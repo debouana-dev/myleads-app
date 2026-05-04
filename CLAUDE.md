@@ -1,6 +1,6 @@
-# CLAUDE.md — My Leads (Flutter mobile app)
+# CLAUDE.md — Me2Leads (Flutter mobile app)
 
-Reference document for Claude when working on the **My Leads** Flutter
+Reference document for Claude when working on the **Me2Leads** Flutter
 application. Read this first on every task touching this repository so
 changes stay consistent with the existing architecture, theme tokens, and
 conventions.
@@ -27,7 +27,7 @@ conventions.
 
 ## 1. Project overview
 
-- **Name:** My Leads — `myleads` (pub name), bundle id `com.debouana.myleads`.
+- **Name:** Me2Leads — `myleads` (pub name), bundle id `com.debouana.myleads`.
 - **Pitch:** Mobile app for capturing professional contacts through business-card
   scanning (OCR), QR code, NFC, or manual entry, with lead scoring (hot / warm
   / cold), reminders, and quick actions (call / SMS / WhatsApp / email).
@@ -35,7 +35,9 @@ conventions.
   `AppStrings.sloganEn`).
 - **Stack:** Flutter 3.24.5, Dart SDK `^3.5.0`, Riverpod 2.5 for state, GoRouter
   14 for navigation, SQLite (sqflite + sqflite_common_ffi) for local storage,
-  AES-256-CBC encryption of PII via `encrypt` + `flutter_secure_storage`.
+  MySQL (`mysql_client`) for remote sync, FTP (`ftpconnect`) for photo storage,
+  AES-256-CBC encryption of PII via `encrypt` + `flutter_secure_storage`,
+  push notifications via `flutter_local_notifications` + `workmanager`.
 - **Pricing tiers:** Free (10 contacts), Premium `2.99 €/mois`, Business
   `5.99 €/utilisateur/mois` — wired to `in_app_purchase` 3.2.
 - **Primary UI language:** French. Hardcoded strings live in
@@ -65,7 +67,7 @@ myleads-app/
 └── lib/
     ├── main.dart                     ← entry, SystemChrome, StorageService.init()
     ├── config/
-    │   └── app_config.dart           ← feature flags & environment toggles
+    │   └── app_config.dart           ← XOR-obfuscated credentials (SMTP/MySQL/FTP) + feature flags
     ├── core/
     │   ├── constants/app_strings.dart
     │   ├── router/app_router.dart    ← GoRouter config, named routes below
@@ -77,35 +79,52 @@ myleads-app/
     │   ├── contact.dart              ← Contact entity (see §6)
     │   ├── interaction.dart          ← call/sms/email history
     │   ├── reminder.dart             ← multi-contact reminder
-    │   └── user_account.dart        ← user + session token
+    │   ├── user_account.dart         ← user + session token
+    │   ├── organization.dart         ← Organization + OrgMember entities (see §6)
+    │   ├── app_notification.dart     ← in-app notification entity
+    │   └── plan_features.dart        ← subscription tier feature matrix
     ├── providers/
     │   ├── auth_provider.dart        ← signup/login/logout/changeEmail/changePassword
     │   ├── contacts_provider.dart    ← CRUD + filters + search (Riverpod)
     │   ├── navigation_provider.dart  ← currentTabProvider (IndexedStack)
-    │   └── reminders_provider.dart   ← 5 computed lists (today/week/later/late/done)
+    │   ├── reminders_provider.dart   ← 5 computed lists (today/week/later/late/done)
+    │   ├── notifications_provider.dart ← in-app notification feed
+    │   ├── settings_provider.dart    ← locale & theme preferences
+    │   ├── currency_provider.dart    ← real-time currency conversion
+    │   └── organization_provider.dart ← full org CRUD + member management
     ├── screens/
     │   ├── splash/splash_screen.dart
     │   ├── auth/                     ← login / signup / forgot / verify / reset
     │   ├── home/
     │   │   ├── main_shell.dart       ← IndexedStack + bottom nav (see §4)
     │   │   └── home_screen.dart      ← dashboard + stat cards
-    │   ├── contacts/                 ← list, detail, edit
+    │   ├── contacts/                 ← list, detail, edit, history, contact-reminders
     │   ├── scan/scan_screen.dart     ← card / QR / NFC scanner
     │   ├── review/review_screen.dart ← post-OCR verification
     │   ├── reminders/                ← list, create, detail
-    │   ├── profile/                  ← profile, my profile, account security
-    │   └── pricing/pricing_screen.dart
+    │   ├── profile/                  ← profile, my profile, account security, sync, import/export
+    │   ├── notifications/            ← in-app notification feed
+    │   ├── settings/                 ← locale + theme toggles
+    │   ├── organization/             ← admin panel, create org, join org
+    │   └── pricing/                  ← pricing, subscription plan, payment history
     ├── services/
+    │   ├── action_tracker.dart       ← WidgetsBindingObserver: logs Interaction on app background
+    │   ├── background_task.dart      ← WorkManager integration for background reminders
     │   ├── calendar_service.dart     ← add_2_calendar wrapper
     │   ├── contact_actions.dart      ← url_launcher for call/sms/whatsapp/email
-    │   ├── database_service.dart     ← SQLite, schema v5 with migrations
+    │   ├── contact_import_export_service.dart ← CSV/JSON contact import/export
+    │   ├── currency_service.dart     ← real-time currency conversion API
+    │   ├── database_service.dart     ← SQLite, schema v11 with migrations
     │   ├── email_service.dart        ← mailer (SMTP) for verification codes
     │   ├── encryption_service.dart   ← AES-256-CBC master key in Keystore
+    │   ├── ftp_photo_service.dart    ← upload/download/delete photos via FTP
+    │   ├── notification_service.dart ← in-app + push notifications, scheduled triggers
     │   ├── ocr_parser.dart           ← text → Contact field extraction
     │   ├── ocr_service_mobile.dart   ← ML Kit text recognition
     │   ├── ocr_service_stub.dart     ← web / unsupported platforms
-    │   ├── photo_storage_service.dart ← contact / user photo files
-    │   ├── storage_service.dart      ← facade, init order for DB + encryption
+    │   ├── photo_storage_service.dart ← contact / user photo files (local)
+    │   ├── remote_sync_service.dart  ← MySQL bidirectional sync + live-write callbacks
+    │   ├── storage_service.dart      ← facade, init order for DB + crypto + sync wiring
     │   └── web_db_factory_{stub,web}.dart ← conditional import for sqflite web
     └── widgets/
         ├── bottom_nav_bar.dart       ← standalone variant (legacy)
@@ -117,26 +136,37 @@ myleads-app/
 
 ### Route map (`lib/core/router/app_router.dart`)
 
-| Path                   | Screen                           | Transition |
-|------------------------|----------------------------------|------------|
-| `/`                    | `SplashScreen`                   | —          |
-| `/login`               | `LoginScreen`                    | Fade       |
-| `/signup`              | `SignupScreen`                   | Slide L→R  |
-| `/forgot-password`     | `ForgotPasswordScreen`           | Slide L→R  |
-| `/email-verification`  | `EmailVerificationScreen(email)` | Slide L→R  |
-| `/recovery-code`       | `RecoveryCodeScreen(email)`      | Slide L→R  |
-| `/reset-password`      | `ResetPasswordScreen(email,code)`| Slide L→R  |
-| `/main`                | `MainShell` (tabbed)             | Fade       |
-| `/scan`                | `ScanScreen` (standalone)        | Fade       |
-| `/review`              | `ReviewScreen(ocrData)`          | Slide L→R  |
-| `/contact/new`         | `ContactEditScreen`              | Slide L→R  |
-| `/contact/:id`         | `ContactDetailScreen`            | Slide L→R  |
-| `/contact/:id/edit`    | `ContactEditScreen(contactId)`   | Slide L→R  |
-| `/reminder/new`        | `CreateReminderScreen`           | Slide L→R  |
-| `/reminder/:id`        | `ReminderDetailScreen`           | Slide L→R  |
-| `/my-profile`          | `MyProfileScreen`                | Slide L→R  |
-| `/account-security`    | `AccountSecurityScreen`          | Slide L→R  |
-| `/pricing`             | `PricingScreen`                  | Slide bot. |
+| Path                        | Screen                             | Transition |
+|-----------------------------|------------------------------------|------------|
+| `/`                         | `SplashScreen`                     | —          |
+| `/login`                    | `LoginScreen`                      | Fade       |
+| `/signup`                   | `SignupScreen`                     | Slide L→R  |
+| `/forgot-password`          | `ForgotPasswordScreen`             | Slide L→R  |
+| `/email-verification`       | `EmailVerificationScreen(email)`   | Slide L→R  |
+| `/recovery-code`            | `RecoveryCodeScreen(email)`        | Slide L→R  |
+| `/reset-password`           | `ResetPasswordScreen(email,code)`  | Slide L→R  |
+| `/main`                     | `MainShell` (tabbed)               | Fade       |
+| `/scan`                     | `ScanScreen` (standalone)          | Fade       |
+| `/review`                   | `ReviewScreen(ocrData)`            | Slide L→R  |
+| `/contact/new`              | `ContactEditScreen`                | Slide L→R  |
+| `/contact/:id`              | `ContactDetailScreen`              | Slide L→R  |
+| `/contact/:id/edit`         | `ContactEditScreen(contactId)`     | Slide L→R  |
+| `/contact/:id/history`      | `ContactHistoryScreen`             | Slide L→R  |
+| `/contact/:id/reminders`    | `ContactRemindersScreen`           | Slide L→R  |
+| `/reminder/new`             | `CreateReminderScreen`             | Slide L→R  |
+| `/reminder/:id`             | `ReminderDetailScreen`             | Slide L→R  |
+| `/my-profile`               | `MyProfileScreen`                  | Slide L→R  |
+| `/account-security`         | `AccountSecurityScreen`            | Slide L→R  |
+| `/pricing`                  | `PricingScreen`                    | Slide bot. |
+| `/subscription-plan`        | `SubscriptionPlanScreen`           | Slide L→R  |
+| `/payment-history`          | `PaymentHistoryScreen`             | Slide L→R  |
+| `/notifications`            | `NotificationsScreen`              | Slide L→R  |
+| `/settings`                 | `SettingsScreen`                   | Slide L→R  |
+| `/sync`                     | `SyncScreen`                       | Slide L→R  |
+| `/import-export`            | `ImportExportScreen`               | Slide L→R  |
+| `/organization`             | `OrganizationAdminScreen`          | Slide L→R  |
+| `/organization/create`      | `CreateOrganizationScreen`         | Slide L→R  |
+| `/organization/join`        | `JoinOrganizationScreen`           | Slide L→R  |
 
 ---
 
@@ -271,12 +301,16 @@ All providers use `StateNotifierProvider` + an immutable state class with
 `copyWith` and a `_sentinel` object to distinguish "not provided" from an
 explicit null for nullable fields.
 
-| Provider                  | Exposes                                                                                         |
-|---------------------------|-------------------------------------------------------------------------------------------------|
-| `authProvider`            | `signUp`, `login`, `logout`, `changePassword`, `changeEmail`, `deleteAccount`                   |
-| `contactsProvider`        | CRUD + `filteredContacts`, `activeFilter`, `statusFilter`, `searchQuery`, `totalContacts`, counts |
-| `remindersProvider`       | CRUD + 5 computed lists: `todayReminders`, `weekReminders`, `laterReminders`, `lateReminders`, `doneReminders` + `refresh()` |
-| `currentTabProvider`      | Simple `StateProvider<int>` for the shell's active tab index                                    |
+| Provider                   | Exposes                                                                                          |
+|----------------------------|--------------------------------------------------------------------------------------------------|
+| `authProvider`             | `signUp`, `login`, `logout`, `changePassword`, `changeEmail`, `deleteAccount`                    |
+| `contactsProvider`         | CRUD + `filteredContacts`, `activeFilter`, `statusFilter`, `searchQuery`, `totalContacts`, counts |
+| `remindersProvider`        | CRUD + 5 computed lists: `todayReminders`, `weekReminders`, `laterReminders`, `lateReminders`, `doneReminders` + `refresh()` |
+| `currentTabProvider`       | Simple `StateProvider<int>` for the shell's active tab index                                     |
+| `notificationsProvider`    | In-app notification feed (unread count, mark-read, delete)                                       |
+| `settingsProvider`         | Locale (`_en` toggle) + theme preferences                                                        |
+| `currencyProvider`         | Real-time currency conversion (for multi-currency pricing display)                               |
+| `organizationProvider`     | Full org CRUD + member management; derived: `orgCanCreateProvider`, `orgCanEditOthersProvider`, `orgCanViewRemindersProvider` |
 
 ### Cross-screen navigation patterns
 
@@ -298,7 +332,7 @@ explicit null for nullable fields.
 
 ---
 
-## 6. Data model (SQLite schema v5)
+## 6. Data model (SQLite schema v11)
 
 ### Contact
 ```
@@ -310,6 +344,8 @@ avatar_color, capture_method, owner_id, photo_path
 - `email` / `phone` persisted as AES-encrypted blobs.
 - Lookup columns `email_lookup` / `phone_lookup` store deterministic SHA-256
   for uniqueness queries without decryption.
+- `photo_path` stores a **relative path** (e.g. `contact_pictures/<userId>/<file>.jpg`);
+  resolve to absolute with `PhotoStorageService`, upload/download with `FtpPhotoService`.
 
 ### Reminder (v2 schema — multi-contact)
 ```
@@ -321,25 +357,111 @@ repeat_frequency, note, to_do_action, priority, is_completed, created_at
 
 ### UserAccount
 ```
-id, full_name, email, email_hash, password_hash, date_of_birth,
-phone, photo_path, session_token, created_at, plan
+id, full_name, email, email_hash, password_hash, phone,
+photo_path, session_token, created_at, plan, last_sync_at
 ```
 - Password hashed with a salt via `crypto.sha256`.
 - `session_token` rotated on logout / password change (pseudo "sign out
   everywhere").
+- `last_sync_at` updated on every successful MySQL push; displayed on `SyncScreen`.
 
 ### Interaction
 ```
-id, contact_id, type (call|sms|whatsapp|email|note), at, payload
+id, contact_id, type (call|sms|whatsapp|email|note|edit), at, payload
 ```
 
-Schema upgrades are additive — see `_onUpgrade` in `database_service.dart`.
+### Organization (v7+)
+```
+id, name, owner_id, invite_code (8-char alphanumeric), created_at
+```
+
+### OrgMember (v7+)
+```
+id, org_id, user_id, role (admin|member), status (active|suspended),
+can_edit BOOL, can_create BOOL, can_view_reminders BOOL, joined_at
+```
+- Admin always has all three privileges set to true.
+- `suspendMember` freezes member access without removing them.
+- `removeMember` transfers the member's shared contacts to the org admin first.
+
+### AppNotification (v6+)
+```
+id, owner_id, type, title, body, scheduled_at, created_at, reference_id, is_read
+```
+
+Schema version history (additive only — see `_onUpgrade` in `database_service.dart`):
+
+| Version | Change |
+|---------|--------|
+| 1–4 | Original contacts / reminders / users schema |
+| 5 | Multi-contact reminders, scheduling |
+| 6 | In-app notifications table |
+| 7 | Organizations + org_members tables |
+| 8 | Per-member `can_edit` / `can_create` privilege columns |
+| 9 | `users.plan` subscription tier column |
+| 10 | `organization_members.can_view_reminders` privilege column |
+| 11 | `users.last_sync_at` timestamp column |
+
 **Bump `_dbVersion` and add an `if (oldVersion < N)` block** when changing
 the schema; never rewrite existing tables.
 
 ---
 
-## 7. Conventions to follow
+## 7. Remote sync & photo storage
+
+### 7.1 MySQL bidirectional sync (`remote_sync_service.dart`)
+
+- **Target:** MySQL server at `AppConfig.mysqlHost:35500`, database `me2leads`.
+- **Credentials:** XOR-obfuscated in `app_config.dart`, decrypted at runtime via
+  `_deobfuscate()`. Never appear as plaintext string literals in source.
+- **Push:** Uploads all local rows (contacts, reminders, interactions, org data,
+  user record) to MySQL. Absolute photo paths are migrated to relative paths
+  before the upsert (`_migrateAndUploadPhotos`).
+- **Pull:** Downloads remote rows, applies upsert to local SQLite.
+- **Live-write mode:** Every local write (insert/update/delete via `DatabaseService`)
+  spawns a fire-and-forget background MySQL upsert. Network errors are swallowed
+  so they never block the UI.
+- **UI:** `SyncScreen` (`/sync`) provides explicit push, pull, and test-connection
+  actions with idle/loading/success/error states and a last-sync timestamp.
+
+### 7.2 FTP photo storage (`ftp_photo_service.dart`)
+
+- **Server layout:**
+  ```
+  photos/
+  ├── profile_pictures/<userId>/<filename>.jpg
+  └── contact_pictures/<userId>/<filename>.jpg
+  ```
+- **Credentials:** `AppConfig.ftpHost`, `.ftpPort` (21), `.ftpUsername`, `.ftpPassword`.
+- **Operations:** `uploadPhoto(relativePath)`, `downloadPhoto(relativePath)`,
+  `deletePhoto(relativePath)`. All failures are silently ignored; web returns false.
+- **Path convention:** `photo_path` in SQLite always stores a relative path.
+  Display logic resolves it to an absolute local path and lazily downloads from
+  FTP if the local file is absent.
+
+---
+
+## 8. Organizations & team management
+
+Organizations are wired throughout contacts, reminders, and the profile tab.
+
+- **Create / join:** `/organization/create` or `/organization/join` (invite code).
+- **Admin panel:** `/organization` shows member list, invite code (copyable,
+  regenerable), privileges matrix, suspend/remove actions.
+- **Privilege matrix (per member):**
+  - `can_create` — may add new contacts
+  - `can_edit` — may edit any org contact
+  - `can_view_reminders` — may see reminders on shared contacts
+- **Derived providers (read in UI):**
+  - `orgCanCreateProvider` — current user may create contacts
+  - `orgCanEditOthersProvider` — current user may edit other members' contacts
+  - `orgCanViewRemindersProvider` — current user may view shared reminders
+- **Contact transfer:** removing or suspending a member transfers their shared
+  contacts to the org admin before the operation completes.
+
+---
+
+## 9. Conventions to follow
 
 1. **Theme tokens only.** Import `AppColors` + use `AppTheme.cardShadow/accentShadow`;
    never hardcode hex or raw `BoxShadow(...)`.
@@ -388,16 +510,26 @@ the schema; never rewrite existing tables.
     mobile one directly — go through `storage_service.dart` or the provider.
 13. **No build-runner output committed.** If you add `@riverpod` annotations,
     run `flutter pub run build_runner build` locally; CI will regenerate.
+14. **Remote sync live-write.** `RemoteSyncService` registers callbacks on
+    `DatabaseService` so every write also fires a background MySQL upsert.
+    Do not call MySQL directly from providers or screens — go through
+    `DatabaseService` and let the callbacks propagate.
+15. **Photo paths are always relative.** Store `contact_pictures/<userId>/<file>`
+    in `photo_path`, never an absolute device path. `PhotoStorageService`
+    resolves to absolute; `FtpPhotoService` uses the relative path as-is.
+16. **Organization privilege checks.** Any screen that mutates org contacts must
+    read `orgCanCreateProvider` / `orgCanEditOthersProvider` before allowing the
+    action. Non-admin members may be restricted.
 
 ---
 
-## 8. Build & CI
+## 10. Build & CI
 
 `.github/workflows/build.yml` runs on every push to `main`. Jobs:
 
 | Job            | Steps                                                            |
 |----------------|------------------------------------------------------------------|
-| `build-android`| Java 17 → Flutter 3.24.5 → `flutter create` (regenerates android/ios/web) → patch `build.gradle` with ProGuard → **patch `AndroidManifest.xml`** (INTERNET permission + `<queries>` block for tel/sms/mailto/https/http) → `flutter build apk --release --no-tree-shake-icons` → `dart run sqflite_common_ffi_web:setup` → `flutter build web --release --base-href "/myleads-app/"` → upload artifacts |
+| `build-android`| Java 17 → Flutter 3.24.5 → `flutter create` (regenerates android/ios/web) → patch `build.gradle` with ProGuard → **patch `AndroidManifest.xml`** (INTERNET + POST_NOTIFICATIONS + RECEIVE_BOOT_COMPLETED + WAKE_LOCK + `<queries>` block for tel/sms/mailto/https/http) → `flutter build apk --release --no-tree-shake-icons` → `dart run sqflite_common_ffi_web:setup` → `flutter build web --release --base-href "/myleads-app/"` → upload artifacts |
 | `release`      | Downloads APK → deletes existing `v1.0.0` release → creates new release with `app-release.apk` attached |
 | `deploy-web`   | Deploys `build/web/` to GitHub Pages                              |
 
@@ -410,7 +542,7 @@ patch step in the workflow, not via committed files. Files under
 
 ---
 
-## 9. Quick-start for common tasks
+## 11. Quick-start for common tasks
 
 | Task                                   | Start here                                                       |
 |----------------------------------------|------------------------------------------------------------------|
@@ -418,14 +550,16 @@ patch step in the workflow, not via committed files. Files under
 | Add a new tab to the shell             | extend `MainShell._screens` + the `_buildBottomNav` Row; update `currentTabProvider` default |
 | Add a new domain model                 | `lib/models/foo.dart` → add table in `_onCreate`, bump `_dbVersion` + `_onUpgrade` in `database_service.dart` |
 | Tweak brand colour                     | edit `AppColors` — propagates via `AppTheme` + gradients         |
-| Add a new string                       | `AppStrings` (FR). If reused from EN, add an `*En` variant.      |
+| Add a new string                       | `AppStrings` (FR) + both branches in `app_l10n.dart`.            |
 | Add a platform permission              | patch the Python step in `.github/workflows/build.yml`, not `android/app/src/main/AndroidManifest.xml` (regenerated) |
 | Release a new APK                      | push to `main`; CI handles build + GitHub Release + Pages        |
 | Watch a CI run                         | `gh run list --limit 3` then `gh run watch <id> --exit-status`   |
+| Trigger a manual sync                  | `SyncScreen` (`/sync`) — push/pull buttons call `RemoteSyncService` |
+| Add org-gated UI                       | read `orgCanCreateProvider` / `orgCanEditOthersProvider` before allowing mutations |
 
 ---
 
-## 10. Known constraints & gotchas
+## 12. Known constraints & gotchas
 
 - **`android/` and `ios/` are not committed source.** They're regenerated on
   every CI run by `flutter create`. Any native-side config (manifest, gradle)
@@ -456,10 +590,24 @@ patch step in the workflow, not via committed files. Files under
 - **SQLite web:** `sqflite_common_ffi_web` needs the WASM blob copied to
   `web/` via `dart run sqflite_common_ffi_web:setup` before
   `flutter build web`. The CI already does this.
+- **Remote sync credentials:** MySQL + FTP credentials are XOR-obfuscated in
+  `app_config.dart`. Never add them as plaintext literals. The obfuscation key
+  is `MyLeads2026SecretKey` (cycling XOR). Runtime memory could still expose
+  them on a compromised device — this is acceptable for the current threat model.
+- **Live-write errors are swallowed.** `RemoteSyncService._fireAndForget()` logs
+  failures via `debugPrint` but never throws. If a sync divergence is suspected,
+  use the explicit push/pull on `SyncScreen`.
+- **FTP directory auto-creation.** `FtpPhotoService.uploadPhoto` creates nested
+  server directories automatically on first upload. No manual FTP setup is needed
+  for new user IDs.
+- **Organization contact transfer.** Calling `removeMember` or `suspendMember`
+  triggers a contact-ownership transfer to the org admin in both SQLite and
+  MySQL before the membership change is committed. Do not remove members directly
+  via raw DB calls.
 
 ---
 
-## 11. Version history anchors
+## 13. Version history anchors
 
 Use these as reference points when coordinating changes:
 
@@ -476,16 +624,22 @@ Use these as reference points when coordinating changes:
   Call + SMS remain; WhatsApp kept on the contact detail screen), official
   WhatsApp brand glyph via `font_awesome_flutter`, date-of-birth removed
   from profile + user model + DB payload, automatic calendar sync on
-  reminder save when priority = `important`/`very_important` (verified
-  already wired), [ActionTracker](lib/services/action_tracker.dart)
-  `WidgetsBindingObserver` that records a persisted `Interaction` when the
-  user leaves the app for ≥10 s after tapping a contact action, field-level
-  diff logging on `updateContact` (audit entry in `interactions` with
-  `type='edit'`), and a unified contact history that merges raw
-  interactions with completed reminders for that contact. Calendar sync
-  diagnostic: `add_2_calendar` is intent-based (ACTION_INSERT on Android,
-  EKEventStore on iOS) — direct Google/Outlook/Apple/Notion/Motion API sync
-  would require per-provider OAuth integration beyond this release.
+  reminder save when priority = `important`/`very_important`,
+  `ActionTracker` `WidgetsBindingObserver` that records a persisted
+  `Interaction` when the user leaves the app for ≥10 s after tapping a
+  contact action, field-level diff logging on `updateContact` (audit entry
+  in `interactions` with `type='edit'`), unified contact history that merges
+  raw interactions with completed reminders.
+- **v1.0.0 doc v8** — Organizations + team management (admin/member roles,
+  invite codes, privilege matrix: `can_edit` / `can_create` / `can_view_reminders`,
+  contact-transfer on member removal/suspension), MySQL bidirectional sync
+  (`RemoteSyncService` with live-write callbacks + `SyncScreen`), FTP photo
+  storage (`FtpPhotoService`, relative path convention), push notifications
+  via `flutter_local_notifications` + `workmanager` background tasks,
+  in-app notification feed, settings screen (locale + theme), subscription
+  plan screen + payment history, CSV/JSON import/export, contact history and
+  contact-reminders sub-screens, app label renamed to **Me2Leads** (db name
+  `me2leads`), SQLite schema bumped to **v11**.
 
 When the user references "doc vN", match the behaviour to the nearest anchor
 above and consult the corresponding commit (see `git log --oneline`).
@@ -494,4 +648,4 @@ above and consult the corresponding commit (see `git log --oneline`).
 
 *Maintenance: when you add a top-level folder under `lib/`, a new route, a
 new theme token, or a new CI step, update the corresponding tables in §2,
-§3, §4, §5, §6, and §8.*
+§3, §4, §5, §6, and §10.*
