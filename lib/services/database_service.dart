@@ -356,6 +356,7 @@ class DatabaseService {
         joined_at TEXT NOT NULL,
         can_edit INTEGER NOT NULL DEFAULT 0,
         can_create INTEGER NOT NULL DEFAULT 1,
+        can_view_reminders INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         UNIQUE (organization_id, user_id)
