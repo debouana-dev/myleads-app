@@ -38,6 +38,7 @@ void main() async {
   try {
     await StorageService.init();
     RemoteSyncService.wireDatabase();
+    RemoteSyncService.startUserSync();
   } catch (e, st) {
     debugPrint('StorageService.init failed: $e\n$st');
   }

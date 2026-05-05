@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/l10n/app_l10n.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_theme.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/remote_sync_service.dart';
 import '../../services/storage_service.dart';
@@ -118,6 +121,8 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = ref.watch(l10nProvider);
+    final plan = ref.watch(authProvider).plan;
+    final locked = plan == 'free';
 
     return Scaffold(
       backgroundColor: AppColors.bg(context),
@@ -323,26 +328,105 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
 
                   if (_state != _SyncState.idle) const SizedBox(height: 12),
 
-                  // Upload button
-                  _actionTile(
-                    context,
-                    icon: Icons.cloud_upload_rounded,
-                    iconColor: AppColors.success,
-                    title: l10n.syncUploadTitle,
-                    subtitle: l10n.syncUploadDesc,
-                    onTap: _state == _SyncState.loading ? null : _runPush,
-                  ),
-                  const SizedBox(height: 8),
+                  if (locked) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [AppColors.accent, AppColors.accentLight],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: AppTheme.accentShadow,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.25),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: const Icon(Icons.lock_rounded,
+                                    color: AppColors.primary, size: 22),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  l10n.syncPlanGateTitle,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            l10n.syncPlanGateBody,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.primary.withValues(alpha: 0.8),
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: () => context.push('/pricing'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 0,
+                              ),
+                              child: Text(
+                                l10n.upgradeNow,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
+                    // Upload button
+                    _actionTile(
+                      context,
+                      icon: Icons.cloud_upload_rounded,
+                      iconColor: AppColors.success,
+                      title: l10n.syncUploadTitle,
+                      subtitle: l10n.syncUploadDesc,
+                      onTap: _state == _SyncState.loading ? null : _runPush,
+                    ),
+                    const SizedBox(height: 8),
 
-                  // Download button
-                  _actionTile(
-                    context,
-                    icon: Icons.cloud_download_rounded,
-                    iconColor: AppColors.primary,
-                    title: l10n.syncDownloadTitle,
-                    subtitle: l10n.syncDownloadDesc,
-                    onTap: _state == _SyncState.loading ? null : _runPull,
-                  ),
+                    // Download button
+                    _actionTile(
+                      context,
+                      icon: Icons.cloud_download_rounded,
+                      iconColor: AppColors.primary,
+                      title: l10n.syncDownloadTitle,
+                      subtitle: l10n.syncDownloadDesc,
+                      onTap: _state == _SyncState.loading ? null : _runPull,
+                    ),
+                  ],
                   const SizedBox(height: 40),
                 ],
               ),

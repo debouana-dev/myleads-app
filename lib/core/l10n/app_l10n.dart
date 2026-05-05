@@ -867,6 +867,15 @@ class AppL10n {
   String syncResultLabel(int contacts, int reminders) => _en
       ? '$contacts contact${contacts == 1 ? '' : 's'}, $reminders reminder${reminders == 1 ? '' : 's'} synced'
       : '$contacts contact${contacts == 1 ? '' : 's'}, $reminders rappel${reminders == 1 ? '' : 's'} synchronisé${reminders == 1 ? '' : 's'}';
+  String get syncLockedDesc => _en
+      ? 'Premium & Business plans only'
+      : 'Forfaits Premium et Business uniquement';
+  String get syncPlanGateTitle => _en
+      ? 'Upgrade to sync your data'
+      : 'Passez à un forfait supérieur pour synchroniser';
+  String get syncPlanGateBody => _en
+      ? 'Cloud sync is available on Premium and Business plans. Back up your contacts and access them across all your devices.'
+      : 'La synchronisation cloud est disponible sur les forfaits Premium et Business. Sauvegardez vos contacts et accédez-y sur tous vos appareils.';
 
   // ─── Currency helpers ─────────────────────────────────────────────────────
   // [eurToTargetRate] is the live EUR → target-currency rate (e.g. 1.08 for USD).

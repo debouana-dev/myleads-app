@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -15,6 +16,7 @@ import '../services/database_service.dart';
 import '../services/email_service.dart';
 import '../services/encryption_service.dart';
 import '../services/photo_storage_service.dart';
+import '../services/remote_sync_service.dart';
 import '../services/storage_service.dart';
 
 const _uuid = Uuid();
@@ -92,13 +94,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     final lookup = _emailLookup(email);
-    final user = await DatabaseService.findUserByEmailLookup(lookup);
+    var user = await DatabaseService.findUserByEmailLookup(lookup);
+    var importedFromCloud = false;
+
     if (user == null) {
-      state = state.copyWith(
-        isLoading: false,
-        error: 'Aucun compte trouvé pour cet email',
-      );
-      return false;
+      // No local account — try the cloud database.
+      importedFromCloud =
+          await RemoteSyncService.importUserByEmailLookup(lookup);
+      if (importedFromCloud) {
+        user = await DatabaseService.findUserByEmailLookup(lookup);
+      }
+      if (user == null) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Aucun compte trouvé pour cet email',
+        );
+        return false;
+      }
     }
 
     if (user.authProvider != 'email') {
@@ -146,6 +158,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       plan: updated.plan,
       clearError: true,
     );
+
+    // When the user record was pulled from the cloud, bring their data too.
+    if (importedFromCloud) {
+      unawaited(RemoteSyncService.pull(updated.id));
+    }
+
     return true;
   }
 
@@ -159,6 +177,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? phone,
   }) async {
     state = state.copyWith(isLoading: true, clearError: true);
+
+    // Require internet — account must be registered in both local and cloud DB.
+    if (!kIsWeb) {
+      final connectivity = await Connectivity().checkConnectivity();
+      if (connectivity.contains(ConnectivityResult.none)) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Une connexion internet est requise pour créer un compte',
+        );
+        return false;
+      }
+    }
 
     if (firstName.trim().isEmpty || lastName.trim().isEmpty) {
       state = state.copyWith(
@@ -196,6 +226,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return false;
     }
 
+    // Also check the cloud database — an account registered on another device
+    // would not appear in the local DB.
+    final emailLookup = DatabaseService.lookupHashForEmail(email.trim());
+    if (await RemoteSyncService.isEmailTakenInCloud(emailLookup)) {
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Un compte existe déjà pour cet email',
+      );
+      return false;
+    }
+
     if (phone != null &&
         phone.trim().isNotEmpty &&
         await DatabaseService.isPhoneTaken(phone)) {
@@ -220,6 +261,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
 
     await DatabaseService.insertUser(user);
+
+    // Explicitly register in the cloud database (awaited for guaranteed write).
+    // The live-write background callback fired by insertUser is best-effort;
+    // this call confirms the record is present before we complete signup.
+    final rawRow = await DatabaseService.getRawUserRow(user.id);
+    final cloudErr = rawRow != null
+        ? await RemoteSyncService.registerUserInCloud(rawRow)
+        : "Données introuvables après l'insertion locale";
+    if (cloudErr != null) {
+      // Roll back the local insert and clean up any partial cloud write.
+      await DatabaseService.deleteUserAndAllData(user.id);
+      unawaited(RemoteSyncService.deleteUserFromCloud(user.id));
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Impossible de créer le compte. Veuillez réessayer.',
+      );
+      return false;
+    }
+
     await StorageService.setCurrentSession(user, token);
 
     state = state.copyWith(
@@ -231,7 +291,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
 
     // Send email verification code (non-blocking).
-    await sendVerificationCode(email.trim());
+    unawaited(sendVerificationCode(email.trim()));
 
     return true;
   }
@@ -371,7 +431,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   /// Permanently deletes the current user account and every piece of
   /// data that belongs to them (contacts, reminders, interactions,
-  /// payment methods, photo files). Clears the session afterwards.
+  /// payment methods, photo files) from both local and cloud databases.
+  /// Requires an active internet connection.
   ///
   /// When the user is a non-admin org member, their contacts are transferred
   /// to the org admin first so the org workspace is not affected.
@@ -382,27 +443,45 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<String?> deleteAccount() async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
+
+    // Require internet — account must be erased from both databases.
+    if (!kIsWeb) {
+      final connectivity = await Connectivity().checkConnectivity();
+      if (connectivity.contains(ConnectivityResult.none)) {
+        return 'Une connexion internet est requise pour supprimer votre compte';
+      }
+    }
+
     try {
       final userPhotoPath = user.photoPath;
+      final userId = user.id;
 
       if (user.organizationId != null) {
         if (user.orgRole == 'admin') {
           // Block deletion if other members still depend on this org.
           final members = await DatabaseService.getMembersForOrganization(
               user.organizationId!);
-          final hasOtherMembers = members.any((m) => m.userId != user.id);
+          final hasOtherMembers = members.any((m) => m.userId != userId);
           if (hasOtherMembers) {
             return "Supprimez ou transférez l'administration de l'organisation avant de supprimer votre compte.";
           }
           // Last admin and sole member — dissolve the org before erasing data.
+          // The live-write callback on deleteOrganization handles the cloud
+          // org + org_members deletion in the background.
           await DatabaseService.deleteOrganization(user.organizationId!);
         } else {
-          // Non-admin member: transfer their contacts to the admin so the org
-          // workspace is unaffected, then erase the account. Contact photo
-          // files are NOT deleted — they now belong to the admin's contacts.
+          // Non-admin member: transfer contacts to the admin (cloud handled via
+          // live-write callbacks), then erase this user from both databases.
+          // Contact photo files are NOT deleted — they now belong to the admin.
           await DatabaseService.transferOrgContactsToAdmin(
-              fromUserId: user.id, orgId: user.organizationId!);
-          await DatabaseService.deleteUserAndAllData(user.id);
+              fromUserId: userId, orgId: user.organizationId!);
+          // Cloud delete excludes contacts (already re-owned by admin).
+          final cloudErr = await RemoteSyncService.deleteUserFromCloud(
+            userId,
+            includeContacts: false,
+          );
+          if (cloudErr != null) debugPrint('deleteAccount cloud error: $cloudErr');
+          await DatabaseService.deleteUserAndAllData(userId);
           await StorageService.clearSession();
           state = const AuthState();
           if (!kIsWeb) _deleteFileIfExists(userPhotoPath);
@@ -413,8 +492,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // Standard path (solo user or admin who just dissolved their org):
       // collect contact photo paths before rows are erased.
       final List<Contact> contacts =
-          await DatabaseService.getAllContactsForOwner(user.id);
-      await DatabaseService.deleteUserAndAllData(user.id);
+          await DatabaseService.getAllContactsForOwner(userId);
+      // Delete all user data from the cloud first, then locally.
+      final cloudErr = await RemoteSyncService.deleteUserFromCloud(userId);
+      if (cloudErr != null) debugPrint('deleteAccount cloud error: $cloudErr');
+      await DatabaseService.deleteUserAndAllData(userId);
       await StorageService.clearSession();
       state = const AuthState();
       if (!kIsWeb) {
@@ -470,6 +552,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
     await DatabaseService.updateUser(updated);
     await StorageService.setCurrentSession(updated, newToken);
+
+    // Sync to cloud — the background live-write callback excludes password_hash
+    // from its ON DUPLICATE KEY UPDATE clause, so an explicit call is required.
+    final rawRow = await DatabaseService.getRawUserRow(updated.id);
+    if (rawRow != null) {
+      unawaited(RemoteSyncService.updatePasswordInCloud(
+        userId: updated.id,
+        passwordHash: (rawRow['password_hash'] as String?) ?? '',
+        sessionToken: rawRow['session_token'] as String?,
+        passwordChangedAt: rawRow['password_changed_at'] as String?,
+      ));
+    }
+
     return null; // success
   }
 
@@ -497,10 +592,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return 'Mot de passe actuel incorrect';
     }
 
-    // Disallow changing to an email already in use by another account.
+    // Disallow changing to an email already in use by another account —
+    // check both the local database and the cloud database.
     final newLookup = _emailLookup(newEmail);
     final existing = await DatabaseService.findUserByEmailLookup(newLookup);
     if (existing != null && existing.id != user.id) {
+      return 'Cet email est déjà utilisé par un autre compte';
+    }
+    final cloudOwnerId =
+        await RemoteSyncService.findCloudUserIdByEmailLookup(newLookup);
+    if (cloudOwnerId != null && cloudOwnerId != user.id) {
       return 'Cet email est déjà utilisé par un autre compte';
     }
 
@@ -529,6 +630,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     // Clear the used code.
     _verificationCodes.remove(newLookup);
+
+    // Sync to cloud — the background live-write callback updates email_enc but
+    // intentionally skips email_lookup, which would leave the cloud with a
+    // stale lookup hash and break login on other devices after an email change.
+    final rawRow = await DatabaseService.getRawUserRow(updated.id);
+    if (rawRow != null) {
+      unawaited(RemoteSyncService.updateEmailInCloud(
+        userId: updated.id,
+        emailEnc: (rawRow['email_enc'] as String?) ?? '',
+        emailLookup: (rawRow['email_lookup'] as String?) ?? '',
+        sessionToken: rawRow['session_token'] as String?,
+      ));
+    }
 
     return null; // success
   }
@@ -564,9 +678,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (emailErr != null) return emailErr;
 
     final lookup = _emailLookup(email);
-    final user = await DatabaseService.findUserByEmailLookup(lookup);
+    var user = await DatabaseService.findUserByEmailLookup(lookup);
     if (user == null) {
-      return 'Aucun compte associé à cet email';
+      // No local account — try the cloud database.
+      final imported = await RemoteSyncService.importUserByEmailLookup(lookup);
+      if (imported) user = await DatabaseService.findUserByEmailLookup(lookup);
+      if (user == null) return 'Aucun compte associé à cet email';
     }
 
     if (user.authProvider != 'email') {
@@ -653,6 +770,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userEmail: updated.email,
         clearError: true,
       );
+    }
+
+    // Sync to cloud — same reason as changePassword: password_hash is excluded
+    // from the background live-write ON DUPLICATE KEY UPDATE clause.
+    final rawRow = await DatabaseService.getRawUserRow(updated.id);
+    if (rawRow != null) {
+      unawaited(RemoteSyncService.updatePasswordInCloud(
+        userId: updated.id,
+        passwordHash: (rawRow['password_hash'] as String?) ?? '',
+        sessionToken: rawRow['session_token'] as String?,
+        passwordChangedAt: rawRow['password_changed_at'] as String?,
+      ));
     }
 
     return null; // success

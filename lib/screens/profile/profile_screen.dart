@@ -239,10 +239,12 @@ class ProfileScreen extends ConsumerWidget {
                     context,
                     Icons.cloud_upload_rounded,
                     l10n.syncLabel,
-                    l10n.syncDesc,
+                    auth.plan == 'free' ? l10n.syncLockedDesc : l10n.syncDesc,
                     AppColors.success.withOpacity(0.1),
                     AppColors.success,
-                    () => context.push('/sync'),
+                    () => auth.plan == 'free'
+                        ? context.push('/pricing')
+                        : context.push('/sync'),
                   ),
                   _menuItem(
                     context,

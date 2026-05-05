@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -9,6 +10,7 @@ import '../config/app_config.dart';
 import 'database_service.dart';
 import 'ftp_photo_service.dart';
 import 'photo_storage_service.dart';
+import 'storage_service.dart';
 
 /// Result of a push or pull sync operation.
 class SyncResult {
@@ -46,6 +48,53 @@ class RemoteSyncService {
   // Set to true after the first successful _ensureSchema so live-write
   // background tasks don't run all 6 CREATE TABLE statements on every call.
   static bool _schemaReady = false;
+
+  // ── Plan gate ────────────────────────────────────────────────────────────────
+
+  /// Returns true when the current user's plan allows full data-table sync
+  /// (premium or business). The `users` table is always synced regardless.
+  static bool get _hasSyncPlan {
+    final plan = StorageService.userPlan;
+    return plan == 'premium' || plan == 'business';
+  }
+
+  // ── Automatic user-row sync ──────────────────────────────────────────────────
+
+  static StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+  static Timer? _syncDebounce;
+
+  /// Starts a connectivity listener that automatically pushes the logged-in
+  /// user's profile row to the remote database whenever the device gains
+  /// internet access (for all subscription plans).
+  ///
+  /// Call once at startup, immediately after [wireDatabase].
+  static void startUserSync() {
+    if (kIsWeb) return;
+    _connectivitySub?.cancel();
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
+      if (results.contains(ConnectivityResult.none)) return;
+      // Debounce: connectivity streams can burst on interface changes.
+      _syncDebounce?.cancel();
+      _syncDebounce = Timer(const Duration(seconds: 3), () {
+        final userId = StorageService.currentUserId;
+        if (userId.isEmpty) return;
+        _syncUserRow(userId);
+      });
+    });
+    // Attempt an immediate sync in case the device is already online at launch.
+    final userId = StorageService.currentUserId;
+    if (userId.isNotEmpty) _syncUserRow(userId);
+  }
+
+  /// Pushes only the [userId] row to the remote database in the background.
+  /// Used by [startUserSync] and is not plan-gated — user profile data is
+  /// always kept in sync for all plans.
+  static void _syncUserRow(String userId) {
+    _fireAndForget((conn) async {
+      final row = await DatabaseService.getRawUserRow(userId);
+      if (row != null) await _upsertUser(conn, row);
+    });
+  }
 
   /// Returns the ISO-8601 timestamp of the most recent successful sync for
   /// [userId], or null if the user has never synced from this device.
@@ -223,6 +272,141 @@ class RemoteSyncService {
     ''');
   }
 
+  // ── Cloud user helpers ───────────────────────────────────────────────────────
+
+  /// Returns true when a user with [emailLookup] already exists in the remote
+  /// database, false when not found or when the server is unreachable.
+  static Future<bool> isEmailTakenInCloud(String emailLookup) async {
+    if (kIsWeb) return false;
+    final connectivity = await Connectivity().checkConnectivity();
+    if (connectivity.contains(ConnectivityResult.none)) return false;
+    final conn = await _connect();
+    if (conn == null) return false;
+    try {
+      if (!_schemaReady) {
+        await _ensureSchema(conn);
+        _schemaReady = true;
+      }
+      final result = await conn.execute(
+        'SELECT COUNT(*) AS cnt FROM `users` WHERE `email_lookup` = :lookup',
+        {'lookup': emailLookup},
+      );
+      if (result.rows.isEmpty) return false;
+      final cnt = int.tryParse(
+              result.rows.first.colByName('cnt')?.toString() ?? '0') ??
+          0;
+      return cnt > 0;
+    } catch (e) {
+      debugPrint('RemoteSyncService isEmailTakenInCloud error: $e');
+      return false;
+    } finally {
+      await conn.close();
+    }
+  }
+
+  /// Pushes [userRow] to the remote MySQL database and waits for confirmation.
+  ///
+  /// Returns `null` on success, or an error message on failure. Unlike the
+  /// live-write background callback, this method is awaitable so callers can
+  /// gate further actions on a guaranteed cloud registration.
+  static Future<String?> registerUserInCloud(Map<String, dynamic> userRow) async {
+    if (kIsWeb) return null;
+    final conn = await _connect();
+    if (conn == null) return 'Connexion au serveur impossible';
+    try {
+      if (!_schemaReady) {
+        await _ensureSchema(conn);
+        _schemaReady = true;
+      }
+      await _upsertUser(conn, userRow);
+      return null;
+    } catch (e) {
+      debugPrint('RemoteSyncService registerUserInCloud error: $e');
+      return "Erreur lors de l'enregistrement sur le serveur";
+    } finally {
+      await conn.close();
+    }
+  }
+
+  /// Deletes all records belonging to [userId] from the remote MySQL database.
+  ///
+  /// Set [includeContacts] to false when the user's contacts have already been
+  /// transferred to an org admin (via live-write callbacks) so they are not
+  /// accidentally removed from the cloud.
+  ///
+  /// Returns `null` on success, or an error message on failure.
+  static Future<String?> deleteUserFromCloud(
+    String userId, {
+    bool includeContacts = true,
+  }) async {
+    if (kIsWeb) return null;
+    final conn = await _connect();
+    if (conn == null) return 'Connexion au serveur impossible';
+    try {
+      if (!_schemaReady) {
+        await _ensureSchema(conn);
+        _schemaReady = true;
+      }
+      await conn.execute(
+          'DELETE FROM `interactions` WHERE `owner_id` = :id', {'id': userId});
+      await conn.execute(
+          'DELETE FROM `reminders` WHERE `owner_id` = :id', {'id': userId});
+      if (includeContacts) {
+        await conn.execute(
+            'DELETE FROM `contacts` WHERE `owner_id` = :id', {'id': userId});
+      }
+      await conn.execute(
+          'DELETE FROM `organization_members` WHERE `user_id` = :id',
+          {'id': userId});
+      await conn.execute(
+          'DELETE FROM `users` WHERE `id` = :id', {'id': userId});
+      return null;
+    } catch (e) {
+      debugPrint('RemoteSyncService deleteUserFromCloud error: $e');
+      return 'Erreur lors de la suppression sur le serveur';
+    } finally {
+      await conn.close();
+    }
+  }
+
+  // ── Cloud user import ────────────────────────────────────────────────────────
+
+  /// Looks up a user in the remote MySQL database by their [emailLookup] hash
+  /// and, if found, upserts the row into the local SQLite database so the
+  /// normal auth flow can proceed on this device.
+  ///
+  /// Returns `true` when a record was found and imported, `false` when there
+  /// is no network, the server is unreachable, or no matching record exists.
+  static Future<bool> importUserByEmailLookup(String emailLookup) async {
+    if (kIsWeb) return false;
+    final connectivity = await Connectivity().checkConnectivity();
+    if (connectivity.contains(ConnectivityResult.none)) return false;
+    final conn = await _connect();
+    if (conn == null) return false;
+    try {
+      if (!_schemaReady) {
+        await _ensureSchema(conn);
+        _schemaReady = true;
+      }
+      final result = await conn.execute(
+        'SELECT * FROM `users` WHERE `email_lookup` = :lookup',
+        {'lookup': emailLookup},
+      );
+      if (result.rows.isEmpty) return false;
+      final row = _normaliseBools(
+        _rowToMap(result.rows.first, result.cols),
+        _userBoolCols,
+      );
+      await DatabaseService.upsertRawRow('users', row);
+      return true;
+    } catch (e) {
+      debugPrint('RemoteSyncService importUserByEmailLookup error: $e');
+      return false;
+    } finally {
+      await conn.close();
+    }
+  }
+
   // ── Live-write wiring ───────────────────────────────────────────────────────
 
   /// Registers callbacks into [DatabaseService] so every local write is
@@ -236,14 +420,20 @@ class RemoteSyncService {
   }
 
   /// Dispatches a background upsert for any supported table.
+  /// The `users` table is always synced; all other tables require a
+  /// premium or business plan.
   static Future<void> _pushRowBackground(
       String table, Map<String, dynamic> row) =>
       _fireAndForget((conn) async {
+        if (table == 'users') {
+          await _upsertUser(conn, row);
+          return;
+        }
+        if (!_hasSyncPlan) return;
         switch (table) {
           case 'contacts':             await _upsertContact(conn, row);
           case 'reminders':            await _upsertReminder(conn, row);
           case 'interactions':         await _upsertInteraction(conn, row);
-          case 'users':                await _upsertUser(conn, row);
           case 'organizations':        await _upsertOrganization(conn, row);
           case 'organization_members': await _upsertOrgMember(conn, row);
         }
@@ -252,8 +442,10 @@ class RemoteSyncService {
   /// Dispatches a background delete for any supported table.
   /// Handles cascaded deletes for contacts (interactions + reminders)
   /// and organisations (all member rows).
+  /// Data-table deletes require a premium or business plan.
   static Future<void> _deleteRowBackground(String table, String id) =>
       _fireAndForget((conn) async {
+        if (!_hasSyncPlan) return;
         if (table == 'contacts') {
           await conn.execute(
               'DELETE FROM `interactions` WHERE `contact_id` = :id', {'id': id});
@@ -301,10 +493,13 @@ class RemoteSyncService {
       return SyncResult.err('no_connection');
     }
 
-    // Migrate old absolute photo paths → relative, then upload to FTP.
-    // Must run before the MySQL upserts so the remote DB receives
-    // platform-neutral relative paths.
-    await _migrateAndUploadPhotos(userId);
+    // Photo migration and data-table push are restricted to premium/business.
+    if (_hasSyncPlan) {
+      // Migrate old absolute photo paths → relative, then upload to FTP.
+      // Must run before the MySQL upserts so the remote DB receives
+      // platform-neutral relative paths.
+      await _migrateAndUploadPhotos(userId);
+    }
 
     final conn = await _connect();
     if (conn == null) return SyncResult.err('auth_failed');
@@ -313,37 +508,46 @@ class RemoteSyncService {
       await _ensureSchema(conn);
       _schemaReady = true;
 
-      // User row
+      // User row — always synced for all plans.
       final userRow = await DatabaseService.getRawUserRow(userId);
       if (userRow != null) await _upsertUser(conn, userRow);
 
-      // Contacts
-      final contacts = await DatabaseService.getRawContactRows(userId);
-      for (final row in contacts) {
-        await _upsertContact(conn, row);
-      }
+      var contactCount = 0;
+      var reminderCount = 0;
+      var interactionCount = 0;
 
-      // Reminders
-      final reminders = await DatabaseService.getRawReminderRows(userId);
-      for (final row in reminders) {
-        await _upsertReminder(conn, row);
-      }
+      if (_hasSyncPlan) {
+        // Contacts
+        final contacts = await DatabaseService.getRawContactRows(userId);
+        for (final row in contacts) {
+          await _upsertContact(conn, row);
+        }
+        contactCount = contacts.length;
 
-      // Interactions
-      final interactions = await DatabaseService.getRawInteractionRows(userId);
-      for (final row in interactions) {
-        await _upsertInteraction(conn, row);
-      }
+        // Reminders
+        final reminders = await DatabaseService.getRawReminderRows(userId);
+        for (final row in reminders) {
+          await _upsertReminder(conn, row);
+        }
+        reminderCount = reminders.length;
 
-      // Organization (if member)
-      final orgId = userRow?['organization_id'] as String?;
-      if (orgId != null && orgId.isNotEmpty) {
-        final orgRow = await DatabaseService.getRawOrganizationRow(orgId);
-        if (orgRow != null) await _upsertOrganization(conn, orgRow);
+        // Interactions
+        final interactions = await DatabaseService.getRawInteractionRows(userId);
+        for (final row in interactions) {
+          await _upsertInteraction(conn, row);
+        }
+        interactionCount = interactions.length;
 
-        final members = await DatabaseService.getRawOrgMemberRows(orgId);
-        for (final row in members) {
-          await _upsertOrgMember(conn, row);
+        // Organization (if member)
+        final orgId = userRow?['organization_id'] as String?;
+        if (orgId != null && orgId.isNotEmpty) {
+          final orgRow = await DatabaseService.getRawOrganizationRow(orgId);
+          if (orgRow != null) await _upsertOrganization(conn, orgRow);
+
+          final members = await DatabaseService.getRawOrgMemberRows(orgId);
+          for (final row in members) {
+            await _upsertOrgMember(conn, row);
+          }
         }
       }
 
@@ -352,13 +556,109 @@ class RemoteSyncService {
 
       return SyncResult(
         success: true,
-        contactCount: contacts.length,
-        reminderCount: reminders.length,
-        interactionCount: interactions.length,
+        contactCount: contactCount,
+        reminderCount: reminderCount,
+        interactionCount: interactionCount,
       );
     } catch (e) {
       debugPrint('RemoteSyncService push error: $e');
       return SyncResult.err('unknown');
+    } finally {
+      await conn.close();
+    }
+  }
+
+  // ── Targeted user-field updates ─────────────────────────────────────────────
+
+  /// Returns the `id` of the cloud user whose `email_lookup` matches [emailLookup],
+  /// or `null` when not found or the server is unreachable.
+  /// Lighter than [importUserByEmailLookup] — does not upsert locally.
+  static Future<String?> findCloudUserIdByEmailLookup(
+      String emailLookup) async {
+    if (kIsWeb) return null;
+    final connectivity = await Connectivity().checkConnectivity();
+    if (connectivity.contains(ConnectivityResult.none)) return null;
+    final conn = await _connect();
+    if (conn == null) return null;
+    try {
+      final result = await conn.execute(
+        'SELECT `id` FROM `users` WHERE `email_lookup` = :lookup LIMIT 1',
+        {'lookup': emailLookup},
+      );
+      if (result.rows.isEmpty) return null;
+      return result.rows.first.colByName('id')?.toString();
+    } catch (e) {
+      debugPrint('RemoteSyncService findCloudUserIdByEmailLookup error: $e');
+      return null;
+    } finally {
+      await conn.close();
+    }
+  }
+
+  /// Updates only the password-related columns for [userId] in the remote
+  /// database. The background live-write callback fired by [DatabaseService]
+  /// intentionally excludes these security fields from its UPDATE clause, so
+  /// this explicit call is required after every local password change.
+  static Future<void> updatePasswordInCloud({
+    required String userId,
+    required String passwordHash,
+    required String? sessionToken,
+    required String? passwordChangedAt,
+  }) async {
+    if (kIsWeb) return;
+    final conn = await _connect();
+    if (conn == null) return;
+    try {
+      await conn.execute(
+        'UPDATE `users` '
+        'SET `password_hash` = :hash, '
+            '`session_token` = :token, '
+            '`password_changed_at` = :changed_at '
+        'WHERE `id` = :id',
+        {
+          'hash': passwordHash,
+          'token': sessionToken,
+          'changed_at': passwordChangedAt,
+          'id': userId,
+        },
+      );
+    } catch (e) {
+      debugPrint('RemoteSyncService updatePasswordInCloud error: $e');
+    } finally {
+      await conn.close();
+    }
+  }
+
+  /// Updates only the email-related columns for [userId] in the remote
+  /// database. The background live-write callback updates `email_enc` but
+  /// intentionally skips `email_lookup`, so a stale lookup hash would break
+  /// cloud login after an email change. This method fixes both fields.
+  static Future<void> updateEmailInCloud({
+    required String userId,
+    required String emailEnc,
+    required String emailLookup,
+    required String? sessionToken,
+  }) async {
+    if (kIsWeb) return;
+    final conn = await _connect();
+    if (conn == null) return;
+    try {
+      await conn.execute(
+        'UPDATE `users` '
+        'SET `email_enc` = :enc, '
+            '`email_lookup` = :lookup, '
+            '`session_token` = :token, '
+            '`email_verified` = 1 '
+        'WHERE `id` = :id',
+        {
+          'enc': emailEnc,
+          'lookup': emailLookup,
+          'token': sessionToken,
+          'id': userId,
+        },
+      );
+    } catch (e) {
+      debugPrint('RemoteSyncService updateEmailInCloud error: $e');
     } finally {
       await conn.close();
     }
@@ -383,7 +683,7 @@ class RemoteSyncService {
     if (conn == null) return SyncResult.err('auth_failed');
 
     try {
-      // ── Own user row (encrypted profile — never pulled cross-user) ──────
+      // ── Own user row — always pulled for all plans ───────────────────────
       final userResult = await conn.execute(
         'SELECT * FROM `users` WHERE `id` = :id',
         {'id': userId},
@@ -391,6 +691,13 @@ class RemoteSyncService {
       for (final row in userResult.rows) {
         await DatabaseService.upsertRawRow(
             'users', _normaliseBools(_rowToMap(row, userResult.cols), _userBoolCols));
+      }
+
+      // Data-table pull is restricted to premium / business plans.
+      if (!_hasSyncPlan) {
+        final now = DateTime.now().toIso8601String();
+        await DatabaseService.updateUserLastSync(userId, now);
+        return const SyncResult(success: true);
       }
 
       // ── Org membership & permissions ────────────────────────────────────
