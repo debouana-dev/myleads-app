@@ -1281,7 +1281,10 @@ class DatabaseService {
     if (rows.isNotEmpty) _onRemoteUpsert?.call('organization_members', Map<String, dynamic>.from(rows.first));
   }
 
-  /// Load all contacts owned by any active member of [orgId].
+  /// Load all contacts owned by any active member of [orgId], with
+  /// org-level deduplication: when two members hold a contact with the same
+  /// [phone_lookup] or [email_lookup], only the earliest-created copy is
+  /// returned. The later duplicates are silently hidden (not deleted).
   static Future<List<Contact>> getAllContactsForOrganization(String orgId) async {
     final db = await database;
     final memberRows = await db.query(
@@ -1293,11 +1296,190 @@ class DatabaseService {
     if (memberRows.isEmpty) return [];
     final ids = memberRows.map((r) => r['user_id'] as String).toList();
     final placeholders = ids.map((_) => '?').join(', ');
+    // Sort ascending so the oldest contact wins the deduplication pass.
     final rows = await db.rawQuery(
-      'SELECT * FROM contacts WHERE owner_id IN ($placeholders) ORDER BY created_at DESC',
+      'SELECT * FROM contacts WHERE owner_id IN ($placeholders) ORDER BY created_at ASC',
       ids,
     );
-    return rows.map(_contactFromRow).toList();
+    final seenPhone = <String>{};
+    final seenEmail = <String>{};
+    final result = <Contact>[];
+    for (final row in rows) {
+      final phoneLookup = row['phone_lookup'] as String?;
+      final emailLookup = row['email_lookup'] as String?;
+      final isDuplicate =
+          (phoneLookup != null && !seenPhone.add(phoneLookup)) ||
+          (emailLookup != null && !seenEmail.add(emailLookup));
+      if (!isDuplicate) result.add(_contactFromRow(row));
+    }
+    return result;
+  }
+
+  /// Returns the [status] string ('active' | 'suspended') for [userId] in
+  /// [orgId], or null when no membership record is found.
+  static Future<String?> getMemberStatus({
+    required String userId,
+    required String orgId,
+  }) async {
+    final db = await database;
+    final rows = await db.query(
+      'organization_members',
+      columns: ['status'],
+      where: 'organization_id = ? AND user_id = ?',
+      whereArgs: [orgId, userId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['status'] as String?;
+  }
+
+  /// Returns the number of unique contacts visible in the org shared view —
+  /// i.e. the same deduplicated count that [getAllContactsForOrganization]
+  /// would return, but without loading full contact objects.
+  static Future<int> getOrgDeduplicatedContactCount(String orgId) async {
+    final db = await database;
+    final memberRows = await db.query(
+      'organization_members',
+      columns: ['user_id'],
+      where: "organization_id = ? AND status = 'active'",
+      whereArgs: [orgId],
+    );
+    if (memberRows.isEmpty) return 0;
+    final ids = memberRows.map((r) => r['user_id'] as String).toList();
+    final placeholders = ids.map((_) => '?').join(', ');
+    final rows = await db.rawQuery(
+      'SELECT phone_lookup, email_lookup FROM contacts '
+      'WHERE owner_id IN ($placeholders) ORDER BY created_at ASC',
+      ids,
+    );
+    final seenPhone = <String>{};
+    final seenEmail = <String>{};
+    var count = 0;
+    for (final row in rows) {
+      final phoneLookup = row['phone_lookup'] as String?;
+      final emailLookup = row['email_lookup'] as String?;
+      final isDuplicate =
+          (phoneLookup != null && !seenPhone.add(phoneLookup)) ||
+          (emailLookup != null && !seenEmail.add(emailLookup));
+      if (!isDuplicate) count++;
+    }
+    return count;
+  }
+
+  /// Transfer only the contacts of [fromUserId] that are **not** duplicates
+  /// of any contact already owned by another active member of [orgId].
+  ///
+  /// A contact is considered a duplicate when its [phone_lookup] or
+  /// [email_lookup] matches the same field in any other active member's
+  /// contact. Duplicate contacts are left untouched so the member retains
+  /// them in their personal record (visible again once suspended/removed).
+  ///
+  /// Returns the admin's user id on success, or null when the org / admin
+  /// cannot be found, or when [fromUserId] is the admin themselves.
+  static Future<String?> transferNonDuplicateContactsToAdmin({
+    required String fromUserId,
+    required String orgId,
+  }) async {
+    final db = await database;
+
+    final orgRows = await db.query(
+      'organizations',
+      columns: ['owner_id'],
+      where: 'id = ?',
+      whereArgs: [orgId],
+      limit: 1,
+    );
+    if (orgRows.isEmpty) return null;
+    final adminId = orgRows.first['owner_id'] as String;
+    if (adminId == fromUserId) return null;
+
+    // Collect lookup hashes owned by other active members (not the target member).
+    final otherMemberRows = await db.query(
+      'organization_members',
+      columns: ['user_id'],
+      where: "organization_id = ? AND status = 'active' AND user_id != ?",
+      whereArgs: [orgId, fromUserId],
+    );
+    final otherIds = otherMemberRows.map((r) => r['user_id'] as String).toList();
+
+    final otherPhoneLookups = <String>{};
+    final otherEmailLookups = <String>{};
+    if (otherIds.isNotEmpty) {
+      final placeholders = otherIds.map((_) => '?').join(', ');
+      final otherContacts = await db.rawQuery(
+        'SELECT phone_lookup, email_lookup FROM contacts '
+        'WHERE owner_id IN ($placeholders)',
+        otherIds,
+      );
+      for (final r in otherContacts) {
+        final p = r['phone_lookup'] as String?;
+        final e = r['email_lookup'] as String?;
+        if (p != null) otherPhoneLookups.add(p);
+        if (e != null) otherEmailLookups.add(e);
+      }
+    }
+
+    // Fetch target member's contacts.
+    final memberContacts = await db.query(
+      'contacts',
+      where: 'owner_id = ?',
+      whereArgs: [fromUserId],
+    );
+
+    final transferredIds = <String>[];
+    await db.transaction((txn) async {
+      for (final row in memberContacts) {
+        final contactId = row['id'] as String;
+        final phoneLookup = row['phone_lookup'] as String?;
+        final emailLookup = row['email_lookup'] as String?;
+
+        // Skip duplicate contacts — they stay with the member.
+        final isDuplicate =
+            (phoneLookup != null && otherPhoneLookups.contains(phoneLookup)) ||
+            (emailLookup != null && otherEmailLookups.contains(emailLookup));
+        if (isDuplicate) continue;
+
+        final updates = <String, Object?>{'owner_id': adminId};
+
+        // Null out lookup fields that would collide with admin's existing contacts.
+        if (phoneLookup != null) {
+          final conflict = await txn.query(
+            'contacts',
+            columns: ['id'],
+            where: 'owner_id = ? AND phone_lookup = ?',
+            whereArgs: [adminId, phoneLookup],
+            limit: 1,
+          );
+          if (conflict.isNotEmpty) updates['phone_lookup'] = null;
+        }
+        if (emailLookup != null) {
+          final conflict = await txn.query(
+            'contacts',
+            columns: ['id'],
+            where: 'owner_id = ? AND email_lookup = ?',
+            whereArgs: [adminId, emailLookup],
+            limit: 1,
+          );
+          if (conflict.isNotEmpty) updates['email_lookup'] = null;
+        }
+
+        await txn.update('contacts', updates,
+            where: 'id = ?', whereArgs: [contactId]);
+        transferredIds.add(contactId);
+      }
+    });
+
+    if (_onRemoteUpsert != null) {
+      for (final id in transferredIds) {
+        final rows =
+            await db.query('contacts', where: 'id = ?', whereArgs: [id], limit: 1);
+        if (rows.isNotEmpty) {
+          _onRemoteUpsert!('contacts', Map<String, dynamic>.from(rows.first));
+        }
+      }
+    }
+
+    return adminId;
   }
 
   /// Returns true when [userId] is allowed to edit/delete [contactOwnerId]'s

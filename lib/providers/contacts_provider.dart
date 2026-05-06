@@ -118,8 +118,18 @@ class ContactsNotifier extends StateNotifier<ContactsState> {
     final user = StorageService.currentUser;
     List<Contact> contacts;
     if (user?.organizationId != null) {
-      // Org member: load contacts from all active members of the org.
-      contacts = await DatabaseService.getAllContactsForOrganization(user!.organizationId!);
+      // Suspended members see only their own contacts (which includes any
+      // duplicate contacts that were not transferred to admin on suspension).
+      final memberStatus = await DatabaseService.getMemberStatus(
+        userId: _ownerId,
+        orgId: user!.organizationId!,
+      );
+      if (memberStatus == 'suspended') {
+        contacts = await StorageService.getAllContacts();
+      } else {
+        // Active org member: shared view with org-level deduplication applied.
+        contacts = await DatabaseService.getAllContactsForOrganization(user.organizationId!);
+      }
     } else {
       contacts = await StorageService.getAllContacts();
     }

@@ -18,6 +18,8 @@ class OrgState {
   final bool currentUserCanEdit;         // can edit any org member's contacts
   final bool currentUserCanCreate;       // can create new contacts
   final bool currentUserCanViewReminders; // can view reminders on shared contacts
+  // Deduplicated total contact count for the org (excludes hidden duplicates).
+  final int uniqueContactCount;
 
   const OrgState({
     this.organization,
@@ -27,6 +29,7 @@ class OrgState {
     this.currentUserCanEdit = true,
     this.currentUserCanCreate = true,
     this.currentUserCanViewReminders = true,
+    this.uniqueContactCount = 0,
   });
 
   OrgState copyWith({
@@ -37,6 +40,7 @@ class OrgState {
     bool? currentUserCanEdit,
     bool? currentUserCanCreate,
     bool? currentUserCanViewReminders,
+    int? uniqueContactCount,
     bool clearError = false,
     bool clearOrg = false,
   }) {
@@ -49,6 +53,7 @@ class OrgState {
       currentUserCanCreate: currentUserCanCreate ?? this.currentUserCanCreate,
       currentUserCanViewReminders:
           currentUserCanViewReminders ?? this.currentUserCanViewReminders,
+      uniqueContactCount: uniqueContactCount ?? this.uniqueContactCount,
     );
   }
 }
@@ -75,6 +80,8 @@ class OrgNotifier extends StateNotifier<OrgState> {
         userId: user.id,
         orgId: org.id,
       );
+      final uniqueCount =
+          await DatabaseService.getOrgDeduplicatedContactCount(org.id);
       state = state.copyWith(
         isLoading: false,
         organization: org,
@@ -82,6 +89,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
         currentUserCanEdit: privs.canEdit,
         currentUserCanCreate: privs.canCreate,
         currentUserCanViewReminders: privs.canViewReminders,
+        uniqueContactCount: uniqueCount,
       );
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
@@ -94,6 +102,8 @@ class OrgNotifier extends StateNotifier<OrgState> {
     if (org == null) return;
     try {
       final members = await DatabaseService.getMembersForOrganization(org.id);
+      final uniqueCount =
+          await DatabaseService.getOrgDeduplicatedContactCount(org.id);
       final user = StorageService.currentUser;
       if (user != null) {
         final privs = await DatabaseService.getMemberPrivileges(
@@ -102,12 +112,13 @@ class OrgNotifier extends StateNotifier<OrgState> {
         );
         state = state.copyWith(
           members: members,
+          uniqueContactCount: uniqueCount,
           currentUserCanEdit: privs.canEdit,
           currentUserCanCreate: privs.canCreate,
           currentUserCanViewReminders: privs.canViewReminders,
         );
       } else {
-        state = state.copyWith(members: members);
+        state = state.copyWith(members: members, uniqueContactCount: uniqueCount);
       }
     } catch (_) {}
   }
@@ -248,9 +259,10 @@ class OrgNotifier extends StateNotifier<OrgState> {
     if (targetUserId == user.id) return "Utilisez \"Quitter l'organisation\" pour vous retirer";
 
     try {
-      // Transfer the member's contacts to the admin before removal so they
-      // remain visible in the org workspace.
-      await DatabaseService.transferOrgContactsToAdmin(
+      // Only transfer non-duplicate contacts to admin. Duplicate contacts
+      // (same phone/email as another active member's contact) stay with the
+      // removed member so they can still see them as a solo user.
+      await DatabaseService.transferNonDuplicateContactsToAdmin(
           fromUserId: targetUserId, orgId: org.id);
       await DatabaseService.removeOrgMember(org.id, targetUserId);
       await refreshMembers();
@@ -282,9 +294,10 @@ class OrgNotifier extends StateNotifier<OrgState> {
           await StorageService.setCurrentSession(refreshed, refreshed.sessionToken ?? '');
         }
       } else {
-        // Transfer contacts to admin before leaving so they remain visible
-        // in the org workspace after this member departs.
-        await DatabaseService.transferOrgContactsToAdmin(
+        // Only transfer non-duplicate contacts to admin before leaving so they
+        // remain visible in the org workspace. Duplicate contacts stay with
+        // the departing member for their personal record.
+        await DatabaseService.transferNonDuplicateContactsToAdmin(
             fromUserId: user.id, orgId: org.id);
         await DatabaseService.removeOrgMember(org.id, user.id);
         final updated = user.copyWith(organizationId: null, orgRole: null);
@@ -336,10 +349,10 @@ class OrgNotifier extends StateNotifier<OrgState> {
     );
     if (target.role == 'admin') return "Impossible de suspendre un administrateur";
     try {
-      // Transfer contacts to admin before suspension — suspended members are
-      // excluded from getAllContactsForOrganization, so their contacts would
-      // otherwise disappear from the org workspace.
-      await DatabaseService.transferOrgContactsToAdmin(
+      // Only transfer non-duplicate contacts to admin. Contacts that are
+      // duplicates of an existing active member's contact stay with the
+      // suspended member so they can see them while suspended.
+      await DatabaseService.transferNonDuplicateContactsToAdmin(
           fromUserId: targetUserId, orgId: org.id);
       await DatabaseService.updateMemberStatus(
           orgId: org.id, userId: targetUserId, status: 'suspended');

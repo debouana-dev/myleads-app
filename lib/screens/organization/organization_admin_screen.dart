@@ -328,7 +328,7 @@ class _OrganizationAdminScreenState
 
     final members = orgState.members;
     final activeCount = members.where((m) => m.status == 'active').length;
-    final totalContacts = members.fold<int>(0, (s, m) => s + m.contactCount);
+    final totalContacts = orgState.uniqueContactCount;
 
     return Scaffold(
       backgroundColor: AppColors.bg(context),
