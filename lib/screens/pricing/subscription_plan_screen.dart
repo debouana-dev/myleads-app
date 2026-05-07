@@ -27,7 +27,8 @@ class _SubscriptionPlanScreenState
     final l10n = ref.read(l10nProvider);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(err == null ? l10n.planChangedSuccess : l10n.planChangeError),
+        content:
+            Text(err == null ? l10n.planChangedSuccess : l10n.planChangeError),
         backgroundColor: err == null ? AppColors.success : AppColors.error,
       ),
     );
@@ -124,7 +125,8 @@ class _SubscriptionPlanScreenState
                   // Premium
                   _PlanCard(
                     title: l10n.premiumPlanName,
-                    price: l10n.premiumPrice(currency, eurToTargetRate: eurToUsd),
+                    price:
+                        l10n.premiumPrice(currency, eurToTargetRate: eurToUsd),
                     period: l10n.premiumPeriod(currency),
                     description: l10n.premiumPlanDesc,
                     features: _premiumFeatures(l10n),
@@ -141,7 +143,8 @@ class _SubscriptionPlanScreenState
                   // Business
                   _PlanCard(
                     title: l10n.businessPlanName,
-                    price: l10n.businessPrice(currency, eurToTargetRate: eurToUsd),
+                    price:
+                        l10n.businessPrice(currency, eurToTargetRate: eurToUsd),
                     period: l10n.businessPeriod(currency),
                     description: l10n.businessPlanDesc,
                     features: _businessFeatures(l10n),
@@ -214,31 +217,27 @@ class _SubscriptionPlanScreenState
       ? [
           '10 contacts max',
           'Business card scan',
-          'Basic search',
-          '5 active reminders',
+          'Hot · Warm · Cold tags',
+          'Encrypted local storage',
         ]
       : [
           '10 contacts max',
           'Scan carte de visite',
-          'Recherche basique',
-          '5 rappels actifs',
+          'Tags: Hot · Warm · Cold',
+          'Stockage local chiffré',
         ];
 
   List<String> _premiumFeatures(AppL10n l10n) => l10n.isEnglish
       ? [
           'Unlimited contacts',
-          'OCR + QR + NFC scan',
-          'AI auto-enrichment',
-          'Unlimited reminders',
+          'OCR + QR scan',
           'CSV / CRM export',
           'Cloud sync',
           'Priority support',
         ]
       : [
           'Contacts illimités',
-          'Scan OCR + QR + NFC',
-          'IA enrichissement automatique',
-          'Rappels illimités',
+          'Scan OCR + QR',
           'Export CSV / CRM',
           'Synchronisation cloud',
           'Support prioritaire',
@@ -248,21 +247,19 @@ class _SubscriptionPlanScreenState
       ? [
           'All Premium included',
           'Multi-user management',
-          'Team dashboard',
-          'Advanced CRM integrations',
-          'API access',
-          'Advanced analytics',
+          'Shared team space',
+          'Analytics & reports',
           'AI lead scoring',
+          'Auto cloud sync',
           'Dedicated onboarding',
         ]
       : [
           'Tout Premium inclus',
           'Gestion multi-utilisateurs',
-          'Dashboard équipe',
-          'Intégrations CRM avancées',
-          'API access',
-          'Analytics avancés',
-          'IA scoring leads',
+          'Espace équipe partagé',
+          'Analytics & rapports',
+          'Notation des leads par l\'IA',
+          'Synchronisation cloud automatique',
           'Onboarding dédié',
         ];
 
@@ -343,9 +340,8 @@ class _PlanCard extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
-                  color: isPopular
-                      ? Colors.white
-                      : AppColors.onSurface(context),
+                  color:
+                      isPopular ? Colors.white : AppColors.onSurface(context),
                 ),
               ),
               if (isPopular) ...[
@@ -470,8 +466,7 @@ class _PlanCard extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor:
                       isPopular ? AppColors.accent : AppColors.primary,
-                  foregroundColor:
-                      isPopular ? AppColors.primary : Colors.white,
+                  foregroundColor: isPopular ? AppColors.primary : Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
