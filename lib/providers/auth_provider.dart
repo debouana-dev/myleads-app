@@ -36,6 +36,7 @@ class AuthState {
   final String userEmail;
   final String? userPhotoPath;
   final String? error;
+
   /// Current subscription plan: 'free' | 'premium' | 'business'.
   final String plan;
 
@@ -136,8 +137,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await sendVerificationCode(email);
       state = state.copyWith(
         isLoading: false,
-        error:
-            'Veuillez vérifier votre email. Un code a été envoyé à $email.',
+        error: 'Veuillez vérifier votre email. Un code a été envoyé à $email.',
       );
       return false;
     }
@@ -312,7 +312,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<bool> signInWithGoogle() async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final google = GoogleSignIn(scopes: ['email']);
+      final google = GoogleSignIn(
+          scopes: ['email'],
+          serverClientId:
+              '772969451694-npt8ctok5nbm0g6sl6t7ttmn6q7cbgqb.apps.googleusercontent.com');
       final account = await google.signIn();
       if (account == null) {
         state = state.copyWith(isLoading: false);
@@ -393,8 +396,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (user.authProvider != provider) {
         state = state.copyWith(
           isLoading: false,
-          error:
-              'Cet email est déjà associé à un compte ${user.authProvider}.',
+          error: 'Cet email est déjà associé à un compte ${user.authProvider}.',
         );
         return false;
       }
@@ -491,7 +493,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
             userId,
             includeContacts: false,
           );
-          if (cloudErr != null) debugPrint('deleteAccount cloud error: $cloudErr');
+          if (cloudErr != null)
+            debugPrint('deleteAccount cloud error: $cloudErr');
           await DatabaseService.deleteUserAndAllData(userId);
           await StorageService.clearSession();
           state = const AuthState();
