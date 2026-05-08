@@ -1,5 +1,5 @@
 -- ============================================================
--- me2leads  —  MySQL schema v11
+-- me2leads  —  MySQL schema v12
 -- MySQL 8.0+  ·  InnoDB  ·  utf8mb4_unicode_ci
 -- Source of truth: lib/services/remote_sync_service.dart (_ensureSchema)
 --
@@ -192,7 +192,7 @@ SET foreign_key_checks = 1;
 
 -- ============================================================
 -- UPGRADE SCRIPT — run this section against an existing cloud DB
--- to bring it to v11.  Every statement is idempotent (safe to
+-- to bring it to v12.  Every statement is idempotent (safe to
 -- re-run).  Execute in order; stop on first error and investigate.
 -- ============================================================
 

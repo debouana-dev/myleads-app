@@ -272,6 +272,12 @@ class RemoteSyncService {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ''');
 
+    // Upgrade existing cloud databases that were bootstrapped before v11.
+    await conn.execute('''
+      ALTER TABLE `users`
+        ADD COLUMN IF NOT EXISTS `last_sync_at` VARCHAR(50) DEFAULT NULL
+    ''');
+
     // Upgrade existing cloud databases that were bootstrapped before v12.
     await conn.execute('''
       ALTER TABLE `organization_members`
