@@ -31,6 +31,7 @@ jobs:
         run: |
           flutter create --project-name me2leads --org com.debouana --platforms android,ios,web .
           flutter pub get
+          dart pub run flutter_launcher_icons
 
       - name: Patch iOS app display name
         run: |
