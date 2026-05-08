@@ -88,6 +88,80 @@ class AppL10n {
       ? 'Unable to create account. Please try again.'
       : 'Impossible de créer le compte. Veuillez réessayer.';
 
+  // Auth – Runtime error messages (returned by AuthNotifier methods)
+  String get authNoUserLoggedIn =>
+      _en ? 'No user logged in' : 'Aucun utilisateur connecté';
+  String get authNoAccountForEmail => _en
+      ? 'No account found for this email'
+      : 'Aucun compte trouvé pour cet email';
+  String authWrongProvider(String provider) => _en
+      ? 'This account uses $provider. Sign in via that service.'
+      : 'Ce compte utilise $provider. Connectez-vous via ce service.';
+  String get authInvalidCredentials =>
+      _en ? 'Incorrect email or password' : 'Email ou mot de passe incorrect';
+  String authEmailNotVerified(String email) => _en
+      ? 'Please verify your email. A code was sent to $email.'
+      : 'Veuillez vérifier votre email. Un code a été envoyé à $email.';
+  String get authInternetRequiredSignup => _en
+      ? 'An internet connection is required to create an account'
+      : 'Une connexion internet est requise pour créer un compte';
+  String get authFirstLastNameRequired =>
+      _en ? 'First and last name are required' : 'Prénom et nom sont obligatoires';
+  String get authEmailAlreadyUsed => _en
+      ? 'An account already exists for this email'
+      : 'Un compte existe déjà pour cet email';
+  String get authPhoneAlreadyUsed => _en
+      ? 'An account already exists for this phone number'
+      : 'Un compte existe déjà pour ce numéro de téléphone';
+  String authGoogleFailed(String error) =>
+      _en ? 'Google sign-in failed: $error' : 'Connexion Google échouée: $error';
+  String get authAppleNoEmail =>
+      _en ? 'Apple did not provide an email' : "Apple n'a pas fourni d'email";
+  String authAppleFailed(String error) =>
+      _en ? 'Apple sign-in failed: $error' : 'Connexion Apple échouée: $error';
+  String authOAuthEmailConflict(String provider) => _en
+      ? 'This email is already linked to a $provider account.'
+      : 'Cet email est déjà associé à un compte $provider.';
+  String get authInvalidPlan =>
+      _en ? 'Invalid plan' : 'Forfait invalide';
+  String get authInternetRequiredDelete => _en
+      ? 'An internet connection is required to delete your account'
+      : 'Une connexion internet est requise pour supprimer votre compte';
+  String get authDeleteOrgBlocker => _en
+      ? 'Delete or transfer the organization administration before deleting your account.'
+      : "Supprimez ou transférez l'administration de l'organisation avant de supprimer votre compte.";
+  String authDeleteError(String e) =>
+      _en ? 'Error during deletion: $e' : 'Erreur lors de la suppression : $e';
+  String authPasswordNotModifiable(String provider) => _en
+      ? 'Password cannot be changed for $provider accounts'
+      : 'Mot de passe non modifiable pour les comptes $provider';
+  String get authCurrentPasswordIncorrect =>
+      _en ? 'Incorrect current password' : 'Mot de passe actuel incorrect';
+  String authEmailNotModifiable(String provider) => _en
+      ? 'Email cannot be changed for $provider accounts'
+      : 'Email non modifiable pour les comptes $provider';
+  String get authEmailAlreadyInUse => _en
+      ? 'This email is already in use by another account'
+      : 'Cet email est déjà utilisé par un autre compte';
+  String get authNoVerificationCodePending => _en
+      ? 'No verification code pending. Please request a new one.'
+      : 'Aucun code de vérification en attente. Veuillez en demander un nouveau.';
+  String get authCodeExpired => _en
+      ? 'The code has expired. Please request a new one.'
+      : 'Le code a expiré. Veuillez en demander un nouveau.';
+  String get authInvalidVerificationCode =>
+      _en ? 'Invalid verification code' : 'Code de vérification invalide';
+  String get authNoRecoveryCodePending => _en
+      ? 'No recovery code pending. Please request a new one.'
+      : 'Aucun code de récupération en attente. Veuillez en demander un nouveau.';
+  String get authInvalidRecoveryCode =>
+      _en ? 'Invalid recovery code' : 'Code de récupération invalide';
+  String get authNoAccountForEmailRecovery =>
+      _en ? 'No account associated with this email' : 'Aucun compte associé à cet email';
+  String authOAuthNoRecovery(String provider) => _en
+      ? 'This account uses $provider. Code recovery is not available for this account type.'
+      : "Ce compte utilise $provider. La récupération par code n'est pas disponible pour ce type de compte.";
+
   // ─── Auth – Login ─────────────────────────────────────────────────────────
   String get welcomeBack => _en ? 'Welcome' : 'Bienvenue';
   String get loginSubtitle => _en
