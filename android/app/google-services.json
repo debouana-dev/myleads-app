@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "772969451694",
+    "project_id": "me2leads",
+    "storage_bucket": "me2leads.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:772969451694:android:5a7c7da609d2ef522ddd3f",
+        "android_client_info": {
+          "package_name": "com.debouana.myleads"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "772969451694-9e71lctlt1rqdhavob115f16s35vroes.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.debouana.myleads",
+            "certificate_hash": "68a76c5bb363fa3da03c001ba563256b5f155e8e"
+          }
+        },
+        {
+          "client_id": "772969451694-npt8ctok5nbm0g6sl6t7ttmn6q7cbgqb.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB2I8NJ78pqu4Ceu3qG0s7tPN80nvv8v38"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "772969451694-npt8ctok5nbm0g6sl6t7ttmn6q7cbgqb.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "772969451694-765ju5be261tatu47gmeuihktrsu3uut.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.debouana.myleads"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
