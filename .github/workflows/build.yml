@@ -86,7 +86,7 @@ jobs:
               content = f.read()
 
           # Change app display label (flutter create defaults to package name)
-          content = content.replace('android:label="me2leads"', 'android:label="Me2Leads"')
+          content = re.sub(r'android:label="(?:me2leads|myleads|@string/app_name)"', 'android:label="Me2Leads"', content)
 
           # Add INTERNET permission (idempotent)
           if 'android.permission.INTERNET' not in content:
@@ -156,6 +156,17 @@ jobs:
           with open(path, 'w') as f:
               f.write(content)
           print('AndroidManifest.xml patched')
+
+          # Patch strings.xml app_name (covers @string/app_name reference)
+          import os
+          strings_path = 'android/app/src/main/res/values/strings.xml'
+          if os.path.exists(strings_path):
+              with open(strings_path, 'r') as f:
+                  s = f.read()
+              s = re.sub(r'<string name="app_name">[^<]*</string>', '<string name="app_name">Me2Leads</string>', s)
+              with open(strings_path, 'w') as f:
+                  f.write(s)
+              print('strings.xml patched')
           PYEOF
 
       - name: Build APK
