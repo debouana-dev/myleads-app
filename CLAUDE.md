@@ -74,7 +74,9 @@ myleads-app/
 │   ├── icons/
 │   └── images/
 └── lib/
-    ├── main.dart                     ← entry, SystemChrome, StorageService.init()
+    ├── main.dart                     ← entry, SystemChrome, StorageService.init(), startUserSync()
+    ├── test/
+    │   └── org_sync_test.dart        ← integration tests: org lifecycle, member management, contact dedup, permissions
     ├── config/
     │   └── app_config.dart           ← XOR-obfuscated credentials (SMTP/MySQL/FTP) + feature flags
     ├── core/
@@ -118,12 +120,12 @@ myleads-app/
     │   └── pricing/                  ← pricing, subscription plan, payment history
     ├── services/
     │   ├── action_tracker.dart       ← WidgetsBindingObserver: logs Interaction on app background
-    │   ├── background_task.dart      ← WorkManager integration for background reminders
+    │   ├── background_task.dart      ← WorkManager: background reminders + Business-plan 15-min auto-sync
     │   ├── calendar_service.dart     ← add_2_calendar wrapper
     │   ├── contact_actions.dart      ← url_launcher for call/sms/whatsapp/email
     │   ├── contact_import_export_service.dart ← CSV/JSON contact import/export
     │   ├── currency_service.dart     ← real-time currency conversion API
-    │   ├── database_service.dart     ← SQLite, schema v11 with migrations
+    │   ├── database_service.dart     ← SQLite, schema v12 with migrations
     │   ├── email_service.dart        ← mailer (SMTP) for verification codes
     │   ├── encryption_service.dart   ← AES-256-CBC master key in Keystore
     │   ├── ftp_photo_service.dart    ← upload/download/delete photos via FTP
@@ -132,7 +134,7 @@ myleads-app/
     │   ├── ocr_service_mobile.dart   ← ML Kit text recognition
     │   ├── ocr_service_stub.dart     ← web / unsupported platforms
     │   ├── photo_storage_service.dart ← contact / user photo files (local)
-    │   ├── remote_sync_service.dart  ← MySQL bidirectional sync + live-write callbacks
+    │   ├── remote_sync_service.dart  ← MySQL bidirectional sync + live-write callbacks + cloud user lookup
     │   ├── storage_service.dart      ← facade, init order for DB + crypto + sync wiring
     │   └── web_db_factory_{stub,web}.dart ← conditional import for sqflite web
     └── widgets/
@@ -312,14 +314,14 @@ explicit null for nullable fields.
 
 | Provider                   | Exposes                                                                                          |
 |----------------------------|--------------------------------------------------------------------------------------------------|
-| `authProvider`             | `signUp`, `login`, `logout`, `changePassword`, `changeEmail`, `deleteAccount`                    |
+| `authProvider`             | `signUp` (internet required, cloud-conflict check), `login` (falls back to cloud import for new devices), `logout`, `changePassword`, `changeEmail`, `deleteAccount` |
 | `contactsProvider`         | CRUD + `filteredContacts`, `activeFilter`, `statusFilter`, `searchQuery`, `totalContacts`, counts |
 | `remindersProvider`        | CRUD + 5 computed lists: `todayReminders`, `weekReminders`, `laterReminders`, `lateReminders`, `doneReminders` + `refresh()` |
 | `currentTabProvider`       | Simple `StateProvider<int>` for the shell's active tab index                                     |
 | `notificationsProvider`    | In-app notification feed (unread count, mark-read, delete)                                       |
 | `settingsProvider`         | Locale (`_en` toggle) + theme preferences                                                        |
 | `currencyProvider`         | Real-time currency conversion (for multi-currency pricing display)                               |
-| `organizationProvider`     | Full org CRUD + member management; derived: `orgCanCreateProvider`, `orgCanEditOthersProvider`, `orgCanViewRemindersProvider` |
+| `organizationProvider`     | Full org CRUD + member management; `OrgState` exposes `currentUserCanViewHistory`, `uniqueContactCount`; derived: `orgCanCreateProvider`, `orgCanEditOthersProvider`, `orgCanViewRemindersProvider`, `orgCanViewHistoryProvider` |
 
 ### Cross-screen navigation patterns
 
@@ -341,7 +343,7 @@ explicit null for nullable fields.
 
 ---
 
-## 6. Data model (SQLite schema v11)
+## 6. Data model (SQLite schema v12)
 
 ### Contact
 ```
@@ -387,11 +389,13 @@ id, name, owner_id, invite_code (8-char alphanumeric), created_at
 ### OrgMember (v7+)
 ```
 id, org_id, user_id, role (admin|member), status (active|suspended),
-can_edit BOOL, can_create BOOL, can_view_reminders BOOL, joined_at
+can_edit BOOL, can_create BOOL, can_view_reminders BOOL,
+can_view_history BOOL, joined_at
 ```
-- Admin always has all three privileges set to true.
+- Admin always has all four privileges set to true.
+- `can_view_history` — may see interaction history authored by other org members (v12).
 - `suspendMember` freezes member access without removing them.
-- `removeMember` transfers the member's shared contacts to the org admin first.
+- `removeMember` transfers only **non-duplicate** contacts to the org admin (contacts whose phone/email already exist in the admin's set are left with the removed member to avoid data loss).
 
 ### AppNotification (v6+)
 ```
@@ -410,6 +414,7 @@ Schema version history (additive only — see `_onUpgrade` in `database_service.
 | 9 | `users.plan` subscription tier column |
 | 10 | `organization_members.can_view_reminders` privilege column |
 | 11 | `users.last_sync_at` timestamp column |
+| 12 | `organization_members.can_view_history` privilege column |
 
 **Bump `_dbVersion` and add an `if (oldVersion < N)` block** when changing
 the schema; never rewrite existing tables.
@@ -423,13 +428,33 @@ the schema; never rewrite existing tables.
 - **Target:** MySQL server at `AppConfig.mysqlHost:35500`, database `me2leads`.
 - **Credentials:** XOR-obfuscated in `app_config.dart`, decrypted at runtime via
   `_deobfuscate()`. Never appear as plaintext string literals in source.
-- **Push:** Uploads all local rows (contacts, reminders, interactions, org data,
-  user record) to MySQL. Absolute photo paths are migrated to relative paths
-  before the upsert (`_migrateAndUploadPhotos`).
-- **Pull:** Downloads remote rows, applies upsert to local SQLite.
+- **Plan-gated sync:**
+  - **Free** — syncs user row only (no contacts / reminders / interactions).
+  - **Premium / Business** — full bidirectional data sync.
+  - Gate is enforced in both push and pull via the `_hasSyncPlan` getter.
+- **Push:** Uploads local rows to MySQL. Data tables (contacts, reminders,
+  interactions, org data) require Premium/Business. User row is always pushed.
+  Absolute photo paths are migrated to relative before upsert (`_migrateAndUploadPhotos`).
+- **Pull:** Downloads remote rows, applies upsert to local SQLite. **Session
+  preservation:** `session_token` and `password_hash` from the cloud are never
+  written to the local DB during pull — prevents remote logout on multi-device use.
+  Updates `last_sync_at` on every pull.
+- **Auto user-row sync:** `startUserSync()` (called from `main.dart`) listens to
+  connectivity changes and pushes the user row (debounced 3 s) whenever the
+  device gains internet — applies to all plans.
+- **Business background sync:** `scheduleBusinessSync()` registers a WorkManager
+  periodic task (every 15 min) that runs `push()` + `pull()` for Business-plan
+  users. Cancelled via `cancelBusinessSync()` on logout or plan downgrade.
 - **Live-write mode:** Every local write (insert/update/delete via `DatabaseService`)
   spawns a fire-and-forget background MySQL upsert. Network errors are swallowed
   so they never block the UI.
+- **Cloud user lookup helpers:** `isEmailTakenInCloud()`, `registerUserInCloud()`,
+  `importUserByEmailLookup()`, `deleteUserFromCloud()`,
+  `findCloudUserIdByEmailLookup()` — used by `AuthNotifier` for multi-device
+  login, signup conflict checks, and account deletion.
+- **Targeted field updates:** `updatePasswordInCloud()`, `updateEmailInCloud()`,
+  `updateEmailVerifiedInCloud()` — background live-write callbacks intentionally
+  exclude password hash; use these methods to sync security-sensitive fields.
 - **UI:** `SyncScreen` (`/sync`) provides explicit push, pull, and test-connection
   actions with idle/loading/success/error states and a last-sync timestamp.
 
@@ -461,12 +486,18 @@ Organizations are wired throughout contacts, reminders, and the profile tab.
   - `can_create` — may add new contacts
   - `can_edit` — may edit any org contact
   - `can_view_reminders` — may see reminders on shared contacts
+  - `can_view_history` — may see interaction history authored by other members (v12)
 - **Derived providers (read in UI):**
   - `orgCanCreateProvider` — current user may create contacts
   - `orgCanEditOthersProvider` — current user may edit other members' contacts
   - `orgCanViewRemindersProvider` — current user may view shared reminders
-- **Contact transfer:** removing or suspending a member transfers their shared
-  contacts to the org admin before the operation completes.
+  - `orgCanViewHistoryProvider` — current user may view history entries authored by others
+- **Contact history gating:** `ContactHistoryScreen` watches `orgCanViewHistoryProvider`
+  and filters to show only entries authored by the current user when the privilege is false.
+- **Contact transfer:** removing or suspending a member transfers only **non-duplicate**
+  contacts to the org admin (deduplication by phone/email lookup prevents data loss when
+  members share contacts). `OrgState.uniqueContactCount` reflects the deduplicated total.
+- **Org stats panel** shows `uniqueContactCount` (not the raw sum of per-member counts).
 
 ---
 
@@ -528,7 +559,9 @@ Organizations are wired throughout contacts, reminders, and the profile tab.
     resolves to absolute; `FtpPhotoService` uses the relative path as-is.
 16. **Organization privilege checks.** Any screen that mutates org contacts must
     read `orgCanCreateProvider` / `orgCanEditOthersProvider` before allowing the
-    action. Non-admin members may be restricted.
+    action. Any screen that displays other members' interaction history must check
+    `orgCanViewHistoryProvider`. Non-admin members may be restricted on all four
+    privilege axes (`can_create`, `can_edit`, `can_view_reminders`, `can_view_history`).
 
 ---
 
@@ -565,7 +598,8 @@ patch step in the workflow, not via committed files. Files under
 | Release a new APK                      | push to `main`; CI handles build + GitHub Release + Pages        |
 | Watch a CI run                         | `gh run list --limit 3` then `gh run watch <id> --exit-status`   |
 | Trigger a manual sync                  | `SyncScreen` (`/sync`) — push/pull buttons call `RemoteSyncService` |
-| Add org-gated UI                       | read `orgCanCreateProvider` / `orgCanEditOthersProvider` before allowing mutations |
+| Add org-gated UI                       | read `orgCanCreateProvider` / `orgCanEditOthersProvider` before allowing mutations; read `orgCanViewHistoryProvider` before showing other members' interaction history |
+| Test org/sync behavior                 | `test/org_sync_test.dart` — 47 cases covering org lifecycle, member privileges, contact deduplication, live-write callbacks |
 
 ---
 
@@ -612,8 +646,25 @@ patch step in the workflow, not via committed files. Files under
   for new user IDs.
 - **Organization contact transfer.** Calling `removeMember` or `suspendMember`
   triggers a contact-ownership transfer to the org admin in both SQLite and
-  MySQL before the membership change is committed. Do not remove members directly
-  via raw DB calls.
+  MySQL before the membership change is committed. Only non-duplicate contacts
+  transfer (deduplication by `phone_lookup` / `email_lookup`). Do not remove
+  members directly via raw DB calls.
+- **Plan-gated sync.** Free-plan users push/pull the user row only; contacts,
+  reminders, and interactions are excluded. Premium and Business get full sync.
+  Calling `push()` / `pull()` for a free-plan user is safe — the data tables
+  are silently skipped.
+- **Multi-device login.** If a user's email is not found locally, `AuthNotifier`
+  attempts `RemoteSyncService.importUserByEmailLookup()` to fetch the account
+  from the cloud. On success only the session token is updated locally — the
+  password hash is left intact to avoid key-mismatch decryption failures.
+- **Session preservation on pull.** `RemoteSyncService.pull()` never overwrites
+  the local `session_token` or `password_hash` with cloud values. Always use the
+  targeted helpers (`updatePasswordInCloud`, `updateEmailInCloud`) for
+  security-sensitive field syncs.
+- **Business background sync.** `scheduleBusinessSync()` registers a 15-minute
+  WorkManager periodic task. It is started in `initBackgroundTasks()` when the
+  user's plan is `business`, and cancelled via `cancelBusinessSync()` on logout
+  or plan change. Do not schedule it manually from screens.
 
 ---
 
@@ -650,8 +701,25 @@ Use these as reference points when coordinating changes:
   plan screen + payment history, CSV/JSON import/export, contact history and
   contact-reminders sub-screens, app label renamed to **Me2Leads** (db name
   `me2leads`), SQLite schema bumped to **v11**.
+- **v1.0.0 doc v9** — Plan-gated sync (Free = user row only; Premium/Business =
+  full data sync), multi-device login via cloud user import
+  (`importUserByEmailLookup`), session-preservation on pull (local
+  `session_token` / `password_hash` never overwritten by cloud values),
+  auto user-row sync on connectivity change (`startUserSync` in `main.dart`),
+  Business-plan 15-min WorkManager background sync
+  (`scheduleBusinessSync` / `cancelBusinessSync`), targeted security-field
+  sync helpers (`updatePasswordInCloud`, `updateEmailInCloud`,
+  `updateEmailVerifiedInCloud`), cloud user registration + conflict check
+  on signup (`registerUserInCloud`, `isEmailTakenInCloud`), account deletion
+  from cloud on `deleteAccount`, smart contact-transfer on member
+  removal (non-duplicate only via `transferNonDuplicateContactsToAdmin`),
+  `can_view_history` privilege on `OrgMember` + `orgCanViewHistoryProvider`
+  + history gating in `ContactHistoryScreen`, `OrgState.uniqueContactCount`
+  for deduplicated org stats, payment methods updated (Amazon Pay added;
+  Mobile Money + Virement removed), SQLite schema bumped to **v12**,
+  integration test suite added (`test/org_sync_test.dart`, 47 cases).
 
-When the user references "doc vN", match the behaviour to the nearest anchor
+When the user references "doc vN", match the behavior to the nearest anchor
 above and consult the corresponding commit (see `git log --oneline`).
 
 ---
