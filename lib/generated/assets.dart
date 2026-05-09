@@ -8,6 +8,15 @@ import 'package:lottie/src/composition.dart';
 
 class Assets {
   Assets._();
+
+  static const $AssetsIconsGen icons = $AssetsIconsGen();
+}
+
+class $AssetsIconsGen {
+  const $AssetsIconsGen();
+
+  final AssetGenImage appLogo =
+      const AssetGenImage('assets/icons/app_logo.png');
 }
 
 class AssetGenImage {

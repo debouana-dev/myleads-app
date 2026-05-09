@@ -83,6 +83,88 @@ class AppL10n {
       ? 'Please enter the 6-digit code'
       : 'Veuillez entrer un code à 6 chiffres';
 
+  // Alerts
+  String get createAccErrRetry => _en
+      ? 'Unable to create account. Please try again.'
+      : 'Impossible de créer le compte. Veuillez réessayer.';
+
+  // Auth – Runtime error messages (returned by AuthNotifier methods)
+  String get authNoUserLoggedIn =>
+      _en ? 'No user logged in' : 'Aucun utilisateur connecté';
+  String get authNoAccountForEmail => _en
+      ? 'No account found for this email'
+      : 'Aucun compte trouvé pour cet email';
+  String get authCloudConnectionError => _en
+      ? 'Unable to reach the server. Please check your connection and try again.'
+      : 'Impossible de contacter le serveur. Vérifiez votre connexion et réessayez.';
+  String authWrongProvider(String provider) => _en
+      ? 'This account uses $provider. Sign in via that service.'
+      : 'Ce compte utilise $provider. Connectez-vous via ce service.';
+  String get authInvalidCredentials =>
+      _en ? 'Incorrect email or password' : 'Email ou mot de passe incorrect';
+  String authEmailNotVerified(String email) => _en
+      ? 'Please verify your email. A code was sent to $email.'
+      : 'Veuillez vérifier votre email. Un code a été envoyé à $email.';
+  String get authInternetRequiredSignup => _en
+      ? 'An internet connection is required to create an account'
+      : 'Une connexion internet est requise pour créer un compte';
+  String get authFirstLastNameRequired =>
+      _en ? 'First and last name are required' : 'Prénom et nom sont obligatoires';
+  String get authEmailAlreadyUsed => _en
+      ? 'An account already exists for this email'
+      : 'Un compte existe déjà pour cet email';
+  String get authPhoneAlreadyUsed => _en
+      ? 'An account already exists for this phone number'
+      : 'Un compte existe déjà pour ce numéro de téléphone';
+  String authGoogleFailed(String error) =>
+      _en ? 'Google sign-in failed: $error' : 'Connexion Google échouée: $error';
+  String get authAppleNoEmail =>
+      _en ? 'Apple did not provide an email' : "Apple n'a pas fourni d'email";
+  String authAppleFailed(String error) =>
+      _en ? 'Apple sign-in failed: $error' : 'Connexion Apple échouée: $error';
+  String authOAuthEmailConflict(String provider) => _en
+      ? 'This email is already linked to a $provider account.'
+      : 'Cet email est déjà associé à un compte $provider.';
+  String get authInvalidPlan =>
+      _en ? 'Invalid plan' : 'Forfait invalide';
+  String get authInternetRequiredDelete => _en
+      ? 'An internet connection is required to delete your account'
+      : 'Une connexion internet est requise pour supprimer votre compte';
+  String get authDeleteOrgBlocker => _en
+      ? 'Delete or transfer the organization administration before deleting your account.'
+      : "Supprimez ou transférez l'administration de l'organisation avant de supprimer votre compte.";
+  String authDeleteError(String e) =>
+      _en ? 'Error during deletion: $e' : 'Erreur lors de la suppression : $e';
+  String authPasswordNotModifiable(String provider) => _en
+      ? 'Password cannot be changed for $provider accounts'
+      : 'Mot de passe non modifiable pour les comptes $provider';
+  String get authCurrentPasswordIncorrect =>
+      _en ? 'Incorrect current password' : 'Mot de passe actuel incorrect';
+  String authEmailNotModifiable(String provider) => _en
+      ? 'Email cannot be changed for $provider accounts'
+      : 'Email non modifiable pour les comptes $provider';
+  String get authEmailAlreadyInUse => _en
+      ? 'This email is already in use by another account'
+      : 'Cet email est déjà utilisé par un autre compte';
+  String get authNoVerificationCodePending => _en
+      ? 'No verification code pending. Please request a new one.'
+      : 'Aucun code de vérification en attente. Veuillez en demander un nouveau.';
+  String get authCodeExpired => _en
+      ? 'The code has expired. Please request a new one.'
+      : 'Le code a expiré. Veuillez en demander un nouveau.';
+  String get authInvalidVerificationCode =>
+      _en ? 'Invalid verification code' : 'Code de vérification invalide';
+  String get authNoRecoveryCodePending => _en
+      ? 'No recovery code pending. Please request a new one.'
+      : 'Aucun code de récupération en attente. Veuillez en demander un nouveau.';
+  String get authInvalidRecoveryCode =>
+      _en ? 'Invalid recovery code' : 'Code de récupération invalide';
+  String get authNoAccountForEmailRecovery =>
+      _en ? 'No account associated with this email' : 'Aucun compte associé à cet email';
+  String authOAuthNoRecovery(String provider) => _en
+      ? 'This account uses $provider. Code recovery is not available for this account type.'
+      : "Ce compte utilise $provider. La récupération par code n'est pas disponible pour ce type de compte.";
+
   // ─── Auth – Login ─────────────────────────────────────────────────────────
   String get welcomeBack => _en ? 'Welcome' : 'Bienvenue';
   String get loginSubtitle => _en
@@ -497,6 +579,7 @@ class AppL10n {
       _en ? 'Plan updated successfully' : 'Forfait mis à jour avec succès';
   String get planChangeError =>
       _en ? 'Error changing plan' : 'Erreur lors du changement de forfait';
+  String get bankCard => _en ? 'Bank card' : 'Carte bancaire';
 
   // ─── Payment History ─────────────────────────────────────────────────────
   String get paymentHistoryTitle =>
@@ -646,12 +729,14 @@ class AppL10n {
   String get privileges => _en ? 'Privileges' : 'Privilèges';
   String get viewRemindersPrivilege =>
       _en ? 'Can view shared reminders' : 'Peut voir les rappels partagés';
-  String get viewHistoryPrivilege =>
-      _en ? 'Can view shared contact history' : "Peut voir l'historique des contacts partagés";
+  String get viewHistoryPrivilege => _en
+      ? 'Can view shared contact history'
+      : "Peut voir l'historique des contacts partagés";
   String get memberManagement => _en ? 'Manage member' : 'Gérer le membre';
   String get youLabel => _en ? '(you)' : '(vous)';
   String get suspendMember => _en ? 'Suspend' : 'Suspendre';
-  String get suspendMemberTitle => _en ? 'Suspend member' : 'Suspendre le membre';
+  String get suspendMemberTitle =>
+      _en ? 'Suspend member' : 'Suspendre le membre';
   String suspendMemberConfirm(String name) => _en
       ? 'Suspend $name? They will lose access to the organisation.'
       : 'Suspendre $name ? Il/elle perdra l\'accès à l\'organisation.';
@@ -675,10 +760,12 @@ class AppL10n {
   String get codeRegenerated =>
       _en ? 'Invite code regenerated' : "Code d'invitation régénéré";
   String get orgStatsTitle => _en ? 'Organisation' : 'Organisation';
-  String orgTotalContacts(int n) =>
-      _en ? '$n total contact${n == 1 ? '' : 's'}' : '$n contact${n > 1 ? 's' : ''} au total';
-  String orgActiveMembers(int n) =>
-      _en ? '$n active member${n == 1 ? '' : 's'}' : '$n membre${n > 1 ? 's' : ''} actif${n > 1 ? 's' : ''}';
+  String orgTotalContacts(int n) => _en
+      ? '$n total contact${n == 1 ? '' : 's'}'
+      : '$n contact${n > 1 ? 's' : ''} au total';
+  String orgActiveMembers(int n) => _en
+      ? '$n active member${n == 1 ? '' : 's'}'
+      : '$n membre${n > 1 ? 's' : ''} actif${n > 1 ? 's' : ''}';
 
   // ─── Import / Export ─────────────────────────────────────────────────────
   String get importExportTitle => _en ? 'Import / Export' : 'Import / Export';
@@ -691,21 +778,22 @@ class AppL10n {
   String get importSectionDesc => _en
       ? 'Load contacts from a file'
       : 'Charger des contacts depuis un fichier';
-  String get exportSection =>
-      _en ? 'Export contacts' : 'Exporter les contacts';
+  String get exportSection => _en ? 'Export contacts' : 'Exporter les contacts';
   String exportSectionDesc(int n) => _en
       ? 'Export your $n contact${n == 1 ? '' : 's'}'
       : 'Exporter vos $n contact${n > 1 ? 's' : ''}';
 
-  String get csvImportDesc =>
-      _en ? 'Salesforce, Odoo, SAP or generic' : 'Salesforce, Odoo, SAP ou générique';
+  String get csvImportDesc => _en
+      ? 'Salesforce, Odoo, SAP or generic'
+      : 'Salesforce, Odoo, SAP ou générique';
   String get vcardImportDesc =>
       _en ? 'Standard vCard / contacts app' : 'vCard standard / app Contacts';
   String get txtImportDesc =>
       _en ? 'Me2Leads TXT format' : 'Format TXT Me2Leads';
 
-  String get vcardExportDesc =>
-      _en ? 'Universal contacts format (RFC 6350)' : 'Format contacts universel (RFC 6350)';
+  String get vcardExportDesc => _en
+      ? 'Universal contacts format (RFC 6350)'
+      : 'Format contacts universel (RFC 6350)';
   String get txtExportDesc =>
       _en ? 'Readable plain text' : 'Texte brut lisible';
   String csvExportDesc(String formatName) =>
@@ -755,8 +843,7 @@ class AppL10n {
   String get confirmImport => _en ? 'Import' : 'Importer';
 
   // TXT format guide
-  String get txtGuideTitle =>
-      _en ? 'TXT Format Guide' : 'Guide du format TXT';
+  String get txtGuideTitle => _en ? 'TXT Format Guide' : 'Guide du format TXT';
   String get txtGuideSubtitle => _en
       ? 'Recommended structure for best import results'
       : 'Structure recommandée pour de meilleurs résultats';
@@ -764,7 +851,8 @@ class AppL10n {
       _en ? 'View format guide' : 'Voir le guide de format';
   String get txtGuideHideBtn => _en ? 'Hide guide' : 'Masquer le guide';
   String get txtGuideTemplateLabel => _en ? 'Template' : 'Modèle';
-  String get txtGuideFieldsLabel => _en ? 'Fields reference' : 'Référence des champs';
+  String get txtGuideFieldsLabel =>
+      _en ? 'Fields reference' : 'Référence des champs';
   String get txtGuideRequired => _en ? 'Required' : 'Obligatoire';
   String get txtGuideOptional => _en ? 'Optional' : 'Optionnel';
   String get txtGuideSeparatorNote => _en
@@ -784,15 +872,15 @@ class AppL10n {
       : 'Un fichier peut contenir plusieurs contacts. Incrémentez le numéro dans chaque séparateur.';
 
   // CSV format guide
-  String get csvGuideTitle =>
-      _en ? 'CSV Format Guide' : 'Guide du format CSV';
+  String get csvGuideTitle => _en ? 'CSV Format Guide' : 'Guide du format CSV';
   String get csvGuideSubtitle => _en
       ? 'Supported headers for Salesforce, Odoo, SAP and generic CSV'
       : 'En-têtes supportés pour Salesforce, Odoo, SAP et CSV générique';
   String get csvGuideShowBtn =>
       _en ? 'View format guide' : 'Voir le guide de format';
   String get csvGuideHideBtn => _en ? 'Hide guide' : 'Masquer le guide';
-  String get csvGuideTemplateLabel => _en ? 'Generic template' : 'Modèle générique';
+  String get csvGuideTemplateLabel =>
+      _en ? 'Generic template' : 'Modèle générique';
   String get csvGuideColumnsLabel =>
       _en ? 'Accepted column names' : 'Noms de colonnes acceptés';
   String get csvGuideHeaderNote => _en
@@ -846,15 +934,18 @@ class AppL10n {
   String get syncScreenTitle => _en ? 'Cloud Sync' : 'Sync Cloud';
   String get syncLastSyncLabel => _en ? 'Last sync' : 'Dernière sync';
   String get syncNever => _en ? 'Never' : 'Jamais';
-  String get syncUploadTitle => _en ? 'Upload to cloud' : 'Envoyer vers le cloud';
+  String get syncUploadTitle =>
+      _en ? 'Upload to cloud' : 'Envoyer vers le cloud';
   String get syncUploadDesc => _en
       ? 'Back up your local data to the remote database'
       : 'Sauvegarder vos données locales sur le serveur distant';
-  String get syncDownloadTitle => _en ? 'Download from cloud' : 'Télécharger du cloud';
+  String get syncDownloadTitle =>
+      _en ? 'Download from cloud' : 'Télécharger du cloud';
   String get syncDownloadDesc => _en
       ? 'Restore your data from the remote database'
       : 'Restaurer vos données depuis le serveur distant';
-  String get syncInProgress => _en ? 'Sync in progress…' : 'Synchronisation en cours…';
+  String get syncInProgress =>
+      _en ? 'Sync in progress…' : 'Synchronisation en cours…';
   String get syncSuccess => _en ? 'Sync completed' : 'Synchronisation terminée';
   String get syncConfirmPullTitle =>
       _en ? 'Overwrite local data?' : 'Écraser les données locales ?';
@@ -863,10 +954,12 @@ class AppL10n {
       : 'Vos contacts et rappels locaux seront remplacés par la version du cloud. Cette action est irréversible.';
   String get syncErrNoConnection =>
       _en ? 'No internet connection' : 'Pas de connexion internet';
-  String get syncErrAuthFailed =>
-      _en ? 'Could not connect to the database' : 'Impossible de se connecter à la base de données';
-  String get syncErrUnknown =>
-      _en ? 'An unexpected error occurred' : 'Une erreur inattendue est survenue';
+  String get syncErrAuthFailed => _en
+      ? 'Could not connect to the database'
+      : 'Impossible de se connecter à la base de données';
+  String get syncErrUnknown => _en
+      ? 'An unexpected error occurred'
+      : 'Une erreur inattendue est survenue';
   String syncResultLabel(int contacts, int reminders) => _en
       ? '$contacts contact${contacts == 1 ? '' : 's'}, $reminders reminder${reminders == 1 ? '' : 's'} synced'
       : '$contacts contact${contacts == 1 ? '' : 's'}, $reminders rappel${reminders == 1 ? '' : 's'} synchronisé${reminders == 1 ? '' : 's'}';

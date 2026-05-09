@@ -40,7 +40,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         await ref.read(remindersProvider.notifier).reload();
         if (mounted) context.go('/main');
       } else {
-        context.go('/login');
+         context.go('/login');
       }
     });
   }
@@ -80,7 +80,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                 width: 120,
                 height: 120,
                 decoration: BoxDecoration(
-                  gradient: AppColors.accentGradient,
+                  color: AppColors.white,
                   borderRadius: BorderRadius.circular(32),
                   boxShadow: [
                     BoxShadow(
@@ -90,11 +90,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                     ),
                   ],
                 ),
-                child: const Center(
-                  child: Icon(
-                    Icons.bolt_rounded,
-                    size: 56,
-                    color: AppColors.white,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(32),
+                  child: Image.asset(
+                    'assets/icons/app_logo.png',
+                    width: 120,
+                    height: 120,
+                    fit: BoxFit.contain,
                   ),
                 ),
               )

@@ -5,7 +5,13 @@
       "Bash(flutter analyze *)",
       "Bash(flutter pub *)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(p['package'], p.get\\('latest',{}\\).get\\('version','?'\\)\\) for p in d.get\\('packages',[]\\) if 'sqlite3' in p['package'].lower\\(\\)]\")",
-      "Bash(./android/gradlew --stop)"
+      "Bash(./android/gradlew --stop)",
+      "Bash(flutter test *)",
+      "PowerShell(winget install SQLite.SQLite --silent 2>&1)",
+      "PowerShell(winget install SQLite.SQLite --silent --accept-package-agreements --accept-source-agreements 2>&1)",
+      "PowerShell(scoop install sqlite 2>&1)",
+      "PowerShell(Get-Command scoop 2>&1)",
+      "PowerShell(dart pub cache list 2>$null)"
     ]
   }
 }

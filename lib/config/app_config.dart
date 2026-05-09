@@ -30,24 +30,23 @@ class AppConfig {
 
   static bool get smtpSsl => true;
 
-  // ── MySQL remote sync ───────────────────────────────────────────────────
+  // ── PostgreSQL remote sync ──────────────────────────────────────────────────
 
-  static String get mysqlHost => _deobfuscate(const [
-        47, 11, 125, 87, 88, 82, 66, 6, 3, 31, 6, 99, 84, 77, 23, 16,
-        90, 40, 9, 22, 56, 29, 40, 7, 79, 11, 5, 90, 30, 92, 83, 39,
+  static String get pgHost => _deobfuscate(const [
+        122, 64, 98, 84, 82, 83, 93, 1, 4, 28, 7, 101, 80,
       ]);
 
-  static int get mysqlPort => 35500;
+  static int get pgPort => 5432;
 
-  static String get mysqlUsername => _deobfuscate(const [
-        41, 28, 46, 10, 20, 5, 29, 83,
+  static String get pgUsername => _deobfuscate(const [
+        32, 28, 126, 9, 4, 5, 23, 65,
       ]);
 
-  static String get mysqlPassword => _deobfuscate(const [
-        14, 28, 120, 47, 9, 42, 26, 115, 114, 126, 114, 25,
+  static String get pgPassword => _deobfuscate(const [
+        20, 90, 34, 41, 4, 5, 23, 11, 5, 103, 121, 119,
       ]);
 
-  static String get mysqlDatabase => _deobfuscate(const [
+  static String get pgDatabase => _deobfuscate(const [
         32, 28, 126, 9, 4, 5, 23, 65,
       ]);
 

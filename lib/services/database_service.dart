@@ -1847,5 +1847,8 @@ class DatabaseService {
   /// Public helper to get the deterministic lookup hash for a phone.
   static String lookupHashForPhone(String phone) =>
       _hashLookup(Validators.normalizePhone(phone));
+
+  @visibleForTesting
+  static void injectDatabase(Database db) => _db = db;
 }
 

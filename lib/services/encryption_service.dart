@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:encrypt/encrypt.dart' as enc;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -120,5 +121,12 @@ class EncryptionService {
   static List<int> _randomBytes(int length) {
     final rand = Random.secure();
     return List<int>.generate(length, (_) => rand.nextInt(256));
+  }
+
+  @visibleForTesting
+  static void initForTest({required String keyB64, required String ivB64}) {
+    final key = enc.Key.fromBase64(keyB64);
+    _iv = enc.IV.fromBase64(ivB64);
+    _encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.cbc));
   }
 }

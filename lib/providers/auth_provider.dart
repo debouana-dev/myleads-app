@@ -10,6 +10,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:uuid/uuid.dart';
 
+import '../core/l10n/app_l10n.dart';
 import '../core/utils/validators.dart';
 import '../models/contact.dart';
 import '../models/user_account.dart';
@@ -17,6 +18,7 @@ import '../services/database_service.dart';
 import '../services/email_service.dart';
 import '../services/encryption_service.dart';
 import '../services/photo_storage_service.dart';
+import '../services/background_task.dart';
 import '../services/remote_sync_service.dart';
 import '../services/storage_service.dart';
 
@@ -75,7 +77,9 @@ class AuthState {
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier()
+  final Ref _ref;
+
+  AuthNotifier(this._ref)
       : super(AuthState(
           isLoggedIn: StorageService.isLoggedIn,
           userName: StorageService.userName,
@@ -83,6 +87,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
           userPhotoPath: StorageService.currentUser?.photoPath,
           plan: StorageService.currentUser?.plan ?? 'free',
         ));
+
+  AppL10n get _l10n => _ref.read(l10nProvider);
 
   // ---------------- Email login ----------------
 
@@ -101,25 +107,35 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     if (user == null) {
       // No local account — try the cloud database.
-      importedFromCloud =
+      final cloudResult =
           await RemoteSyncService.importUserByEmailLookup(lookup);
-      if (importedFromCloud) {
+      if (cloudResult == null) {
+        // Server unreachable or connection error — cannot confirm account status.
+        state = state.copyWith(
+          isLoading: false,
+          error: _l10n.authCloudConnectionError,
+        );
+        return false;
+      }
+      if (cloudResult) {
+        importedFromCloud = true;
         user = await DatabaseService.findUserByEmailLookup(lookup);
       }
       if (user == null) {
         state = state.copyWith(
           isLoading: false,
-          error: 'Aucun compte trouvé pour cet email',
+          error: _l10n.authNoAccountForEmail,
         );
         return false;
       }
     }
 
     if (user.authProvider != 'email') {
+      final providerName =
+          user.authProvider == 'google' ? 'Google' : 'Apple';
       state = state.copyWith(
         isLoading: false,
-        error:
-            'Ce compte utilise ${user.authProvider == 'google' ? 'Google' : 'Apple'}. Connectez-vous via ce service.',
+        error: _l10n.authWrongProvider(providerName),
       );
       return false;
     }
@@ -127,7 +143,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (!EncryptionService.verifyPassword(password, user.passwordHash)) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Email ou mot de passe incorrect',
+        error: _l10n.authInvalidCredentials,
       );
       return false;
     }
@@ -138,7 +154,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await sendVerificationCode(email);
       state = state.copyWith(
         isLoading: false,
-        error: 'Veuillez vérifier votre email. Un code a été envoyé à $email.',
+        error: _l10n.authEmailNotVerified(email),
       );
       return false;
     }
@@ -197,7 +213,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (connectivity.contains(ConnectivityResult.none)) {
         state = state.copyWith(
           isLoading: false,
-          error: 'Une connexion internet est requise pour créer un compte',
+          error: _l10n.authInternetRequiredSignup,
         );
         return false;
       }
@@ -206,7 +222,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (firstName.trim().isEmpty || lastName.trim().isEmpty) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Prénom et nom sont obligatoires',
+        error: _l10n.authFirstLastNameRequired,
       );
       return false;
     }
@@ -234,7 +250,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (await DatabaseService.isEmailTaken(email)) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Un compte existe déjà pour cet email',
+        error: _l10n.authEmailAlreadyUsed,
       );
       return false;
     }
@@ -245,7 +261,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (await RemoteSyncService.isEmailTakenInCloud(emailLookup)) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Un compte existe déjà pour cet email',
+        error: _l10n.authEmailAlreadyUsed,
       );
       return false;
     }
@@ -255,7 +271,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         await DatabaseService.isPhoneTaken(phone)) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Un compte existe déjà pour ce numéro de téléphone',
+        error: _l10n.authPhoneAlreadyUsed,
       );
       return false;
     }
@@ -281,14 +297,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final rawRow = await DatabaseService.getRawUserRow(user.id);
     final cloudErr = rawRow != null
         ? await RemoteSyncService.registerUserInCloud(rawRow)
-        : "Données introuvables après l'insertion locale";
+        : 'local_insert_missing';
     if (cloudErr != null) {
       // Roll back the local insert and clean up any partial cloud write.
       await DatabaseService.deleteUserAndAllData(user.id);
       unawaited(RemoteSyncService.deleteUserFromCloud(user.id));
       state = state.copyWith(
         isLoading: false,
-        error: 'Impossible de créer le compte. Veuillez réessayer.',
+        error: _l10n.createAccErrRetry,
       );
       return false;
     }
@@ -331,7 +347,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Connexion Google échouée: ${e.toString()}',
+        error: _l10n.authGoogleFailed(e.toString()),
       );
       return false;
     }
@@ -352,7 +368,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (email == null) {
         state = state.copyWith(
           isLoading: false,
-          error: 'Apple n\'a pas fourni d\'email',
+          error: _l10n.authAppleNoEmail,
         );
         return false;
       }
@@ -365,7 +381,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Connexion Apple échouée: ${e.toString()}',
+        error: _l10n.authAppleFailed(e.toString()),
       );
       return false;
     }
@@ -400,7 +416,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (user.authProvider != provider) {
         state = state.copyWith(
           isLoading: false,
-          error: 'Cet email est déjà associé à un compte ${user.authProvider}.',
+          error: _l10n.authOAuthEmailConflict(user.authProvider),
         );
         return false;
       }
@@ -418,6 +434,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       plan: user.plan,
       clearError: true,
     );
+    if (user.plan == 'business') await scheduleBusinessSync();
     return true;
   }
 
@@ -429,20 +446,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// Returns `null` on success, or an error string on failure.
   Future<String?> changePlan(String plan) async {
     final user = StorageService.currentUser;
-    if (user == null) return 'Aucun utilisateur connecté';
+    if (user == null) return _l10n.authNoUserLoggedIn;
     if (!['free', 'premium', 'business'].contains(plan)) {
-      return 'Forfait invalide';
+      return _l10n.authInvalidPlan;
     }
     final updated = user.copyWith(plan: plan);
     await DatabaseService.updateUser(updated);
     await StorageService.setCurrentSession(updated, user.sessionToken ?? '');
     state = state.copyWith(plan: plan);
+    if (plan == 'business') {
+      await scheduleBusinessSync();
+    } else {
+      await cancelBusinessSync();
+    }
     return null;
   }
 
   // ---------------- Logout ----------------
 
   Future<void> logout() async {
+    await cancelBusinessSync();
     await StorageService.clearSession();
     state = const AuthState();
   }
@@ -460,13 +483,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// Returns `null` on success, or an error string on failure.
   Future<String?> deleteAccount() async {
     final user = StorageService.currentUser;
-    if (user == null) return 'Aucun utilisateur connecté';
+    if (user == null) return _l10n.authNoUserLoggedIn;
 
     // Require internet — account must be erased from both databases.
     if (!kIsWeb) {
       final connectivity = await Connectivity().checkConnectivity();
       if (connectivity.contains(ConnectivityResult.none)) {
-        return 'Une connexion internet est requise pour supprimer votre compte';
+        return _l10n.authInternetRequiredDelete;
       }
     }
 
@@ -481,7 +504,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
               user.organizationId!);
           final hasOtherMembers = members.any((m) => m.userId != userId);
           if (hasOtherMembers) {
-            return "Supprimez ou transférez l'administration de l'organisation avant de supprimer votre compte.";
+            return _l10n.authDeleteOrgBlocker;
           }
           // Last admin and sole member — dissolve the org before erasing data.
           // The live-write callback on deleteOrganization handles the cloud
@@ -527,7 +550,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       return null;
     } catch (e) {
-      return 'Erreur lors de la suppression : $e';
+      return _l10n.authDeleteError(e.toString());
     }
   }
 
@@ -549,14 +572,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<String?> changePassword(
       String currentPassword, String newPassword) async {
     final user = StorageService.currentUser;
-    if (user == null) return 'Aucun utilisateur connecté';
+    if (user == null) return _l10n.authNoUserLoggedIn;
 
     if (user.authProvider != 'email') {
-      return 'Mot de passe non modifiable pour les comptes ${user.authProvider}';
+      return _l10n.authPasswordNotModifiable(user.authProvider);
     }
 
     if (!EncryptionService.verifyPassword(currentPassword, user.passwordHash)) {
-      return 'Mot de passe actuel incorrect';
+      return _l10n.authCurrentPasswordIncorrect;
     }
 
     final pwdErr = Validators.validatePassword(newPassword);
@@ -596,10 +619,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<String?> changeEmail(
       String newEmail, String code, String currentPassword) async {
     final user = StorageService.currentUser;
-    if (user == null) return 'Aucun utilisateur connecté';
+    if (user == null) return _l10n.authNoUserLoggedIn;
 
     if (user.authProvider != 'email') {
-      return 'Email non modifiable pour les comptes ${user.authProvider}';
+      return _l10n.authEmailNotModifiable(user.authProvider);
     }
 
     // Validate new email format.
@@ -608,7 +631,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     // Check current password.
     if (!EncryptionService.verifyPassword(currentPassword, user.passwordHash)) {
-      return 'Mot de passe actuel incorrect';
+      return _l10n.authCurrentPasswordIncorrect;
     }
 
     // Disallow changing to an email already in use by another account —
@@ -616,25 +639,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final newLookup = _emailLookup(newEmail);
     final existing = await DatabaseService.findUserByEmailLookup(newLookup);
     if (existing != null && existing.id != user.id) {
-      return 'Cet email est déjà utilisé par un autre compte';
+      return _l10n.authEmailAlreadyInUse;
     }
     final cloudOwnerId =
         await RemoteSyncService.findCloudUserIdByEmailLookup(newLookup);
     if (cloudOwnerId != null && cloudOwnerId != user.id) {
-      return 'Cet email est déjà utilisé par un autre compte';
+      return _l10n.authEmailAlreadyInUse;
     }
 
     // Verify the 6-digit code sent to the new address.
     final stored = _verificationCodes[newLookup];
     if (stored == null) {
-      return 'Aucun code de vérification en attente. Veuillez en demander un nouveau.';
+      return _l10n.authNoVerificationCodePending;
     }
     if (stored.isExpired) {
       _verificationCodes.remove(newLookup);
-      return 'Le code a expiré. Veuillez en demander un nouveau.';
+      return _l10n.authCodeExpired;
     }
     if (stored.code != code.trim()) {
-      return 'Code de vérification invalide';
+      return _l10n.authInvalidVerificationCode;
     }
 
     // Rotate session token (invalidates other devices) and persist.
@@ -717,14 +740,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
     var user = await DatabaseService.findUserByEmailLookup(lookup);
     if (user == null) {
       // No local account — try the cloud database.
-      final imported = await RemoteSyncService.importUserByEmailLookup(lookup);
-      if (imported) user = await DatabaseService.findUserByEmailLookup(lookup);
-      if (user == null) return 'Aucun compte associé à cet email';
+      final cloudResult =
+          await RemoteSyncService.importUserByEmailLookup(lookup);
+      if (cloudResult == null) return _l10n.authCloudConnectionError;
+      if (cloudResult) user = await DatabaseService.findUserByEmailLookup(lookup);
+      if (user == null) return _l10n.authNoAccountForEmailRecovery;
     }
 
     if (user.authProvider != 'email') {
-      return 'Ce compte utilise ${user.authProvider == 'google' ? 'Google' : 'Apple'}. '
-          'La récupération par code n\'est pas disponible pour ce type de compte.';
+      final providerName =
+          user.authProvider == 'google' ? 'Google' : 'Apple';
+      return _l10n.authOAuthNoRecovery(providerName);
     }
 
     // Generate a 6-digit code.
@@ -751,14 +777,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final stored = _recoveryCodes[lookup];
 
     if (stored == null) {
-      return 'Aucun code de récupération en attente. Veuillez en demander un nouveau.';
+      return _l10n.authNoRecoveryCodePending;
     }
     if (stored.isExpired) {
       _recoveryCodes.remove(lookup);
-      return 'Le code a expiré. Veuillez en demander un nouveau.';
+      return _l10n.authCodeExpired;
     }
     if (stored.code != code.trim()) {
-      return 'Code de récupération invalide';
+      return _l10n.authInvalidRecoveryCode;
     }
     return null; // success
   }
@@ -781,7 +807,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // Fetch the user.
     final lookup = _emailLookup(email);
     final user = await DatabaseService.findUserByEmailLookup(lookup);
-    if (user == null) return 'Aucun compte associé à cet email';
+    if (user == null) return _l10n.authNoAccountForEmailRecovery;
 
     // Hash the new password, rotate token and persist.
     final newToken = EncryptionService.generateSessionToken();
@@ -860,14 +886,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final stored = _verificationCodes[lookup];
 
     if (stored == null) {
-      return 'Aucun code de vérification en attente. Veuillez en demander un nouveau.';
+      return _l10n.authNoVerificationCodePending;
     }
     if (stored.isExpired) {
       _verificationCodes.remove(lookup);
-      return 'Le code a expiré. Veuillez en demander un nouveau.';
+      return _l10n.authCodeExpired;
     }
     if (stored.code != code.trim()) {
-      return 'Code de vérification invalide';
+      return _l10n.authInvalidVerificationCode;
     }
 
     // Mark the account as email-verified in the DB.
@@ -902,5 +928,5 @@ class AuthNotifier extends StateNotifier<AuthState> {
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier();
+  return AuthNotifier(ref);
 });
