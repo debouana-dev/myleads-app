@@ -80,7 +80,7 @@ dependencies:
   file_picker: ^8.1.2
 
   # Remote database sync
-  mysql_client: ^0.0.27
+  postgres: ^3.3.0
 
   # FTP photo sync
   ftpconnect: ^2.0.10
