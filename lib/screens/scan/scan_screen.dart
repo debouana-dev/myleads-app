@@ -475,13 +475,13 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
           active: _mode == ScanMode.qr,
           onTap: () => _switchMode(ScanMode.qr),
         ),
-        const SizedBox(width: 12),
-        _ModeButton(
-          label: l10n.scanNFC,
-          icon: Icons.nfc_rounded,
-          active: _mode == ScanMode.nfc,
-          onTap: () => _switchMode(ScanMode.nfc),
-        ),
+        // const SizedBox(width: 12),
+        // _ModeButton(
+        //   label: l10n.scanNFC,
+        //   icon: Icons.nfc_rounded,
+        //   active: _mode == ScanMode.nfc,
+        //   onTap: () => _switchMode(ScanMode.nfc),
+        // ),
       ],
     );
   }
