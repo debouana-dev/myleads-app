@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/contact.dart';
@@ -18,6 +19,7 @@ class StorageService {
 
   // Session keys
   static const _kCurrentUserId = 'current_user_id';
+  static const _kCurrentUserEmail = 'current_user_email';
   static const _kCurrentSessionToken = 'current_session_token';
   static const _kHasOnboarded = 'has_onboarded';
   static const _kUserPlan = 'user_plan';
@@ -25,21 +27,24 @@ class StorageService {
   static UserAccount? _cachedUser;
 
   static Future<void> init() async {
-    await EncryptionService.init();
+    //await EncryptionService.init();
     // Cache the platform documents directory for cross-platform photo paths.
     await PhotoStorageService.init();
     // Open the database eagerly so the first query is fast.
     await DatabaseService.database;
-    // Seed a Business-plan test account on first install (idempotent).
-    await _seedTestAccount();
 
     // Load cached user if a session exists.
     final userId = await _secure.read(key: _kCurrentUserId);
+    final email = await _secure.read(key: _kCurrentUserEmail);
     final token = await _secure.read(key: _kCurrentSessionToken);
-    if (userId != null && token != null) {
+    if (userId != null && token != null && email != null) {
+      // Initialize encryption for the restored session
+      await EncryptionService.initFromEnv(email);
       final user = await DatabaseService.findUserById(userId);
       if (user != null && user.sessionToken == token) {
         _cachedUser = user;
+        // Seed a Business-plan test account on first install (idempotent).
+        await _seedTestAccount();
       } else {
         // Stale or invalidated session — wipe it.
         await _secure.delete(key: _kCurrentUserId);
@@ -81,12 +86,14 @@ class StorageService {
   static Future<void> setCurrentSession(UserAccount user, String token) async {
     _cachedUser = user.copyWith(sessionToken: token);
     await _secure.write(key: _kCurrentUserId, value: user.id);
+    await _secure.write(key: _kCurrentUserEmail, value: user.email);
     await _secure.write(key: _kCurrentSessionToken, value: token);
   }
 
   static Future<void> clearSession() async {
     _cachedUser = null;
     await _secure.delete(key: _kCurrentUserId);
+    await _secure.delete(key: _kCurrentUserEmail);
     await _secure.delete(key: _kCurrentSessionToken);
   }
 

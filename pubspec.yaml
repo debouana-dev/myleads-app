@@ -96,6 +96,7 @@ dependencies:
   firebase_auth: ^6.4.0
   cloud_firestore: ^6.3.0
   firebase_storage: ^13.3.0
+  flutter_dotenv: ^6.0.1
 
 dev_dependencies:
   flutter_test:
@@ -128,3 +129,4 @@ flutter:
     - assets/images/
     - assets/icons/
     - assets/animations/
+    - .env

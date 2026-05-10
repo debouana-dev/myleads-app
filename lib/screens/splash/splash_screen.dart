@@ -40,7 +40,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         await ref.read(remindersProvider.notifier).reload();
         if (mounted) context.go('/main');
       } else {
-        context.go('/login');
+         context.go('/login');
       }
     });
   }

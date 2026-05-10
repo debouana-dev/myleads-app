@@ -19,6 +19,14 @@ import '../../services/photo_storage_service.dart';
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
+  Future<void> _refreshData(WidgetRef ref) async {
+    await Future.wait([
+      ref.read(contactsProvider.notifier).reload(),
+      ref.read(remindersProvider.notifier).refresh(),
+      ref.read(notificationsProvider.notifier).refresh(),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = ref.watch(l10nProvider);
@@ -43,89 +51,92 @@ class HomeScreen extends ConsumerWidget {
 
           // -- Content --
           Expanded(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(
-                  20, 24, 20, (88 + MediaQuery.of(context).padding.bottom) / 2),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // CTA cards
-                  _CTARow(
-                    onScanTap: () => context.push('/scan'),
-                    onManualTap: () => context.push('/contact/new'),
-                    l10n: l10n,
-                  ),
-                  const SizedBox(height: 24),
+            child: RefreshIndicator(
+              onRefresh: () => _refreshData(ref),
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(20, 24, 20,
+                    (88 + MediaQuery.of(context).padding.bottom) / 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // CTA cards
+                    _CTARow(
+                      onScanTap: () => context.push('/scan'),
+                      onManualTap: () => context.push('/contact/new'),
+                      l10n: l10n,
+                    ),
+                    const SizedBox(height: 24),
 
-                  // Stats row
-                  _StatsRow(
-                    totalContacts: contactsState.totalContacts,
-                    hotLeadsCount: contactsState.hotLeads,
-                    remindersCount: remindersState.todayReminders.length +
-                        remindersState.overdueReminders.length,
-                    onContactsTap: () {
-                      ref.read(contactsProvider.notifier).setFilter('all');
-                      ref.read(currentTabProvider.notifier).state = 1;
-                    },
-                    onHotLeadsTap: () {
-                      ref.read(contactsProvider.notifier).setFilter('hot');
-                      ref.read(currentTabProvider.notifier).state = 1;
-                    },
-                    onRemindersTap: () =>
-                        ref.read(currentTabProvider.notifier).state = 3,
-                    l10n: l10n,
-                  ),
-                  const SizedBox(height: 28),
+                    // Stats row
+                    _StatsRow(
+                      totalContacts: contactsState.totalContacts,
+                      hotLeadsCount: contactsState.hotLeads,
+                      remindersCount: remindersState.todayReminders.length +
+                          remindersState.overdueReminders.length,
+                      onContactsTap: () {
+                        ref.read(contactsProvider.notifier).setFilter('all');
+                        ref.read(currentTabProvider.notifier).state = 1;
+                      },
+                      onHotLeadsTap: () {
+                        ref.read(contactsProvider.notifier).setFilter('hot');
+                        ref.read(currentTabProvider.notifier).state = 1;
+                      },
+                      onRemindersTap: () =>
+                          ref.read(currentTabProvider.notifier).state = 3,
+                      l10n: l10n,
+                    ),
+                    const SizedBox(height: 28),
 
-                  // Hot leads section
-                  _SectionHeader(
-                    title: l10n.hotLeads,
-                    icon: Icons.local_fire_department_rounded,
-                    iconColor: AppColors.hot,
-                    onViewAll: () =>
-                        ref.read(currentTabProvider.notifier).state = 1,
-                    viewAllLabel: l10n.viewAll,
-                  ),
-                  const SizedBox(height: 12),
-                  if (hotLeads.isEmpty)
-                    _EmptyPlaceholder(
-                      icon: Icons.local_fire_department_outlined,
-                      text: l10n.noHotLeads,
-                    )
-                  else
-                    ...hotLeads.take(3).map(
-                          (contact) => Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: _HotLeadCard(
-                              contact: contact,
-                              onTap: () =>
-                                  context.push('/contact/${contact.id}'),
+                    // Hot leads section
+                    _SectionHeader(
+                      title: l10n.hotLeads,
+                      icon: Icons.local_fire_department_rounded,
+                      iconColor: AppColors.hot,
+                      onViewAll: () =>
+                          ref.read(currentTabProvider.notifier).state = 1,
+                      viewAllLabel: l10n.viewAll,
+                    ),
+                    const SizedBox(height: 12),
+                    if (hotLeads.isEmpty)
+                      _EmptyPlaceholder(
+                        icon: Icons.local_fire_department_outlined,
+                        text: l10n.noHotLeads,
+                      )
+                    else
+                      ...hotLeads.take(3).map(
+                            (contact) => Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _HotLeadCard(
+                                contact: contact,
+                                onTap: () =>
+                                    context.push('/contact/${contact.id}'),
+                              ),
                             ),
                           ),
-                        ),
-                  const SizedBox(height: 28),
+                    const SizedBox(height: 28),
 
-                  // Reminders section
-                  _SectionHeader(
-                    title: l10n.reminders,
-                    icon: Icons.notifications_active_rounded,
-                    iconColor: AppColors.warm,
-                    onViewAll: () =>
-                        ref.read(currentTabProvider.notifier).state = 3,
-                    viewAllLabel: l10n.viewAll,
-                  ),
-                  const SizedBox(height: 12),
-                  _RemindersSummaryCard(
-                    todayCount: remindersState.todayReminders.length,
-                    overdueCount: remindersState.overdueReminders.length,
-                    completedCount: remindersState.completedReminders.length,
-                    l10n: l10n,
-                  ),
-                ],
+                    // Reminders section
+                    _SectionHeader(
+                      title: l10n.reminders,
+                      icon: Icons.notifications_active_rounded,
+                      iconColor: AppColors.warm,
+                      onViewAll: () =>
+                          ref.read(currentTabProvider.notifier).state = 3,
+                      viewAllLabel: l10n.viewAll,
+                    ),
+                    const SizedBox(height: 12),
+                    _RemindersSummaryCard(
+                      todayCount: remindersState.todayReminders.length,
+                      overdueCount: remindersState.overdueReminders.length,
+                      completedCount: remindersState.completedReminders.length,
+                      l10n: l10n,
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
+          )
         ],
       ),
     );
@@ -155,8 +166,7 @@ class _Header extends ConsumerWidget {
     final topPadding = MediaQuery.of(context).padding.top;
     final userName = ref.watch(
         authProvider.select((s) => s.userName.isEmpty ? '' : s.userName));
-    final firstName =
-        userName.isEmpty ? '' : userName.split(' ').first;
+    final firstName = userName.isEmpty ? '' : userName.split(' ').first;
 
     return Container(
       padding: EdgeInsets.fromLTRB(20, topPadding + 16, 20, 20),
@@ -400,7 +410,9 @@ class _CTACard extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: (gradient != null ? AppColors.accent : AppColors.onSurface(context))
+              color: (gradient != null
+                      ? AppColors.accent
+                      : AppColors.onSurface(context))
                   .withOpacity(0.12),
               blurRadius: 16,
               offset: const Offset(0, 6),
@@ -663,7 +675,9 @@ class _HotLeadCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
                 image: contact.photoPath != null && !kIsWeb
                     ? DecorationImage(
-                        image: FileImage(File(PhotoStorageService.resolveAbsolutePath(contact.photoPath)!)),
+                        image: FileImage(File(
+                            PhotoStorageService.resolveAbsolutePath(
+                                contact.photoPath)!)),
                         fit: BoxFit.cover,
                       )
                     : null,

@@ -15,6 +15,7 @@ import 'storage_service.dart';
 /// Result of a push or pull sync operation.
 class SyncResult {
   final bool success;
+
   /// Machine-readable error key: 'no_connection' | 'auth_failed' | 'unknown'
   final String? errorCode;
   final int contactCount;
@@ -332,13 +333,14 @@ class RemoteSyncService {
         _schemaReady = true;
       }
       final result = await conn.execute(
-        Sql.named('SELECT COUNT(*) AS cnt FROM "users" WHERE "email_lookup" = @lookup'),
+        Sql.named(
+            'SELECT COUNT(*) AS cnt FROM "users" WHERE "email_lookup" = @lookup'),
         parameters: {'lookup': emailLookup},
       );
       if (result.isEmpty) return false;
-      final cnt = int.tryParse(
-              result.first.toColumnMap()['cnt']?.toString() ?? '0') ??
-          0;
+      final cnt =
+          int.tryParse(result.first.toColumnMap()['cnt']?.toString() ?? '0') ??
+              0;
       return cnt > 0;
     } catch (e) {
       debugPrint('RemoteSyncService isEmailTakenInCloud error: $e');
@@ -353,7 +355,8 @@ class RemoteSyncService {
   /// Returns `null` on success, or an error message on failure. Unlike the
   /// live-write background callback, this method is awaitable so callers can
   /// gate further actions on a guaranteed cloud registration.
-  static Future<String?> registerUserInCloud(Map<String, dynamic> userRow) async {
+  static Future<String?> registerUserInCloud(
+      Map<String, dynamic> userRow) async {
     if (kIsWeb) return null;
     final conn = await _connect();
     if (conn == null) return 'Connexion au serveur impossible';
@@ -433,9 +436,15 @@ class RemoteSyncService {
   /// Returns `null` when there is no network, the server is unreachable,
   /// or an unexpected error prevents the lookup from completing.
   static Future<bool?> importUserByEmailLookup(String emailLookup) async {
-    if (kIsWeb) return null;
+    if (kIsWeb) {
+      return null;
+    }
     final connectivity = await Connectivity().checkConnectivity();
-    if (connectivity.contains(ConnectivityResult.none)) return null;
+    if (connectivity.contains(ConnectivityResult.none)) {
+      return null;
+    }
+    debugPrint(
+        'RemoteSyncService.importUserByEmailLookup: checking remote user for lookup $emailLookup');
     final conn = await _connect();
     if (conn == null) return null;
     try {
@@ -447,7 +456,13 @@ class RemoteSyncService {
         Sql.named('SELECT * FROM "users" WHERE "email_lookup" = @lookup'),
         parameters: {'lookup': emailLookup},
       );
-      if (result.isEmpty) return false;
+      if (result.isEmpty) {
+        debugPrint(
+            'RemoteSyncService.importUserByEmailLookup: no remote user found for lookup $emailLookup');
+        return false;
+      }
+      debugPrint(
+          'RemoteSyncService.importUserByEmailLookup: remote user found for lookup $emailLookup, upserting local row');
       final row = _normaliseBools(result.first.toColumnMap(), _userBoolCols);
       await DatabaseService.upsertRawRow('users', row);
       return true;
@@ -466,8 +481,12 @@ class RemoteSyncService {
   /// Call once after [StorageService.init] during app startup.
   static void wireDatabase() {
     DatabaseService.wireRemoteSync(
-      onUpsert: (table, row) { _pushRowBackground(table, row); },
-      onDelete: (table, id)  { _deleteRowBackground(table, id); },
+      onUpsert: (table, row) {
+        _pushRowBackground(table, row);
+      },
+      onDelete: (table, id) {
+        _deleteRowBackground(table, id);
+      },
     );
   }
 
@@ -475,7 +494,7 @@ class RemoteSyncService {
   /// The `users` table is always synced; all other tables require a
   /// premium or business plan.
   static Future<void> _pushRowBackground(
-      String table, Map<String, dynamic> row) =>
+          String table, Map<String, dynamic> row) =>
       _fireAndForget((conn) async {
         if (table == 'users') {
           await _upsertUser(conn, row);
@@ -483,11 +502,16 @@ class RemoteSyncService {
         }
         if (!_hasSyncPlan) return;
         switch (table) {
-          case 'contacts':             await _upsertContact(conn, row);
-          case 'reminders':            await _upsertReminder(conn, row);
-          case 'interactions':         await _upsertInteraction(conn, row);
-          case 'organizations':        await _upsertOrganization(conn, row);
-          case 'organization_members': await _upsertOrgMember(conn, row);
+          case 'contacts':
+            await _upsertContact(conn, row);
+          case 'reminders':
+            await _upsertReminder(conn, row);
+          case 'interactions':
+            await _upsertInteraction(conn, row);
+          case 'organizations':
+            await _upsertOrganization(conn, row);
+          case 'organization_members':
+            await _upsertOrgMember(conn, row);
         }
       });
 
@@ -509,7 +533,8 @@ class RemoteSyncService {
           );
         } else if (table == 'organizations') {
           await conn.execute(
-            Sql.named('DELETE FROM "organization_members" WHERE "organization_id" = @id'),
+            Sql.named(
+                'DELETE FROM "organization_members" WHERE "organization_id" = @id'),
             parameters: {'id': id},
           );
         }
@@ -591,7 +616,8 @@ class RemoteSyncService {
         reminderCount = reminders.length;
 
         // Interactions
-        final interactions = await DatabaseService.getRawInteractionRows(userId);
+        final interactions =
+            await DatabaseService.getRawInteractionRows(userId);
         for (final row in interactions) {
           await _upsertInteraction(conn, row);
         }
@@ -627,6 +653,17 @@ class RemoteSyncService {
     }
   }
 
+  /// Returns true when the local user has any non-user rows that should
+  /// be pushed before a cloud download.
+  static Future<bool> _hasLocalDataToPush(String userId) async {
+    final contacts = await DatabaseService.getRawContactRows(userId);
+    if (contacts.isNotEmpty) return true;
+    final reminders = await DatabaseService.getRawReminderRows(userId);
+    if (reminders.isNotEmpty) return true;
+    final interactions = await DatabaseService.getRawInteractionRows(userId);
+    return interactions.isNotEmpty;
+  }
+
   // ── Targeted user-field updates ─────────────────────────────────────────────
 
   /// Returns the `id` of the cloud user whose `email_lookup` matches [emailLookup],
@@ -641,7 +678,8 @@ class RemoteSyncService {
     if (conn == null) return null;
     try {
       final result = await conn.execute(
-        Sql.named('SELECT "id" FROM "users" WHERE "email_lookup" = @lookup LIMIT 1'),
+        Sql.named(
+            'SELECT "id" FROM "users" WHERE "email_lookup" = @lookup LIMIT 1'),
         parameters: {'lookup': emailLookup},
       );
       if (result.isEmpty) return null;
@@ -672,8 +710,8 @@ class RemoteSyncService {
         Sql.named(
           'UPDATE "users" '
           'SET "password_hash" = @hash, '
-              '"session_token" = @token, '
-              '"password_changed_at" = @changed_at '
+          '"session_token" = @token, '
+          '"password_changed_at" = @changed_at '
           'WHERE "id" = @id',
         ),
         parameters: {
@@ -719,17 +757,21 @@ class RemoteSyncService {
     required String emailLookup,
     required String? sessionToken,
   }) async {
-    if (kIsWeb) return;
+    if (kIsWeb) {
+      return;
+    }
     final conn = await _connect();
-    if (conn == null) return;
+    if (conn == null) {
+      return;
+    }
     try {
       await conn.execute(
         Sql.named(
           'UPDATE "users" '
           'SET "email_enc" = @enc, '
-              '"email_lookup" = @lookup, '
-              '"session_token" = @token, '
-              '"email_verified" = 1 '
+          '"email_lookup" = @lookup, '
+          '"session_token" = @token, '
+          '"email_verified" = 1 '
           'WHERE "id" = @id',
         ),
         parameters: {
@@ -753,12 +795,22 @@ class RemoteSyncService {
   /// When the user belongs to an organisation, also pulls contacts (and
   /// reminders when the member has `can_view_reminders = 1` or `role = admin`)
   /// from every active org member, so all members share one view of the data.
+  ///
+  /// If the user already has local data, this method first pushes local
+  /// changes online before downloading remote data back to local storage.
   static Future<SyncResult> pull(String userId) async {
     if (kIsWeb) return SyncResult.err('unsupported_platform');
 
     final connectivity = await Connectivity().checkConnectivity();
     if (connectivity.contains(ConnectivityResult.none)) {
       return SyncResult.err('no_connection');
+    }
+
+    if (await _hasLocalDataToPush(userId)) {
+      final pushResult = await push(userId);
+      if (!pushResult.success) {
+        return pushResult;
+      }
     }
 
     final conn = await _connect();
@@ -812,7 +864,7 @@ class RemoteSyncService {
           if (uid != null && uid.isNotEmpty) pullOwnerIds.add(uid);
           if (uid == userId) {
             final role = m['role']?.toString();
-            final cvr  = m['can_view_reminders']?.toString();
+            final cvr = m['can_view_reminders']?.toString();
             canPullOrgReminders = role == 'admin' || cvr == '1';
           }
         }
@@ -833,7 +885,8 @@ class RemoteSyncService {
       } else {
         final inP = _buildInParams(pullOwnerIds);
         final res = await conn.execute(
-          Sql.named('SELECT * FROM "contacts" WHERE "owner_id" IN (${inP.placeholders})'),
+          Sql.named(
+              'SELECT * FROM "contacts" WHERE "owner_id" IN (${inP.placeholders})'),
           parameters: inP.params,
         );
         for (final row in res) {
@@ -851,8 +904,7 @@ class RemoteSyncService {
       );
       for (final row in ownRem) {
         await DatabaseService.upsertRawRow(
-            'reminders',
-            _normaliseBools(row.toColumnMap(), _reminderBoolCols));
+            'reminders', _normaliseBools(row.toColumnMap(), _reminderBoolCols));
         reminderCount++;
       }
       // Pull other org members' reminders only when permitted.
@@ -860,12 +912,12 @@ class RemoteSyncService {
         final others = pullOwnerIds.where((id) => id != userId).toList();
         final inP = _buildInParams(others);
         final orgRem = await conn.execute(
-          Sql.named('SELECT * FROM "reminders" WHERE "owner_id" IN (${inP.placeholders})'),
+          Sql.named(
+              'SELECT * FROM "reminders" WHERE "owner_id" IN (${inP.placeholders})'),
           parameters: inP.params,
         );
         for (final row in orgRem) {
-          await DatabaseService.upsertRawRow(
-              'reminders',
+          await DatabaseService.upsertRawRow('reminders',
               _normaliseBools(row.toColumnMap(), _reminderBoolCols));
           reminderCount++;
         }
@@ -885,7 +937,8 @@ class RemoteSyncService {
       } else {
         final inP = _buildInParams(pullOwnerIds);
         final res = await conn.execute(
-          Sql.named('SELECT * FROM "interactions" WHERE "owner_id" IN (${inP.placeholders})'),
+          Sql.named(
+              'SELECT * FROM "interactions" WHERE "owner_id" IN (${inP.placeholders})'),
           parameters: inP.params,
         );
         for (final row in res) {
@@ -901,16 +954,17 @@ class RemoteSyncService {
           parameters: {'id': orgId},
         );
         for (final row in orgRes) {
-          await DatabaseService.upsertRawRow('organizations', row.toColumnMap());
+          await DatabaseService.upsertRawRow(
+              'organizations', row.toColumnMap());
         }
 
         final memRes = await conn.execute(
-          Sql.named('SELECT * FROM "organization_members" WHERE "organization_id" = @id'),
+          Sql.named(
+              'SELECT * FROM "organization_members" WHERE "organization_id" = @id'),
           parameters: {'id': orgId},
         );
         for (final row in memRes) {
-          await DatabaseService.upsertRawRow(
-              'organization_members',
+          await DatabaseService.upsertRawRow('organization_members',
               _normaliseBools(row.toColumnMap(), _memberBoolCols));
         }
       }
@@ -939,29 +993,53 @@ class RemoteSyncService {
 
   static Future<void> _upsertUser(
       Connection conn, Map<String, dynamic> r) async {
+    // ✅ Supprimer un éventuel doublon avec même email mais id différent
+    // (ex: compte recréé, changement d'auth provider, etc.)
     await conn.execute(
       Sql.named('''
-        INSERT INTO "users"
-          (id,email_enc,email_lookup,first_name_enc,last_name_enc,nickname_enc,
-           phone_enc,phone_lookup,date_of_birth_enc,company_name_enc,company_role_enc,
-           biography_enc,password_hash,auth_provider,session_token,created_at,
-           last_login_at,password_changed_at,photo_path,email_verified,
-           organization_id,org_role,plan,last_sync_at)
-        VALUES
-          (@id,@email_enc,@email_lookup,@first_name_enc,@last_name_enc,@nickname_enc,
-           @phone_enc,@phone_lookup,@date_of_birth_enc,@company_name_enc,@company_role_enc,
-           @biography_enc,@password_hash,@auth_provider,@session_token,@created_at,
-           @last_login_at,@password_changed_at,@photo_path,@email_verified,
-           @organization_id,@org_role,@plan,@last_sync_at)
-        ON CONFLICT (id) DO UPDATE SET
-          email_enc=EXCLUDED.email_enc,first_name_enc=EXCLUDED.first_name_enc,
-          last_name_enc=EXCLUDED.last_name_enc,nickname_enc=EXCLUDED.nickname_enc,
-          phone_enc=EXCLUDED.phone_enc,company_name_enc=EXCLUDED.company_name_enc,
-          company_role_enc=EXCLUDED.company_role_enc,biography_enc=EXCLUDED.biography_enc,
-          photo_path=EXCLUDED.photo_path,plan=EXCLUDED.plan,
-          organization_id=EXCLUDED.organization_id,org_role=EXCLUDED.org_role,
-          last_sync_at=EXCLUDED.last_sync_at
-      '''),
+      DELETE FROM "users"
+      WHERE email_lookup = @email_lookup
+        AND id != @id
+    '''),
+      parameters: {
+        'email_lookup': r['email_lookup'],
+        'id': r['id'],
+      },
+    );
+
+    // ✅ Upsert normal sur id
+    await conn.execute(
+      Sql.named('''
+      INSERT INTO "users"
+        (id,email_enc,email_lookup,first_name_enc,last_name_enc,nickname_enc,
+         phone_enc,phone_lookup,date_of_birth_enc,company_name_enc,company_role_enc,
+         biography_enc,password_hash,auth_provider,session_token,created_at,
+         last_login_at,password_changed_at,photo_path,email_verified,
+         organization_id,org_role,plan,last_sync_at)
+      VALUES
+        (@id,@email_enc,@email_lookup,@first_name_enc,@last_name_enc,@nickname_enc,
+         @phone_enc,@phone_lookup,@date_of_birth_enc,@company_name_enc,@company_role_enc,
+         @biography_enc,@password_hash,@auth_provider,@session_token,@created_at,
+         @last_login_at,@password_changed_at,@photo_path,@email_verified,
+         @organization_id,@org_role,@plan,@last_sync_at)
+      ON CONFLICT (id) DO UPDATE SET
+        email_enc=EXCLUDED.email_enc,
+        email_lookup=EXCLUDED.email_lookup,
+        first_name_enc=EXCLUDED.first_name_enc,
+        last_name_enc=EXCLUDED.last_name_enc,
+        nickname_enc=EXCLUDED.nickname_enc,
+        phone_enc=EXCLUDED.phone_enc,
+        phone_lookup=EXCLUDED.phone_lookup,
+        date_of_birth_enc=EXCLUDED.date_of_birth_enc,
+        company_name_enc=EXCLUDED.company_name_enc,
+        company_role_enc=EXCLUDED.company_role_enc,
+        biography_enc=EXCLUDED.biography_enc,
+        photo_path=EXCLUDED.photo_path,
+        plan=EXCLUDED.plan,
+        organization_id=EXCLUDED.organization_id,
+        org_role=EXCLUDED.org_role,
+        last_sync_at=EXCLUDED.last_sync_at
+    '''),
       parameters: {
         'id': r['id'],
         'email_enc': r['email_enc'],
@@ -993,30 +1071,58 @@ class RemoteSyncService {
 
   static Future<void> _upsertContact(
       Connection conn, Map<String, dynamic> r) async {
+    // ✅ Étape 1 : supprimer uniquement le doublon du MÊME utilisateur
+    // avec même email mais id différent
     await conn.execute(
       Sql.named('''
-        INSERT INTO "contacts"
-          (id,owner_id,first_name,last_name,job_title,company,phone,email,
-           phone_lookup,email_lookup,source,project_1,project_1_budget,
-           project_2,project_2_budget,interest,notes,tags,status,created_at,
-           last_contact_date,avatar_color,capture_method,photo_path)
-        VALUES
-          (@id,@owner_id,@first_name,@last_name,@job_title,@company,@phone,@email,
-           @phone_lookup,@email_lookup,@source,@project_1,@project_1_budget,
-           @project_2,@project_2_budget,@interest,@notes,@tags,@status,@created_at,
-           @last_contact_date,@avatar_color,@capture_method,@photo_path)
-        ON CONFLICT (id) DO UPDATE SET
-          owner_id=EXCLUDED.owner_id,first_name=EXCLUDED.first_name,
-          last_name=EXCLUDED.last_name,job_title=EXCLUDED.job_title,
-          company=EXCLUDED.company,phone=EXCLUDED.phone,email=EXCLUDED.email,
-          phone_lookup=EXCLUDED.phone_lookup,email_lookup=EXCLUDED.email_lookup,
-          source=EXCLUDED.source,project_1=EXCLUDED.project_1,
-          project_1_budget=EXCLUDED.project_1_budget,project_2=EXCLUDED.project_2,
-          project_2_budget=EXCLUDED.project_2_budget,interest=EXCLUDED.interest,
-          notes=EXCLUDED.notes,tags=EXCLUDED.tags,status=EXCLUDED.status,
-          last_contact_date=EXCLUDED.last_contact_date,avatar_color=EXCLUDED.avatar_color,
-          capture_method=EXCLUDED.capture_method,photo_path=EXCLUDED.photo_path
-      '''),
+      DELETE FROM "contacts"
+      WHERE owner_id    = @owner_id       -- ✅ restreint à CET utilisateur
+        AND email_lookup = @email_lookup  -- même email
+        AND id           != @id           -- mais id différent
+    '''),
+      parameters: {
+        'owner_id': r['owner_id'],
+        'email_lookup': r['email_lookup'],
+        'id': r['id'],
+      },
+    );
+
+    // ✅ Étape 2 : upsert normal
+    await conn.execute(
+      Sql.named('''
+      INSERT INTO "contacts"
+        (id,owner_id,first_name,last_name,job_title,company,phone,email,
+         phone_lookup,email_lookup,source,project_1,project_1_budget,
+         project_2,project_2_budget,interest,notes,tags,status,created_at,
+         last_contact_date,avatar_color,capture_method,photo_path)
+      VALUES
+        (@id,@owner_id,@first_name,@last_name,@job_title,@company,@phone,@email,
+         @phone_lookup,@email_lookup,@source,@project_1,@project_1_budget,
+         @project_2,@project_2_budget,@interest,@notes,@tags,@status,@created_at,
+         @last_contact_date,@avatar_color,@capture_method,@photo_path)
+      ON CONFLICT (id) DO UPDATE SET
+        first_name=EXCLUDED.first_name,
+        last_name=EXCLUDED.last_name,
+        job_title=EXCLUDED.job_title,
+        company=EXCLUDED.company,
+        phone=EXCLUDED.phone,
+        email=EXCLUDED.email,
+        phone_lookup=EXCLUDED.phone_lookup,
+        email_lookup=EXCLUDED.email_lookup,
+        source=EXCLUDED.source,
+        project_1=EXCLUDED.project_1,
+        project_1_budget=EXCLUDED.project_1_budget,
+        project_2=EXCLUDED.project_2,
+        project_2_budget=EXCLUDED.project_2_budget,
+        interest=EXCLUDED.interest,
+        notes=EXCLUDED.notes,
+        tags=EXCLUDED.tags,
+        status=EXCLUDED.status,
+        last_contact_date=EXCLUDED.last_contact_date,
+        avatar_color=EXCLUDED.avatar_color,
+        capture_method=EXCLUDED.capture_method,
+        photo_path=EXCLUDED.photo_path
+    '''),
       parameters: {
         'id': r['id'],
         'owner_id': r['owner_id'],
@@ -1165,7 +1271,7 @@ class RemoteSyncService {
   static ({String placeholders, Map<String, dynamic> params}) _buildInParams(
       List<String> ids) {
     final params = <String, dynamic>{};
-    final names  = <String>[];
+    final names = <String>[];
     for (var i = 0; i < ids.length; i++) {
       final key = 'oid$i';
       params[key] = ids[i];
@@ -1190,7 +1296,12 @@ class RemoteSyncService {
   // stored as int in SQLite as well (guard against bool true/false).
   static const _userBoolCols = {'email_verified'};
   static const _reminderBoolCols = {'is_completed'};
-  static const _memberBoolCols = {'can_edit', 'can_create', 'can_view_reminders', 'can_view_history'};
+  static const _memberBoolCols = {
+    'can_edit',
+    'can_create',
+    'can_view_reminders',
+    'can_view_history'
+  };
 
   static Map<String, dynamic> _normaliseBools(
       Map<String, dynamic> row, Set<String> boolCols) {

@@ -21,6 +21,7 @@ class ContactResult {
 // Sentinel object used to distinguish "not provided" from an explicit null
 // in copyWith (so we can clear statusFilter by passing null).
 const Object _sentinel = Object();
+
 class ContactsState {
   final List<Contact> contacts;
   final String searchQuery;
@@ -45,11 +46,9 @@ class ContactsState {
     if (activeFilter != 'all') {
       filtered = filtered.where((c) {
         if (c.status == activeFilter) return true;
-        return c.tags.any(
-            (t) => t.toLowerCase() == activeFilter.toLowerCase());
+        return c.tags.any((t) => t.toLowerCase() == activeFilter.toLowerCase());
       }).toList();
     }
-
 
     // Status filter (setStatusFilter)
     if (statusFilter != null) {
@@ -83,7 +82,6 @@ class ContactsState {
   int get warmLeads => contacts.where((c) => c.status == 'warm').length;
   int get coldLeads => contacts.where((c) => c.status == 'cold').length;
 
-
   ContactsState copyWith({
     List<Contact>? contacts,
     String? searchQuery,
@@ -95,8 +93,9 @@ class ContactsState {
       contacts: contacts ?? this.contacts,
       searchQuery: searchQuery ?? this.searchQuery,
       activeFilter: activeFilter ?? this.activeFilter,
-      statusFilter:
-          statusFilter == _sentinel ? this.statusFilter : statusFilter as String?,
+      statusFilter: statusFilter == _sentinel
+          ? this.statusFilter
+          : statusFilter as String?,
       isLoading: isLoading ?? this.isLoading,
     );
   }
@@ -128,7 +127,8 @@ class ContactsNotifier extends StateNotifier<ContactsState> {
         contacts = await StorageService.getAllContacts();
       } else {
         // Active org member: shared view with org-level deduplication applied.
-        contacts = await DatabaseService.getAllContactsForOrganization(user.organizationId!);
+        contacts = await DatabaseService.getAllContactsForOrganization(
+            user.organizationId!);
       }
     } else {
       contacts = await StorageService.getAllContacts();
@@ -293,7 +293,6 @@ class ContactsNotifier extends StateNotifier<ContactsState> {
     state = state.copyWith(activeFilter: filter);
   }
 
-
   /// Filters the contacts list to only show contacts with [filter] status.
   /// Pass null to clear the filter and show all statuses.
   void setStatusFilter(String? filter) {
@@ -423,7 +422,8 @@ class ContactsNotifier extends StateNotifier<ContactsState> {
     }
 
     await DatabaseService.updateContact(updated);
-    final list = state.contacts.map((c) => c.id == updated.id ? updated : c).toList();
+    final list =
+        state.contacts.map((c) => c.id == updated.id ? updated : c).toList();
     state = state.copyWith(contacts: list);
 
     if (updated.status == 'hot' || updated.status == 'warm') {

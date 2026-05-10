@@ -4,6 +4,7 @@
 build/
 .flutter-plugins
 .flutter-plugins-dependencies
+.env
 
 # IDE
 .idea/
