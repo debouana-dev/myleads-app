@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:encrypt/encrypt.dart' as enc;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// AES-256 Encryption Service
@@ -23,7 +24,7 @@ class EncryptionService {
   static enc.IV? _iv;
 
   /// Initialize encryption service. Must be called before any other method.
-  static Future<void> init() async {
+  /*static Future<void> init() async {
     String? keyB64 = await _secureStorage.read(key: _keyStorageKey);
     String? ivB64 = await _secureStorage.read(key: _ivStorageKey);
 
@@ -36,6 +37,33 @@ class EncryptionService {
       await _secureStorage.write(key: _keyStorageKey, value: keyB64);
       await _secureStorage.write(key: _ivStorageKey, value: ivB64);
     }
+
+    final key = enc.Key.fromBase64(keyB64);
+    _iv = enc.IV.fromBase64(ivB64);
+    _encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.cbc));
+  }*/
+
+  static Future<void> initFromEnv(String userEmail) async {
+    final secret = dotenv.env['SECRET_KEY'];
+    if (secret == null || secret.isEmpty) {
+      throw StateError('SECRET_KEY absente ou vide dans le fichier .env.');
+    }
+
+    if (userEmail.isEmpty) {
+      throw StateError('Email utilisateur vide.');
+    }
+
+    // Combine SECRET_KEY + email puis hash en SHA-256 → 32 bytes (256-bit key)
+    final combined = '$secret:${userEmail.toLowerCase().trim()}';
+    final keyBytes = sha256.convert(utf8.encode(combined)).bytes;
+
+    // Dérive l'IV : SHA-256 du combined inversé → prend les 16 premiers bytes
+    final ivSource = '${userEmail.toLowerCase().trim()}:$secret';
+    final ivBytes = sha256.convert(utf8.encode(ivSource)).bytes.sublist(0, 16);
+
+    // Encode en base64 pour réutiliser le même chemin que init()
+    final keyB64 = base64Encode(keyBytes);
+    final ivB64 = base64Encode(ivBytes);
 
     final key = enc.Key.fromBase64(keyB64);
     _iv = enc.IV.fromBase64(ivB64);

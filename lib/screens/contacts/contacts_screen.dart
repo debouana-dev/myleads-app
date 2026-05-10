@@ -75,7 +75,8 @@ class ContactsScreen extends ConsumerWidget {
                 const SizedBox(height: 16),
                 // Search Bar
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
@@ -83,13 +84,16 @@ class ContactsScreen extends ConsumerWidget {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.search, color: AppColors.textLight, size: 20),
+                      const Icon(Icons.search,
+                          color: AppColors.textLight, size: 20),
                       const SizedBox(width: 10),
                       Expanded(
                         child: TextField(
-                          onChanged: (v) =>
-                              ref.read(contactsProvider.notifier).setSearchQuery(v),
-                          style: const TextStyle(color: Colors.black, fontSize: 14),
+                          onChanged: (v) => ref
+                              .read(contactsProvider.notifier)
+                              .setSearchQuery(v),
+                          style: const TextStyle(
+                              color: Colors.black, fontSize: 14),
                           cursorColor: AppColors.primary,
                           decoration: InputDecoration(
                             hintText: l10n.searchContact,
@@ -136,7 +140,8 @@ class ContactsScreen extends ConsumerWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.person_search,
-                            size: 64, color: AppColors.hint(context).withOpacity(0.4)),
+                            size: 64,
+                            color: AppColors.hint(context).withOpacity(0.4)),
                         const SizedBox(height: 16),
                         Text(
                           l10n.noContactFound,
@@ -149,12 +154,16 @@ class ContactsScreen extends ConsumerWidget {
                       ],
                     ),
                   )
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
-                    itemCount: contacts.length,
-                    itemBuilder: (context, index) {
-                      return _buildContactItem(context, contacts[index]);
-                    },
+                : RefreshIndicator(
+                    onRefresh: () =>
+                        ref.read(contactsProvider.notifier).reload(),
+                    child: ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
+                      itemCount: contacts.length,
+                      itemBuilder: (context, index) {
+                        return _buildContactItem(context, contacts[index]);
+                      },
+                    ),
                   ),
           ),
         ],
@@ -162,8 +171,8 @@ class ContactsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildChip(
-      BuildContext context, WidgetRef ref, String label, String value, String active) {
+  Widget _buildChip(BuildContext context, WidgetRef ref, String label,
+      String value, String active) {
     final isActive = active == value;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
@@ -173,10 +182,12 @@ class ContactsScreen extends ConsumerWidget {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
           decoration: BoxDecoration(
-            color: isActive ? AppColors.primary : AppColors.surfaceColor(context),
+            color:
+                isActive ? AppColors.primary : AppColors.surfaceColor(context),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: isActive ? AppColors.primary : AppColors.borderColor(context),
+              color:
+                  isActive ? AppColors.primary : AppColors.borderColor(context),
               width: 2,
             ),
           ),
@@ -227,7 +238,9 @@ class ContactsScreen extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(14),
                 image: contact.photoPath != null && !kIsWeb
                     ? DecorationImage(
-                        image: FileImage(File(PhotoStorageService.resolveAbsolutePath(contact.photoPath)!)),
+                        image: FileImage(File(
+                            PhotoStorageService.resolveAbsolutePath(
+                                contact.photoPath)!)),
                         fit: BoxFit.cover,
                       )
                     : null,
@@ -264,7 +277,8 @@ class ContactsScreen extends ConsumerWidget {
                     const SizedBox(height: 2),
                     Text(
                       contact.subtitle,
-                      style: TextStyle(fontSize: 12, color: AppColors.secondary(ctx)),
+                      style: TextStyle(
+                          fontSize: 12, color: AppColors.secondary(ctx)),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
@@ -275,8 +289,8 @@ class ContactsScreen extends ConsumerWidget {
                       ...contact.tags.take(2).map((t) => Padding(
                             padding: const EdgeInsets.only(left: 4),
                             child: Container(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
                                 color: AppColors.primary.withOpacity(0.06),
                                 borderRadius: BorderRadius.circular(10),
