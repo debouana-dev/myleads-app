@@ -27,7 +27,7 @@ import 'web_db_factory_stub.dart'
 class DatabaseService {
   static Database? _db;
   static const _dbName = 'myleads.db';
-  static const _dbVersion = 12;
+  static const _dbVersion = 15;
 
   // ── Remote sync callbacks ──────────────────────────────────────────────────
   // Wired once at startup by RemoteSyncService.wireDatabase().
@@ -79,7 +79,8 @@ class DatabaseService {
     );
   }
 
-  static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+  static Future<void> _onUpgrade(
+      Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       // v1 → v2: replace single "project" column with project_1/2 + budgets
       await db.execute('ALTER TABLE contacts ADD COLUMN project_1 TEXT');
@@ -87,7 +88,8 @@ class DatabaseService {
       await db.execute('ALTER TABLE contacts ADD COLUMN project_2 TEXT');
       await db.execute('ALTER TABLE contacts ADD COLUMN project_2_budget TEXT');
       // Copy old project data into project_1
-      await db.execute('UPDATE contacts SET project_1 = project WHERE project IS NOT NULL');
+      await db.execute(
+          'UPDATE contacts SET project_1 = project WHERE project IS NOT NULL');
     }
     if (oldVersion < 3) {
       // v2 → v3: add photo_path to users and contacts
@@ -100,24 +102,63 @@ class DatabaseService {
       await db.execute('ALTER TABLE users ADD COLUMN company_name_enc TEXT');
       await db.execute('ALTER TABLE users ADD COLUMN company_role_enc TEXT');
       await db.execute('ALTER TABLE users ADD COLUMN biography_enc TEXT');
-      await db.execute('ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0');
+      await db.execute(
+          'ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0');
     }
     if (oldVersion < 5) {
       // v4 → v5: multi-contact reminders with start/end/repeat/action/priority
-      try { await db.execute("ALTER TABLE reminders ADD COLUMN contact_ids TEXT NOT NULL DEFAULT '[]'"); } catch (_) {}
-      try { await db.execute('ALTER TABLE reminders ADD COLUMN start_date_time TEXT'); } catch (_) {}
-      try { await db.execute('ALTER TABLE reminders ADD COLUMN end_date_time TEXT'); } catch (_) {}
-      try { await db.execute('ALTER TABLE reminders ADD COLUMN repeat_frequency TEXT'); } catch (_) {}
-      try { await db.execute("ALTER TABLE reminders ADD COLUMN note TEXT NOT NULL DEFAULT ''"); } catch (_) {}
-      try { await db.execute("ALTER TABLE reminders ADD COLUMN todo_action TEXT NOT NULL DEFAULT 'call'"); } catch (_) {}
-      try { await db.execute("ALTER TABLE reminders ADD COLUMN priority_v2 TEXT NOT NULL DEFAULT 'normal'"); } catch (_) {}
+      try {
+        await db.execute(
+            "ALTER TABLE reminders ADD COLUMN contact_ids TEXT NOT NULL DEFAULT '[]'");
+      } catch (_) {}
+      try {
+        await db
+            .execute('ALTER TABLE reminders ADD COLUMN start_date_time TEXT');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE reminders ADD COLUMN end_date_time TEXT');
+      } catch (_) {}
+      try {
+        await db
+            .execute('ALTER TABLE reminders ADD COLUMN repeat_frequency TEXT');
+      } catch (_) {}
+      try {
+        await db.execute(
+            "ALTER TABLE reminders ADD COLUMN note TEXT NOT NULL DEFAULT ''");
+      } catch (_) {}
+      try {
+        await db.execute(
+            "ALTER TABLE reminders ADD COLUMN todo_action TEXT NOT NULL DEFAULT 'call'");
+      } catch (_) {}
+      try {
+        await db.execute(
+            "ALTER TABLE reminders ADD COLUMN priority_v2 TEXT NOT NULL DEFAULT 'normal'");
+      } catch (_) {}
       // Backfill from legacy columns
-      try { await db.execute("UPDATE reminders SET contact_ids = '[\"' || contact_id || '\"]' WHERE contact_id IS NOT NULL AND (contact_ids = '[]' OR contact_ids IS NULL)"); } catch (_) {}
-      try { await db.execute('UPDATE reminders SET start_date_time = due_date WHERE start_date_time IS NULL AND due_date IS NOT NULL'); } catch (_) {}
-      try { await db.execute("UPDATE reminders SET note = COALESCE(title, '') WHERE (note = '' OR note IS NULL) AND title IS NOT NULL"); } catch (_) {}
-      try { await db.execute("UPDATE reminders SET priority_v2 = 'very_important' WHERE priority = 'urgent'"); } catch (_) {}
-      try { await db.execute("UPDATE reminders SET priority_v2 = 'important' WHERE priority = 'soon'"); } catch (_) {}
-      try { await db.execute("UPDATE reminders SET priority_v2 = 'normal' WHERE priority = 'later' OR priority IS NULL"); } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE reminders SET contact_ids = '[\"' || contact_id || '\"]' WHERE contact_id IS NOT NULL AND (contact_ids = '[]' OR contact_ids IS NULL)");
+      } catch (_) {}
+      try {
+        await db.execute(
+            'UPDATE reminders SET start_date_time = due_date WHERE start_date_time IS NULL AND due_date IS NOT NULL');
+      } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE reminders SET note = COALESCE(title, '') WHERE (note = '' OR note IS NULL) AND title IS NOT NULL");
+      } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE reminders SET priority_v2 = 'very_important' WHERE priority = 'urgent'");
+      } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE reminders SET priority_v2 = 'important' WHERE priority = 'soon'");
+      } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE reminders SET priority_v2 = 'normal' WHERE priority = 'later' OR priority IS NULL");
+      } catch (_) {}
     }
     if (oldVersion < 6) {
       // v5 → v6: in-app notifications table
@@ -170,30 +211,81 @@ class DatabaseService {
     }
     if (oldVersion < 8) {
       // v7 → v8: per-member access privileges on org contacts
-      try { await db.execute('ALTER TABLE organization_members ADD COLUMN can_edit INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
-      try { await db.execute('ALTER TABLE organization_members ADD COLUMN can_create INTEGER NOT NULL DEFAULT 1'); } catch (_) {}
+      try {
+        await db.execute(
+            'ALTER TABLE organization_members ADD COLUMN can_edit INTEGER NOT NULL DEFAULT 0');
+      } catch (_) {}
+      try {
+        await db.execute(
+            'ALTER TABLE organization_members ADD COLUMN can_create INTEGER NOT NULL DEFAULT 1');
+      } catch (_) {}
       // Ensure admins (role='admin') get can_edit=1 retrospectively
-      try { await db.execute("UPDATE organization_members SET can_edit = 1, can_create = 1 WHERE role = 'admin'"); } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE organization_members SET can_edit = 1, can_create = 1 WHERE role = 'admin'");
+      } catch (_) {}
     }
     if (oldVersion < 9) {
       // v8 → v9: subscription plan stored on the user row
-      try { await db.execute("ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'"); } catch (_) {}
+      try {
+        await db.execute(
+            "ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'");
+      } catch (_) {}
     }
     if (oldVersion < 10) {
       // v9 → v10: per-member permission to view shared-contact reminders
-      try { await db.execute('ALTER TABLE organization_members ADD COLUMN can_view_reminders INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
+      try {
+        await db.execute(
+            'ALTER TABLE organization_members ADD COLUMN can_view_reminders INTEGER NOT NULL DEFAULT 0');
+      } catch (_) {}
       // Admins can view all reminders by default
-      try { await db.execute("UPDATE organization_members SET can_view_reminders = 1 WHERE role = 'admin'"); } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE organization_members SET can_view_reminders = 1 WHERE role = 'admin'");
+      } catch (_) {}
     }
     if (oldVersion < 11) {
       // v10 → v11: track when the user last successfully synchronized data
-      try { await db.execute('ALTER TABLE users ADD COLUMN last_sync_at TEXT'); } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE users ADD COLUMN last_sync_at TEXT');
+      } catch (_) {}
     }
     if (oldVersion < 12) {
       // v11 → v12: per-member permission to view shared-contact history authored by others
-      try { await db.execute('ALTER TABLE organization_members ADD COLUMN can_view_history INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
+      try {
+        await db.execute(
+            'ALTER TABLE organization_members ADD COLUMN can_view_history INTEGER NOT NULL DEFAULT 0');
+      } catch (_) {}
       // Admins can view all history by default
-      try { await db.execute("UPDATE organization_members SET can_view_history = 1 WHERE role = 'admin'"); } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE organization_members SET can_view_history = 1 WHERE role = 'admin'");
+      } catch (_) {}
+    }
+    if (oldVersion < 13) {
+      // v12 → v13: Stripe payment history table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS payment_history (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          plan TEXT NOT NULL,
+          billing_cycle TEXT NOT NULL,
+          amount REAL NOT NULL,
+          currency TEXT NOT NULL DEFAULT 'EUR',
+          status TEXT NOT NULL DEFAULT 'succeeded',
+          stripe_payment_intent_id TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      ''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_payment_history_user ON payment_history(user_id)');
+    }
+    if (oldVersion < 15) {
+      // v14 → v15: payment method type column on payment history
+      try {
+        await db.execute(
+            "ALTER TABLE payment_history ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'card'");
+      } catch (_) {}
     }
   }
 
@@ -373,6 +465,24 @@ class DatabaseService {
         'CREATE INDEX idx_org_members_org ON organization_members(organization_id)');
     await db.execute(
         'CREATE INDEX idx_org_members_user ON organization_members(user_id)');
+
+    // ----- PAYMENT HISTORY (v13, payment_method added v15) -----
+    await db.execute('''
+      CREATE TABLE payment_history (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        plan TEXT NOT NULL,
+        billing_cycle TEXT NOT NULL,
+        amount REAL NOT NULL,
+        currency TEXT NOT NULL DEFAULT 'EUR',
+        status TEXT NOT NULL DEFAULT 'succeeded',
+        stripe_payment_intent_id TEXT NOT NULL,
+        payment_method TEXT NOT NULL DEFAULT 'card',
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX idx_payment_history_user ON payment_history(user_id)');
   }
 
   // =====================================================================
@@ -412,7 +522,8 @@ class DatabaseService {
 
   static Future<UserAccount?> findUserById(String id) async {
     final db = await database;
-    final rows = await db.query('users', where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows =
+        await db.query('users', where: 'id = ?', whereArgs: [id], limit: 1);
     if (rows.isEmpty) return null;
     return _userFromRow(rows.first);
   }
@@ -482,8 +593,9 @@ class DatabaseService {
         'email_lookup': _hashLookup(Validators.normalizeEmail(u.email)),
         'first_name_enc': EncryptionService.encryptText(u.firstName),
         'last_name_enc': EncryptionService.encryptText(u.lastName),
-        'nickname_enc':
-            u.nickname != null ? EncryptionService.encryptText(u.nickname!) : null,
+        'nickname_enc': u.nickname != null
+            ? EncryptionService.encryptText(u.nickname!)
+            : null,
         'phone_enc':
             u.phone != null ? EncryptionService.encryptText(u.phone!) : null,
         'phone_lookup': u.phone != null && u.phone!.trim().isNotEmpty
@@ -492,12 +604,15 @@ class DatabaseService {
         // date_of_birth_enc column is kept in schema for v5→v6 migration
         // compatibility but no longer written (doc v7: DoB removed).
         'date_of_birth_enc': null,
-        'company_name_enc':
-            u.companyName != null ? EncryptionService.encryptText(u.companyName!) : null,
-        'company_role_enc':
-            u.companyRole != null ? EncryptionService.encryptText(u.companyRole!) : null,
-        'biography_enc':
-            u.biography != null ? EncryptionService.encryptText(u.biography!) : null,
+        'company_name_enc': u.companyName != null
+            ? EncryptionService.encryptText(u.companyName!)
+            : null,
+        'company_role_enc': u.companyRole != null
+            ? EncryptionService.encryptText(u.companyRole!)
+            : null,
+        'biography_enc': u.biography != null
+            ? EncryptionService.encryptText(u.biography!)
+            : null,
         'password_hash': u.passwordHash,
         'auth_provider': u.authProvider,
         'session_token': u.sessionToken,
@@ -515,7 +630,8 @@ class DatabaseService {
     return UserAccount(
       id: row['id'] as String,
       email: EncryptionService.decryptText(row['email_enc'] as String?),
-      firstName: EncryptionService.decryptText(row['first_name_enc'] as String?),
+      firstName:
+          EncryptionService.decryptText(row['first_name_enc'] as String?),
       lastName: EncryptionService.decryptText(row['last_name_enc'] as String?),
       nickname: row['nickname_enc'] != null
           ? EncryptionService.decryptText(row['nickname_enc'] as String?)
@@ -541,8 +657,7 @@ class DatabaseService {
       lastLoginAt: row['last_login_at'] != null
           ? DateTime.parse(row['last_login_at'] as String)
           : null,
-      passwordChangedAt:
-          DateTime.parse(row['password_changed_at'] as String),
+      passwordChangedAt: DateTime.parse(row['password_changed_at'] as String),
       photoPath: row['photo_path'] as String?,
       emailVerified: (row['email_verified'] as int?) == 1,
       organizationId: row['organization_id'] as String?,
@@ -607,7 +722,13 @@ class DatabaseService {
   static Future<void> insertContact(Contact contact) async {
     final db = await database;
     final row = _contactToRow(contact);
-    await db.insert('contacts', row);
+
+    await db.insert(
+      'contacts',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+
     _onRemoteUpsert?.call('contacts', row);
   }
 
@@ -645,7 +766,8 @@ class DatabaseService {
     if (phoneLookup != null) {
       final rows = await db.query(
         'contacts',
-        where: 'owner_id = ? AND phone_lookup = ? ${excludeId != null ? 'AND id != ?' : ''}',
+        where:
+            'owner_id = ? AND phone_lookup = ? ${excludeId != null ? 'AND id != ?' : ''}',
         whereArgs: [
           ownerId,
           phoneLookup,
@@ -661,7 +783,8 @@ class DatabaseService {
     if (emailLookup != null) {
       final rows = await db.query(
         'contacts',
-        where: 'owner_id = ? AND email_lookup = ? ${excludeId != null ? 'AND id != ?' : ''}',
+        where:
+            'owner_id = ? AND email_lookup = ? ${excludeId != null ? 'AND id != ?' : ''}',
         whereArgs: [
           ownerId,
           emailLookup,
@@ -761,6 +884,8 @@ class DatabaseService {
       };
 
   static Contact _contactFromRow(Map<String, dynamic> row) {
+    final phoneEnc = row['phone'] as String?;
+    final emailEnc = row['email'] as String?;
     return Contact(
       id: row['id'] as String,
       ownerId: row['owner_id'] as String? ?? '',
@@ -768,8 +893,12 @@ class DatabaseService {
       lastName: row['last_name'] as String,
       jobTitle: row['job_title'] as String?,
       company: row['company'] as String?,
-      phone: row['phone'] as String?,
-      email: row['email'] as String?,
+      phone: (phoneEnc != null && phoneEnc.isNotEmpty)
+          ? EncryptionService.decryptText(phoneEnc)
+          : null,
+      email: (emailEnc != null && emailEnc.isNotEmpty)
+          ? EncryptionService.decryptText(emailEnc)
+          : null,
       source: row['source'] as String?,
       project1: row['project_1'] as String?,
       project1Budget: row['project_1_budget'] as String?,
@@ -820,7 +949,8 @@ class DatabaseService {
   static Future<void> updateReminder(Reminder reminder) async {
     final db = await database;
     final row = _reminderToRow(reminder);
-    await db.update('reminders', row, where: 'id = ?', whereArgs: [reminder.id]);
+    await db
+        .update('reminders', row, where: 'id = ?', whereArgs: [reminder.id]);
     _onRemoteUpsert?.call('reminders', row);
   }
 
@@ -885,7 +1015,9 @@ class DatabaseService {
       if (v == null) return DateTime.now();
       if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
       if (v is String) {
-        try { return DateTime.parse(v); } catch (_) {
+        try {
+          return DateTime.parse(v);
+        } catch (_) {
           final asInt = int.tryParse(v);
           if (asInt != null) return DateTime.fromMillisecondsSinceEpoch(asInt);
         }
@@ -1015,6 +1147,42 @@ class DatabaseService {
   }
 
   // =====================================================================
+  // PAYMENT HISTORY (v13)
+  // =====================================================================
+
+  static Future<void> insertPaymentRecord(PaymentRecord record) async {
+    final db = await database;
+    final row = record.toRow();
+    // ConflictAlgorithm.ignore makes this idempotent: main.dart inserts the
+    // record on cold-start before the widget tree builds, and
+    // SubscriptionPlanScreen may insert it again on resume — same primary key,
+    // second insert is silently skipped.
+    await db.insert('payment_history', row,
+        conflictAlgorithm: ConflictAlgorithm.ignore);
+    _onRemoteUpsert?.call('payment_history', row);
+  }
+
+  static Future<List<PaymentRecord>> getPaymentHistory(String userId) async {
+    final db = await database;
+    final rows = await db.query(
+      'payment_history',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(PaymentRecord.fromRow).toList();
+  }
+
+  static Future<List<Map<String, dynamic>>> getRawPaymentHistoryRows(
+      String userId) async {
+    final db = await database;
+    return (await db.query('payment_history',
+            where: 'user_id = ?', whereArgs: [userId]))
+        .map((r) => Map<String, dynamic>.from(r))
+        .toList();
+  }
+
+  // =====================================================================
   // NOTIFICATIONS
   // =====================================================================
 
@@ -1071,9 +1239,11 @@ class DatabaseService {
       await txn.delete('reminders', where: 'owner_id = ?', whereArgs: [userId]);
       await txn.delete('payment_methods',
           where: 'owner_id = ?', whereArgs: [userId]);
-      await txn.delete('notifications',
-          where: 'owner_id = ?', whereArgs: [userId]);
+      await txn
+          .delete('notifications', where: 'owner_id = ?', whereArgs: [userId]);
       await txn.delete('organization_members',
+          where: 'user_id = ?', whereArgs: [userId]);
+      await txn.delete('payment_history',
           where: 'user_id = ?', whereArgs: [userId]);
       await txn.delete('users', where: 'id = ?', whereArgs: [userId]);
     });
@@ -1085,7 +1255,8 @@ class DatabaseService {
 
   static Future<Organization?> findOrganizationById(String id) async {
     final db = await database;
-    final rows = await db.query('organizations', where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows = await db.query('organizations',
+        where: 'id = ?', whereArgs: [id], limit: 1);
     if (rows.isEmpty) return null;
     return _orgFromRow(rows.first);
   }
@@ -1126,7 +1297,8 @@ class DatabaseService {
         where: 'organization_id = ?',
         whereArgs: [orgId],
       );
-      await txn.delete('organization_members', where: 'organization_id = ?', whereArgs: [orgId]);
+      await txn.delete('organization_members',
+          where: 'organization_id = ?', whereArgs: [orgId]);
       await txn.delete('organizations', where: 'id = ?', whereArgs: [orgId]);
     });
     _onRemoteDelete?.call('organizations', orgId);
@@ -1192,7 +1364,8 @@ class DatabaseService {
         contactCount: contactCount,
         canEdit: isAdmin || (row['can_edit'] as int? ?? 0) == 1,
         canCreate: isAdmin || (row['can_create'] as int? ?? 1) == 1,
-        canViewReminders: isAdmin || (row['can_view_reminders'] as int? ?? 0) == 1,
+        canViewReminders:
+            isAdmin || (row['can_view_reminders'] as int? ?? 0) == 1,
         canViewHistory: isAdmin || (row['can_view_history'] as int? ?? 0) == 1,
       ));
     }
@@ -1219,7 +1392,8 @@ class DatabaseService {
       'can_view_reminders': isAdmin ? 1 : 0,
       'can_view_history': isAdmin ? 1 : 0,
     };
-    await db.insert('organization_members', row, conflictAlgorithm: ConflictAlgorithm.ignore);
+    await db.insert('organization_members', row,
+        conflictAlgorithm: ConflictAlgorithm.ignore);
     _onRemoteUpsert?.call('organization_members', row);
   }
 
@@ -1247,7 +1421,8 @@ class DatabaseService {
       );
     });
     if (memberRows.isNotEmpty) {
-      _onRemoteDelete?.call('organization_members', memberRows.first['id'] as String);
+      _onRemoteDelete?.call(
+          'organization_members', memberRows.first['id'] as String);
     }
   }
 
@@ -1289,14 +1464,17 @@ class DatabaseService {
       whereArgs: [orgId, userId],
       limit: 1,
     );
-    if (rows.isNotEmpty) _onRemoteUpsert?.call('organization_members', Map<String, dynamic>.from(rows.first));
+    if (rows.isNotEmpty)
+      _onRemoteUpsert?.call(
+          'organization_members', Map<String, dynamic>.from(rows.first));
   }
 
   /// Load all contacts owned by any active member of [orgId], with
   /// org-level deduplication: when two members hold a contact with the same
   /// [phone_lookup] or [email_lookup], only the earliest-created copy is
   /// returned. The later duplicates are silently hidden (not deleted).
-  static Future<List<Contact>> getAllContactsForOrganization(String orgId) async {
+  static Future<List<Contact>> getAllContactsForOrganization(
+      String orgId) async {
     final db = await database;
     final memberRows = await db.query(
       'organization_members',
@@ -1320,7 +1498,7 @@ class DatabaseService {
       final emailLookup = row['email_lookup'] as String?;
       final isDuplicate =
           (phoneLookup != null && !seenPhone.add(phoneLookup)) ||
-          (emailLookup != null && !seenEmail.add(emailLookup));
+              (emailLookup != null && !seenEmail.add(emailLookup));
       if (!isDuplicate) result.add(_contactFromRow(row));
     }
     return result;
@@ -1371,7 +1549,7 @@ class DatabaseService {
       final emailLookup = row['email_lookup'] as String?;
       final isDuplicate =
           (phoneLookup != null && !seenPhone.add(phoneLookup)) ||
-          (emailLookup != null && !seenEmail.add(emailLookup));
+              (emailLookup != null && !seenEmail.add(emailLookup));
       if (!isDuplicate) count++;
     }
     return count;
@@ -1411,7 +1589,8 @@ class DatabaseService {
       where: "organization_id = ? AND status = 'active' AND user_id != ?",
       whereArgs: [orgId, fromUserId],
     );
-    final otherIds = otherMemberRows.map((r) => r['user_id'] as String).toList();
+    final otherIds =
+        otherMemberRows.map((r) => r['user_id'] as String).toList();
 
     final otherPhoneLookups = <String>{};
     final otherEmailLookups = <String>{};
@@ -1445,8 +1624,8 @@ class DatabaseService {
         final emailLookup = row['email_lookup'] as String?;
 
         // Skip duplicate contacts — they stay with the member.
-        final isDuplicate =
-            (phoneLookup != null && otherPhoneLookups.contains(phoneLookup)) ||
+        final isDuplicate = (phoneLookup != null &&
+                otherPhoneLookups.contains(phoneLookup)) ||
             (emailLookup != null && otherEmailLookups.contains(emailLookup));
         if (isDuplicate) continue;
 
@@ -1482,8 +1661,8 @@ class DatabaseService {
 
     if (_onRemoteUpsert != null) {
       for (final id in transferredIds) {
-        final rows =
-            await db.query('contacts', where: 'id = ?', whereArgs: [id], limit: 1);
+        final rows = await db.query('contacts',
+            where: 'id = ?', whereArgs: [id], limit: 1);
         if (rows.isNotEmpty) {
           _onRemoteUpsert!('contacts', Map<String, dynamic>.from(rows.first));
         }
@@ -1543,24 +1722,45 @@ class DatabaseService {
 
   /// Convenience: fetch all privilege flags for the current user in their org.
   /// Returns defaults (full access) when not in an org.
-  static Future<({bool canEdit, bool canCreate, bool canViewReminders, bool canViewHistory})>
-      getMemberPrivileges({
+  static Future<
+      ({
+        bool canEdit,
+        bool canCreate,
+        bool canViewReminders,
+        bool canViewHistory
+      })> getMemberPrivileges({
     required String userId,
     required String? orgId,
   }) async {
     if (orgId == null) {
-      return (canEdit: true, canCreate: true, canViewReminders: true, canViewHistory: true);
+      return (
+        canEdit: true,
+        canCreate: true,
+        canViewReminders: true,
+        canViewHistory: true
+      );
     }
     final db = await database;
     final rows = await db.query(
       'organization_members',
-      columns: ['role', 'can_edit', 'can_create', 'can_view_reminders', 'can_view_history'],
+      columns: [
+        'role',
+        'can_edit',
+        'can_create',
+        'can_view_reminders',
+        'can_view_history'
+      ],
       where: 'organization_id = ? AND user_id = ?',
       whereArgs: [orgId, userId],
       limit: 1,
     );
     if (rows.isEmpty) {
-      return (canEdit: true, canCreate: true, canViewReminders: true, canViewHistory: true);
+      return (
+        canEdit: true,
+        canCreate: true,
+        canViewReminders: true,
+        canViewHistory: true
+      );
     }
     final isAdmin = (rows.first['role'] as String?) == 'admin';
     final canEdit = isAdmin || (rows.first['can_edit'] as int? ?? 0) == 1;
@@ -1569,7 +1769,12 @@ class DatabaseService {
         isAdmin || (rows.first['can_view_reminders'] as int? ?? 0) == 1;
     final canViewHistory =
         isAdmin || (rows.first['can_view_history'] as int? ?? 0) == 1;
-    return (canEdit: canEdit, canCreate: canCreate, canViewReminders: canViewReminders, canViewHistory: canViewHistory);
+    return (
+      canEdit: canEdit,
+      canCreate: canCreate,
+      canViewReminders: canViewReminders,
+      canViewHistory: canViewHistory
+    );
   }
 
   /// Load reminders visible to [userId] within [orgId].
@@ -1618,7 +1823,9 @@ class DatabaseService {
       whereArgs: [orgId, userId],
       limit: 1,
     );
-    if (rows.isNotEmpty) _onRemoteUpsert?.call('organization_members', Map<String, dynamic>.from(rows.first));
+    if (rows.isNotEmpty)
+      _onRemoteUpsert?.call(
+          'organization_members', Map<String, dynamic>.from(rows.first));
   }
 
   /// Transfer all contacts owned by [fromUserId] to the organization's admin.
@@ -1718,8 +1925,11 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [orgId],
     );
-    final rows = await db.query('organizations', where: 'id = ?', whereArgs: [orgId], limit: 1);
-    if (rows.isNotEmpty) _onRemoteUpsert?.call('organizations', Map<String, dynamic>.from(rows.first));
+    final rows = await db.query('organizations',
+        where: 'id = ?', whereArgs: [orgId], limit: 1);
+    if (rows.isNotEmpty)
+      _onRemoteUpsert?.call(
+          'organizations', Map<String, dynamic>.from(rows.first));
   }
 
   // =====================================================================
@@ -1730,38 +1940,48 @@ class DatabaseService {
 
   static Future<Map<String, dynamic>?> getRawUserRow(String userId) async {
     final db = await database;
-    final rows = await db.query('users', where: 'id = ?', whereArgs: [userId], limit: 1);
+    final rows =
+        await db.query('users', where: 'id = ?', whereArgs: [userId], limit: 1);
     return rows.isEmpty ? null : Map<String, dynamic>.from(rows.first);
   }
 
-  static Future<List<Map<String, dynamic>>> getRawContactRows(String ownerId) async {
+  static Future<List<Map<String, dynamic>>> getRawContactRows(
+      String ownerId) async {
     final db = await database;
-    return (await db.query('contacts', where: 'owner_id = ?', whereArgs: [ownerId]))
+    return (await db
+            .query('contacts', where: 'owner_id = ?', whereArgs: [ownerId]))
         .map((r) => Map<String, dynamic>.from(r))
         .toList();
   }
 
-  static Future<List<Map<String, dynamic>>> getRawReminderRows(String ownerId) async {
+  static Future<List<Map<String, dynamic>>> getRawReminderRows(
+      String ownerId) async {
     final db = await database;
-    return (await db.query('reminders', where: 'owner_id = ?', whereArgs: [ownerId]))
+    return (await db
+            .query('reminders', where: 'owner_id = ?', whereArgs: [ownerId]))
         .map((r) => Map<String, dynamic>.from(r))
         .toList();
   }
 
-  static Future<List<Map<String, dynamic>>> getRawInteractionRows(String ownerId) async {
+  static Future<List<Map<String, dynamic>>> getRawInteractionRows(
+      String ownerId) async {
     final db = await database;
-    return (await db.query('interactions', where: 'owner_id = ?', whereArgs: [ownerId]))
+    return (await db
+            .query('interactions', where: 'owner_id = ?', whereArgs: [ownerId]))
         .map((r) => Map<String, dynamic>.from(r))
         .toList();
   }
 
-  static Future<Map<String, dynamic>?> getRawOrganizationRow(String orgId) async {
+  static Future<Map<String, dynamic>?> getRawOrganizationRow(
+      String orgId) async {
     final db = await database;
-    final rows = await db.query('organizations', where: 'id = ?', whereArgs: [orgId], limit: 1);
+    final rows = await db.query('organizations',
+        where: 'id = ?', whereArgs: [orgId], limit: 1);
     return rows.isEmpty ? null : Map<String, dynamic>.from(rows.first);
   }
 
-  static Future<List<Map<String, dynamic>>> getRawOrgMemberRows(String orgId) async {
+  static Future<List<Map<String, dynamic>>> getRawOrgMemberRows(
+      String orgId) async {
     final db = await database;
     return (await db.query('organization_members',
             where: 'organization_id = ?', whereArgs: [orgId]))
@@ -1769,7 +1989,8 @@ class DatabaseService {
         .toList();
   }
 
-  static Future<void> upsertRawRow(String table, Map<String, dynamic> row) async {
+  static Future<void> upsertRawRow(
+      String table, Map<String, dynamic> row) async {
     final db = await database;
     await db.insert(table, row, conflictAlgorithm: ConflictAlgorithm.replace);
   }
@@ -1800,7 +2021,8 @@ class DatabaseService {
   }
 
   /// Persists the timestamp of the most recent successful sync for [userId].
-  static Future<void> updateUserLastSync(String userId, String isoTimestamp) async {
+  static Future<void> updateUserLastSync(
+      String userId, String isoTimestamp) async {
     final db = await database;
     await db.update(
       'users',
@@ -1851,4 +2073,3 @@ class DatabaseService {
   @visibleForTesting
   static void injectDatabase(Database db) => _db = db;
 }
-

@@ -160,9 +160,8 @@ class PricingScreen extends ConsumerWidget {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
-                                color: isPaid
-                                    ? Colors.white
-                                    : AppColors.primary,
+                                color:
+                                    isPaid ? Colors.white : AppColors.primary,
                               ),
                             ),
                           ),
@@ -217,15 +216,17 @@ class PricingScreen extends ConsumerWidget {
                           children: [
                             _MiniPlanTile(
                               name: l10n.premiumPlanName,
-                              price: l10n.premiumPrice(currency, eurToTargetRate: eurToUsd),
-                              period: l10n.premiumPeriod(currency),
+                              price: l10n.premiumPrice(currency,
+                                  eurToTargetRate: eurToUsd),
+                              period: l10n.premiumPeriod(l10n),
                               highlight: true,
                             ),
                             const SizedBox(width: 10),
                             _MiniPlanTile(
                               name: l10n.businessPlanName,
-                              price: l10n.businessPrice(currency, eurToTargetRate: eurToUsd),
-                              period: l10n.businessPeriod(currency),
+                              price: l10n.businessPrice(currency,
+                                  eurToTargetRate: eurToUsd),
+                              period: l10n.businessPeriod(l10n),
                               highlight: false,
                             ),
                           ],

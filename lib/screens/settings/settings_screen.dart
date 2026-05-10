@@ -54,8 +54,8 @@ class SettingsScreen extends ConsumerWidget {
               isDark: isDark,
               lightLabel: l10n.lightMode,
               darkLabel: l10n.darkMode,
-              onChanged: (dark) => notifier.setThemeMode(
-                  dark ? ThemeMode.dark : ThemeMode.light),
+              onChanged: (dark) => notifier
+                  .setThemeMode(dark ? ThemeMode.dark : ThemeMode.light),
             ),
           ),
 
@@ -301,9 +301,8 @@ class _ToggleChip extends StatelessWidget {
           color: isSelected ? null : AppColors.bg(context),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isSelected
-                ? AppColors.primary
-                : AppColors.borderColor(context),
+            color:
+                isSelected ? AppColors.primary : AppColors.borderColor(context),
           ),
         ),
         child: Row(
@@ -313,9 +312,8 @@ class _ToggleChip extends StatelessWidget {
               Icon(
                 icon,
                 size: 15,
-                color: isSelected
-                    ? AppColors.white
-                    : AppColors.secondary(context),
+                color:
+                    isSelected ? AppColors.white : AppColors.secondary(context),
               ),
               const SizedBox(width: 6),
             ],
@@ -324,9 +322,8 @@ class _ToggleChip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: isSelected
-                    ? AppColors.white
-                    : AppColors.secondary(context),
+                color:
+                    isSelected ? AppColors.white : AppColors.secondary(context),
               ),
             ),
           ],
@@ -377,7 +374,7 @@ class _PreviewCard extends StatelessWidget {
                 context,
                 label: l10n.premiumPlanName,
                 price: l10n.premiumPrice(currency, eurToTargetRate: eurToUsd),
-                period: l10n.premiumPeriod(currency),
+                period: l10n.premiumPeriod(l10n),
                 highlight: true,
               ),
               const SizedBox(width: 10),
@@ -385,7 +382,7 @@ class _PreviewCard extends StatelessWidget {
                 context,
                 label: l10n.businessPlanName,
                 price: l10n.businessPrice(currency, eurToTargetRate: eurToUsd),
-                period: l10n.businessPeriod(currency),
+                period: l10n.businessPeriod(l10n),
                 highlight: false,
               ),
             ],
@@ -432,8 +429,7 @@ class _PreviewCard extends StatelessWidget {
                     color: highlight ? AppColors.accent : AppColors.white)),
             Text(period,
                 style: TextStyle(
-                    fontSize: 10,
-                    color: AppColors.white.withOpacity(0.6))),
+                    fontSize: 10, color: AppColors.white.withOpacity(0.6))),
           ],
         ),
       ),

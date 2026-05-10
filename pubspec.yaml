@@ -94,8 +94,12 @@ dependencies:
   cupertino_icons: ^1.0.8
   firebase_core: ^4.7.0
   firebase_auth: ^6.4.0
+  firebase_app_check: 0.4.3
   cloud_firestore: ^6.3.0
   firebase_storage: ^13.3.0
+  cloud_functions: ^6.2.0
+  flutter_stripe: ^11.0.0
+  flutter_dotenv: ^6.0.1
 
 dev_dependencies:
   flutter_test:
@@ -128,3 +132,4 @@ flutter:
     - assets/images/
     - assets/icons/
     - assets/animations/
+    - .env

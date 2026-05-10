@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/l10n/app_l10n.dart';
 import '../../core/theme/app_colors.dart';
+import '../../models/user_account.dart';
 import '../../providers/currency_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../services/database_service.dart';
+import '../../services/storage_service.dart';
 
 enum _DateFilter { allTime, thisMonth, last3Months, last6Months, thisYear }
 
@@ -18,55 +21,45 @@ class PaymentHistoryScreen extends ConsumerStatefulWidget {
 
 class _PaymentHistoryScreenState extends ConsumerState<PaymentHistoryScreen> {
   _DateFilter _filter = _DateFilter.allTime;
+  late Future<List<PaymentRecord>> _recordsFuture;
 
-  static final List<_Transaction> _allTransactions = [
-    _Transaction(
-      id: 'TXN-2024-001',
-      plan: 'Premium',
-      amount: 2.99,
-      date: DateTime(2024, 3, 1),
-      status: _TxStatus.paid,
-    ),
-    _Transaction(
-      id: 'TXN-2024-002',
-      plan: 'Premium',
-      amount: 2.99,
-      date: DateTime(2024, 2, 1),
-      status: _TxStatus.paid,
-    ),
-    _Transaction(
-      id: 'TXN-2024-003',
-      plan: 'Premium',
-      amount: 2.99,
-      date: DateTime(2024, 1, 1),
-      status: _TxStatus.paid,
-    ),
-    _Transaction(
-      id: 'TXN-2023-012',
-      plan: 'Business',
-      amount: 5.99,
-      date: DateTime(2023, 12, 1),
-      status: _TxStatus.paid,
-    ),
-    _Transaction(
-      id: 'TXN-2023-011',
-      plan: 'Business',
-      amount: 5.99,
-      date: DateTime(2023, 11, 1),
-      status: _TxStatus.failed,
-    ),
-    _Transaction(
-      id: 'TXN-2023-010',
-      plan: 'Premium',
-      amount: 2.99,
-      date: DateTime(2023, 10, 1),
-      status: _TxStatus.paid,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _recordsFuture = DatabaseService.getPaymentHistory(StorageService.currentUserId);
+  }
 
-  List<_Transaction> get _filtered {
+  List<_Transaction> _toTransactions(List<PaymentRecord> records) {
+    return records.map((r) {
+      _TxStatus status;
+      switch (r.status) {
+        case 'succeeded':
+          status = _TxStatus.paid;
+          break;
+        case 'failed':
+          status = _TxStatus.failed;
+          break;
+        default:
+          status = _TxStatus.pending;
+      }
+      return _Transaction(
+        id: r.stripePaymentIntentId.isNotEmpty
+            ? r.stripePaymentIntentId
+            : r.id.substring(0, 8).toUpperCase(),
+        plan: r.plan[0].toUpperCase() + r.plan.substring(1),
+        billingCycle: r.billingCycle,
+        amount: r.amount,
+        currency: r.currency,
+        date: DateTime.tryParse(r.createdAt) ?? DateTime.now(),
+        status: status,
+        paymentMethod: r.paymentMethod,
+      );
+    }).toList();
+  }
+
+  List<_Transaction> _filtered(List<_Transaction> all) {
     final now = DateTime.now();
-    return _allTransactions.where((tx) {
+    return all.where((tx) {
       switch (_filter) {
         case _DateFilter.allTime:
           return true;
@@ -87,7 +80,6 @@ class _PaymentHistoryScreenState extends ConsumerState<PaymentHistoryScreen> {
     final l10n = ref.watch(l10nProvider);
     final currency = ref.watch(settingsProvider).currency;
     final eurToUsd = ref.watch(eurToUsdRateProvider);
-    final transactions = _filtered;
 
     return Scaffold(
       backgroundColor: AppColors.bg(context),
@@ -195,21 +187,33 @@ class _PaymentHistoryScreenState extends ConsumerState<PaymentHistoryScreen> {
             ),
           ),
 
-          // Transactions list
+          // Transactions list — loaded from SQLite
           Expanded(
-            child: transactions.isEmpty
-                ? _EmptyState(l10n: l10n)
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-                    itemCount: transactions.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, i) => _TransactionCard(
-                      transaction: transactions[i],
-                      currency: currency,
-                      eurToUsd: eurToUsd,
-                      l10n: l10n,
-                    ),
+            child: FutureBuilder<List<PaymentRecord>>(
+              future: _recordsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final all = _toTransactions(snapshot.data ?? []);
+                final transactions = _filtered(all);
+
+                if (transactions.isEmpty) {
+                  return _EmptyState(l10n: l10n);
+                }
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                  itemCount: transactions.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (context, i) => _TransactionCard(
+                    transaction: transactions[i],
+                    currency: currency,
+                    eurToUsd: eurToUsd,
+                    l10n: l10n,
                   ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -302,12 +306,15 @@ class _TransactionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isEur = currency == AppCurrency.eur;
+    final isEur = currency == AppCurrency.eur || transaction.currency != 'USD';
     final displayAmount = isEur
         ? '${transaction.amount.toStringAsFixed(2)}€'
         : '\$${(transaction.amount * eurToUsd).toStringAsFixed(2)}';
     final statusColor = _statusColor(transaction.status);
     final statusLabel = _statusLabel(transaction.status, l10n);
+    final cycleLabel = transaction.billingCycle == 'yearly'
+        ? l10n.billingCycleYearly
+        : l10n.billingCycleMonthly;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -339,13 +346,34 @@ class _TransactionCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      transaction.plan,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onSurface(context),
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          transaction.plan,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.onSurface(context),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Text(
+                            cycleLabel,
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     Text(
                       displayAmount,
@@ -361,13 +389,23 @@ class _TransactionCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      transaction.id,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.hint(context),
-                        letterSpacing: 0.3,
-                      ),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.credit_card_rounded,
+                          size: 12,
+                          color: AppColors.hint(context),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _methodLabel(transaction.paymentMethod, l10n),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.hint(context),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -389,7 +427,7 @@ class _TransactionCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _formatDate(transaction.date),
+                  _formatDateTime(transaction.date),
                   style: TextStyle(
                     fontSize: 12,
                     color: AppColors.secondary(context),
@@ -425,22 +463,31 @@ class _TransactionCard extends StatelessWidget {
     }
   }
 
-  String _formatDate(DateTime d) {
+  String _formatDateTime(DateTime d) {
     const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
-    return '${d.day} ${months[d.month - 1]} ${d.year}';
+    final h = d.hour.toString().padLeft(2, '0');
+    final m = d.minute.toString().padLeft(2, '0');
+    return '${d.day} ${months[d.month - 1]} ${d.year} · $h:$m';
+  }
+
+  String _methodLabel(String method, AppL10n l10n) {
+    switch (method) {
+      case 'card':
+        return l10n.paymentMethodCard;
+      case 'link':
+        return l10n.paymentMethodLink;
+      case 'amazon_pay':
+        return l10n.paymentMethodAmazonPay;
+      case 'apple_pay':
+        return l10n.paymentMethodApplePay;
+      case 'google_pay':
+        return l10n.paymentMethodGooglePay;
+      default:
+        return method.isNotEmpty ? method : l10n.paymentMethodCard;
+    }
   }
 }
 
@@ -451,15 +498,21 @@ enum _TxStatus { paid, failed, pending }
 class _Transaction {
   final String id;
   final String plan;
+  final String billingCycle;
   final double amount;
+  final String currency;
   final DateTime date;
   final _TxStatus status;
+  final String paymentMethod;
 
   const _Transaction({
     required this.id,
     required this.plan,
+    required this.billingCycle,
     required this.amount,
+    required this.currency,
     required this.date,
     required this.status,
+    this.paymentMethod = 'card',
   });
 }

@@ -4,10 +4,15 @@
 build/
 .flutter-plugins
 .flutter-plugins-dependencies
+.env
+
+# NPM
+**/functions/node_modules/
 
 # IDE
 .idea/
 .vscode/
+.claude/
 *.iml
 
 # macOS

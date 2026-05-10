@@ -33,6 +33,44 @@ jobs:
           flutter pub get
           dart pub run flutter_launcher_icons
 
+      - name: Patch NormalTheme to MaterialComponents (required by flutter_stripe)
+        run: |
+          python3 << 'PYEOF'
+          import re
+
+          patches = {
+              'android/app/src/main/res/values/styles.xml': (
+                  r'(<style name="NormalTheme" parent=")[^"]*(")',
+                  r'\1Theme.MaterialComponents.Light.NoActionBar\2',
+              ),
+              'android/app/src/main/res/values-night/styles.xml': (
+                  r'(<style name="NormalTheme" parent=")[^"]*(")',
+                  r'\1Theme.MaterialComponents.DayNight.NoActionBar\2',
+              ),
+          }
+          for path, (pattern, replacement) in patches.items():
+              with open(path, 'r') as f:
+                  content = f.read()
+              content = re.sub(pattern, replacement, content)
+              with open(path, 'w') as f:
+                  f.write(content)
+              print(f'{path} patched')
+          PYEOF
+
+      - name: Patch MainActivity to extend FlutterFragmentActivity
+        run: |
+          python3 << 'PYEOF'
+          path = 'android/app/src/main/kotlin/com/debouana/myleads/MainActivity.kt'
+          content = (
+              'package com.debouana.myleads\n\n'
+              'import io.flutter.embedding.android.FlutterFragmentActivity\n\n'
+              'class MainActivity : FlutterFragmentActivity()\n'
+          )
+          with open(path, 'w') as f:
+              f.write(content)
+          print('MainActivity.kt patched')
+          PYEOF
+
       - name: Patch iOS app display name
         run: |
           python3 << 'PYEOF'
@@ -88,6 +126,16 @@ jobs:
           # Change app display label (flutter create defaults to package name)
           content = re.sub(r'android:label="(?:me2leads|myleads|@string/app_name)"', 'android:label="Me2Leads"', content)
 
+          # singleTask is required for Stripe PaymentSheet redirect flows (Link,
+          # Amazon Pay, bank redirects). With singleTop, the Chrome Custom Tab
+          # sits on top of the task so the redirect intent creates a NEW
+          # MainActivity instance instead of calling onNewIntent on the existing
+          # one — the second Flutter engine start crashes the app.
+          content = content.replace(
+              'android:launchMode="singleTop"',
+              'android:launchMode="singleTask"',
+          )
+
           # Add INTERNET permission (idempotent)
           if 'android.permission.INTERNET' not in content:
               content = re.sub(
@@ -125,9 +173,11 @@ jobs:
                   count=1,
               )
 
-          # Inject <queries> block before </manifest>
-          queries_block = """
-              <queries>
+          # Merge additional intents into the existing <queries> block that
+          # flutter create always generates. The old guard
+          # `if '<queries>' not in content` was always False, so these
+          # intents were never injected into CI-built APKs.
+          extra_intents = """
                   <intent>
                       <action android:name="android.intent.action.VIEW" />
                       <data android:scheme="tel" />
@@ -148,10 +198,43 @@ jobs:
                       <action android:name="android.intent.action.VIEW" />
                       <data android:scheme="http" />
                   </intent>
-              </queries>
-          """
-          if '<queries>' not in content:
-              content = content.replace('</manifest>', queries_block + '</manifest>')
+                  <!-- Chrome Custom Tabs — required for Stripe PaymentSheet redirect
+                       flows (Link, Amazon Pay). Without this, CustomTabsClient
+                       .getPackageName() returns null on Android 11+ and the SDK
+                       falls back to a plain Intent.ACTION_VIEW that has no return
+                       path, causing an ActivityNotFoundException crash. -->
+                  <intent>
+                      <action android:name="android.support.customtabs.action.CustomTabsService" />
+                  </intent>"""
+          if 'android:scheme="https"' not in content:
+              # No <queries> block at all — insert a full one before </manifest>
+              content = content.replace(
+                  '</manifest>',
+                  '<queries>' + extra_intents + '\n          </queries>\n      </manifest>',
+                  1,
+              )
+          else:
+              # flutter create already generated a <queries> block; append our
+              # intents just before the closing </queries> tag.
+              if 'android.support.customtabs.action.CustomTabsService' not in content:
+                  content = content.replace(
+                      '</queries>',
+                      extra_intents + '\n          </queries>',
+                      1,
+                  )
+
+          # Inject Stripe deep-link intent-filter inside MainActivity so that
+          # me2leads://stripe-redirect routes back to the app after Link / bank
+          # redirect payments complete in the external browser.
+          stripe_filter = """
+                  <intent-filter>
+                      <action android:name="android.intent.action.VIEW" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <category android:name="android.intent.category.BROWSABLE" />
+                      <data android:scheme="me2leads" android:host="stripe-redirect" />
+                  </intent-filter>"""
+          if 'android:scheme="me2leads"' not in content:
+              content = content.replace('</activity>', stripe_filter + '\n        </activity>', 1)
 
           with open(path, 'w') as f:
               f.write(content)

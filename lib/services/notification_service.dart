@@ -23,6 +23,10 @@ class NotificationService {
   static const _chHighId = 'myleads_high';
   static const _chMediumId = 'myleads_medium';
   static const _chLowId = 'myleads_low';
+  static const _chPaymentId = 'myleads_payment';
+
+  // Fixed ID for the one-at-a-time payment-in-progress notification.
+  static const _kPaymentNotifId = 9000001;
 
   static bool _initialized = false;
 
@@ -53,8 +57,8 @@ class NotificationService {
     );
 
     // Android notification channels
-    final androidImpl = _plugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    final androidImpl = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
     await androidImpl?.createNotificationChannel(
       const AndroidNotificationChannel(
         _chHighId,
@@ -77,6 +81,16 @@ class NotificationService {
         'Rappels',
         description: 'Rappels normaux et alertes contacts',
         importance: Importance.low,
+      ),
+    );
+    await androidImpl?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _chPaymentId,
+        'Paiements',
+        description: 'Statut du paiement en cours',
+        importance: Importance.low,
+        playSound: false,
+        enableVibration: false,
       ),
     );
 
@@ -133,7 +147,53 @@ class NotificationService {
           priority: Priority.low,
         );
     }
-    return NotificationDetails(android: android, iOS: const DarwinNotificationDetails());
+    return NotificationDetails(
+        android: android, iOS: const DarwinNotificationDetails());
+  }
+
+  // -----------------------------------------------------------------------
+  // Payment-in-progress notification
+  // -----------------------------------------------------------------------
+
+  /// Shows a persistent, non-dismissible notification while a Stripe redirect
+  /// payment (Link, Amazon Pay, bank redirect) is open in an external browser.
+  ///
+  /// Keeping a visible notification raises this process's priority in Android's
+  /// LMK (Low Memory Killer) table so it survives while Chrome Custom Tabs is
+  /// in the foreground. Call [dismissPaymentProgressNotification] when the
+  /// payment flow completes or is cancelled.
+  static Future<void> showPaymentProgressNotification() async {
+    if (kIsWeb || !_initialized) return;
+    try {
+      const android = AndroidNotificationDetails(
+        _chPaymentId,
+        'Paiements',
+        channelDescription: 'Statut du paiement en cours',
+        importance: Importance.low,
+        priority: Priority.low,
+        ongoing: true,
+        autoCancel: false,
+        playSound: false,
+        enableVibration: false,
+        icon: '@mipmap/ic_launcher',
+      );
+      await _plugin.show(
+        _kPaymentNotifId,
+        'Paiement en cours…',
+        'Ne fermez pas l\'application. Revenez ici une fois le paiement terminé.',
+        const NotificationDetails(
+            android: android, iOS: DarwinNotificationDetails()),
+      );
+    } catch (_) {}
+  }
+
+  /// Cancels the payment-in-progress notification posted by
+  /// [showPaymentProgressNotification].
+  static Future<void> dismissPaymentProgressNotification() async {
+    if (kIsWeb || !_initialized) return;
+    try {
+      await _plugin.cancel(_kPaymentNotifId);
+    } catch (_) {}
   }
 
   /// Show a push notification immediately.
@@ -208,7 +268,8 @@ class NotificationService {
     final ownerId = StorageService.currentUserId;
     if (ownerId.isEmpty) return;
 
-    final scheduledAt = reminder.startDateTime.subtract(const Duration(minutes: 15));
+    final scheduledAt =
+        reminder.startDateTime.subtract(const Duration(minutes: 15));
     final now = DateTime.now();
 
     final title = 'Rappel dans 15 min';
@@ -247,7 +308,8 @@ class NotificationService {
       );
     } else if (reminder.startDateTime.isAfter(now)) {
       // Between scheduledAt and startDateTime (0–15 min window) — fire now.
-      await _sendPush(id: pushId, title: title, body: body, priority: reminder.priority);
+      await _sendPush(
+          id: pushId, title: title, body: body, priority: reminder.priority);
     }
     // Both times are past → no push needed (reminder is already overdue).
   }
@@ -256,7 +318,8 @@ class NotificationService {
   // Public API — overdue reminder push (4+ hours past deadline)
   // -----------------------------------------------------------------------
 
-  static Future<void> createOverdueReminderNotification(Reminder reminder) async {
+  static Future<void> createOverdueReminderNotification(
+      Reminder reminder) async {
     final ownerId = StorageService.currentUserId;
     if (ownerId.isEmpty) return;
 
@@ -294,7 +357,8 @@ class NotificationService {
           scheduledAt: scheduledAt,
         );
       } else {
-        await _sendPush(id: pushId, title: title, body: body, priority: reminder.priority);
+        await _sendPush(
+            id: pushId, title: title, body: body, priority: reminder.priority);
       }
     }
   }
@@ -303,7 +367,8 @@ class NotificationService {
   // Public API — incomplete hot/warm contact push (3+ days after creation)
   // -----------------------------------------------------------------------
 
-  static Future<void> createIncompleteContactNotification(Contact contact) async {
+  static Future<void> createIncompleteContactNotification(
+      Contact contact) async {
     final ownerId = StorageService.currentUserId;
     if (ownerId.isEmpty) return;
     if (contact.status != 'hot' && contact.status != 'warm') return;
@@ -314,7 +379,8 @@ class NotificationService {
     final notifId = 'incomplete_${contact.id}';
     final label = contact.status == 'hot' ? 'HOT' : 'WARM';
     final title = 'Profil $label incomplet';
-    final body = '${contact.fullName} — champs manquants : ${missingFields.join(', ')}';
+    final body =
+        '${contact.fullName} — champs manquants : ${missingFields.join(', ')}';
     final scheduledAt = contact.createdAt.add(const Duration(days: 3));
     final now = DateTime.now();
     final priority = contact.status == 'hot' ? 'important' : 'normal';
@@ -342,7 +408,8 @@ class NotificationService {
           scheduledAt: scheduledAt,
         );
       } else {
-        await _sendPush(id: pushId, title: title, body: body, priority: priority);
+        await _sendPush(
+            id: pushId, title: title, body: body, priority: priority);
       }
     }
   }
@@ -358,7 +425,8 @@ class NotificationService {
   /// fires even when the app is closed. Any previously registered overdue
   /// push is cancelled and its in-app record removed first so that a
   /// changed deadline is always honoured.
-  static Future<void> scheduleAllReminderNotifications(Reminder reminder) async {
+  static Future<void> scheduleAllReminderNotifications(
+      Reminder reminder) async {
     if (reminder.isCompleted) return;
 
     // Re-schedule upcoming push (cancels stale alarm internally).
@@ -386,7 +454,8 @@ class NotificationService {
 
   /// Must be called when a reminder is deleted or marked complete so stale
   /// OS-level alarms don't fire after the fact.
-  static Future<void> cancelReminderScheduledNotification(String reminderId) async {
+  static Future<void> cancelReminderScheduledNotification(
+      String reminderId) async {
     if (kIsWeb || !_initialized) return;
     try {
       await _plugin.cancel(_upcomingPushId(reminderId));
@@ -445,10 +514,12 @@ class NotificationService {
     final missing = <String>[];
     if (c.phone == null || c.phone!.trim().isEmpty) missing.add('téléphone');
     if (c.email == null || c.email!.trim().isEmpty) missing.add('email');
-    if (c.company == null || c.company!.trim().isEmpty) missing.add('entreprise');
+    if (c.company == null || c.company!.trim().isEmpty)
+      missing.add('entreprise');
     if (c.jobTitle == null || c.jobTitle!.trim().isEmpty) missing.add('poste');
     if (c.notes == null || c.notes!.trim().isEmpty) missing.add('notes');
-    if (c.interest == null || c.interest!.trim().isEmpty) missing.add('intérêt');
+    if (c.interest == null || c.interest!.trim().isEmpty)
+      missing.add('intérêt');
     if (c.source == null || c.source!.trim().isEmpty) missing.add('source');
     return missing;
   }
