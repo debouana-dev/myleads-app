@@ -262,6 +262,24 @@ class DatabaseService {
             "UPDATE organization_members SET can_view_history = 1 WHERE role = 'admin'");
       } catch (_) {}
     }
+    if (oldVersion < 13) {
+      // v12 → v13: Stripe payment history table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS payment_history (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          plan TEXT NOT NULL,
+          billing_cycle TEXT NOT NULL,
+          amount REAL NOT NULL,
+          currency TEXT NOT NULL DEFAULT 'EUR',
+          status TEXT NOT NULL DEFAULT 'succeeded',
+          stripe_payment_intent_id TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      ''');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_payment_history_user ON payment_history(user_id)');
+    }
   }
 
   static Future<void> _onCreate(Database db, int version) async {
@@ -440,6 +458,23 @@ class DatabaseService {
         'CREATE INDEX idx_org_members_org ON organization_members(organization_id)');
     await db.execute(
         'CREATE INDEX idx_org_members_user ON organization_members(user_id)');
+
+    // ----- PAYMENT HISTORY (v13) -----
+    await db.execute('''
+      CREATE TABLE payment_history (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        plan TEXT NOT NULL,
+        billing_cycle TEXT NOT NULL,
+        amount REAL NOT NULL,
+        currency TEXT NOT NULL DEFAULT 'EUR',
+        status TEXT NOT NULL DEFAULT 'succeeded',
+        stripe_payment_intent_id TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX idx_payment_history_user ON payment_history(user_id)');
   }
 
   // =====================================================================
@@ -1104,6 +1139,42 @@ class DatabaseService {
   }
 
   // =====================================================================
+  // PAYMENT HISTORY (v13)
+  // =====================================================================
+
+  static Future<void> insertPaymentRecord(PaymentRecord record) async {
+    final db = await database;
+    final row = record.toRow();
+    // ConflictAlgorithm.ignore makes this idempotent: main.dart inserts the
+    // record on cold-start before the widget tree builds, and
+    // SubscriptionPlanScreen may insert it again on resume — same primary key,
+    // second insert is silently skipped.
+    await db.insert('payment_history', row,
+        conflictAlgorithm: ConflictAlgorithm.ignore);
+    _onRemoteUpsert?.call('payment_history', row);
+  }
+
+  static Future<List<PaymentRecord>> getPaymentHistory(String userId) async {
+    final db = await database;
+    final rows = await db.query(
+      'payment_history',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(PaymentRecord.fromRow).toList();
+  }
+
+  static Future<List<Map<String, dynamic>>> getRawPaymentHistoryRows(
+      String userId) async {
+    final db = await database;
+    return (await db.query('payment_history',
+            where: 'user_id = ?', whereArgs: [userId]))
+        .map((r) => Map<String, dynamic>.from(r))
+        .toList();
+  }
+
+  // =====================================================================
   // NOTIFICATIONS
   // =====================================================================
 
@@ -1163,6 +1234,8 @@ class DatabaseService {
       await txn
           .delete('notifications', where: 'owner_id = ?', whereArgs: [userId]);
       await txn.delete('organization_members',
+          where: 'user_id = ?', whereArgs: [userId]);
+      await txn.delete('payment_history',
           where: 'user_id = ?', whereArgs: [userId]);
       await txn.delete('users', where: 'id = ?', whereArgs: [userId]);
     });

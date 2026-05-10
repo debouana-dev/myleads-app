@@ -6,6 +6,9 @@ build/
 .flutter-plugins-dependencies
 .env
 
+# NPM
+**/functions/node_modules/
+
 # IDE
 .idea/
 .vscode/

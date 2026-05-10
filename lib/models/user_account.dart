@@ -103,6 +103,55 @@ class UserAccount {
   }
 }
 
+/// Stripe payment record persisted in payment_history table.
+class PaymentRecord {
+  final String id;
+  final String userId;
+  final String plan; // 'premium' | 'business'
+  final String billingCycle; // 'monthly' | 'yearly'
+  final double amount;
+  final String currency; // 'EUR'
+  final String status; // 'succeeded' | 'failed' | 'refunded'
+  final String stripePaymentIntentId;
+  final String createdAt; // ISO-8601
+
+  const PaymentRecord({
+    required this.id,
+    required this.userId,
+    required this.plan,
+    required this.billingCycle,
+    required this.amount,
+    required this.currency,
+    required this.status,
+    required this.stripePaymentIntentId,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toRow() => {
+        'id': id,
+        'user_id': userId,
+        'plan': plan,
+        'billing_cycle': billingCycle,
+        'amount': amount,
+        'currency': currency,
+        'status': status,
+        'stripe_payment_intent_id': stripePaymentIntentId,
+        'created_at': createdAt,
+      };
+
+  static PaymentRecord fromRow(Map<String, dynamic> row) => PaymentRecord(
+        id: row['id'] as String,
+        userId: row['user_id'] as String,
+        plan: row['plan'] as String,
+        billingCycle: row['billing_cycle'] as String,
+        amount: (row['amount'] as num).toDouble(),
+        currency: row['currency'] as String? ?? 'EUR',
+        status: row['status'] as String? ?? 'succeeded',
+        stripePaymentIntentId: row['stripe_payment_intent_id'] as String,
+        createdAt: row['created_at'] as String,
+      );
+}
+
 /// Saved payment method (only stored if user opts in).
 class PaymentMethod {
   final String id;

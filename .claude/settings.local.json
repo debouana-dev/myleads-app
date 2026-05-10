@@ -11,7 +11,10 @@
       "PowerShell(winget install SQLite.SQLite --silent --accept-package-agreements --accept-source-agreements 2>&1)",
       "PowerShell(scoop install sqlite 2>&1)",
       "PowerShell(Get-Command scoop 2>&1)",
-      "PowerShell(dart pub cache list 2>$null)"
+      "PowerShell(dart pub cache list 2>$null)",
+      "Bash(xargs grep *)",
+      "Bash(Get-ChildItem \"C:\\\\Users\\\\munki\\\\AppData\\\\Local\\\\Pub\\\\Cache\\\\hosted\\\\pub.dev\" -Filter \"*stripe*\" -Directory)",
+      "Bash(Select-Object Name)"
     ]
   }
 }

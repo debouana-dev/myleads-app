@@ -315,6 +315,25 @@ class RemoteSyncService {
     await conn.execute(
       'UPDATE "organization_members" SET "can_view_history" = 1 WHERE "role" = \'admin\' AND "can_view_history" = 0',
     );
+
+    // v13: Stripe payment history table.
+    await conn.execute('''
+      CREATE TABLE IF NOT EXISTS "payment_history" (
+        "id"                        VARCHAR(36)   NOT NULL,
+        "user_id"                   VARCHAR(36)   NOT NULL,
+        "plan"                      VARCHAR(20)   NOT NULL,
+        "billing_cycle"             VARCHAR(10)   NOT NULL,
+        "amount"                    NUMERIC(8,2)  NOT NULL,
+        "currency"                  CHAR(3)       NOT NULL DEFAULT 'EUR',
+        "status"                    VARCHAR(20)   NOT NULL DEFAULT 'succeeded',
+        "stripe_payment_intent_id"  VARCHAR(255)  NOT NULL,
+        "created_at"                VARCHAR(50)   NOT NULL,
+        PRIMARY KEY ("id")
+      )
+    ''');
+    await conn.execute(
+      'CREATE INDEX IF NOT EXISTS "idx_payment_history_user" ON "payment_history" ("user_id")',
+    );
   }
 
   // ── Cloud user helpers ───────────────────────────────────────────────────────
@@ -512,6 +531,8 @@ class RemoteSyncService {
             await _upsertOrganization(conn, row);
           case 'organization_members':
             await _upsertOrgMember(conn, row);
+          case 'payment_history':      
+            await _upsertPaymentRecord(conn, row);
         }
       });
 
@@ -633,6 +654,12 @@ class RemoteSyncService {
           for (final row in members) {
             await _upsertOrgMember(conn, row);
           }
+        }
+
+        // Payment history
+        final payments = await DatabaseService.getRawPaymentHistoryRows(userId);
+        for (final row in payments) {
+          await _upsertPaymentRecord(conn, row);
         }
       }
 
@@ -969,6 +996,28 @@ class RemoteSyncService {
         }
       }
 
+      // ── Payment history ───────────────────────────────────────────────────
+      if (_hasSyncPlan) {
+        final payRes = await conn.execute(
+          Sql.named('SELECT * FROM "payment_history" WHERE "user_id" = @uid'),
+          parameters: {'uid': userId},
+        );
+        for (final row in payRes) {
+          final r = row.toColumnMap();
+          await DatabaseService.upsertRawRow('payment_history', {
+            'id': r['id'],
+            'user_id': r['user_id'],
+            'plan': r['plan'],
+            'billing_cycle': r['billing_cycle'],
+            'amount': double.tryParse(r['amount']?.toString() ?? '0') ?? 0.0,
+            'currency': r['currency'] ?? 'EUR',
+            'status': r['status'] ?? 'succeeded',
+            'stripe_payment_intent_id': r['stripe_payment_intent_id'],
+            'created_at': r['created_at'],
+          });
+        }
+      }
+
       // Download any photos that are referenced in the DB but missing locally.
       await _downloadMissingPhotos(userId, pullOwnerIds);
 
@@ -1258,6 +1307,33 @@ class RemoteSyncService {
         'can_create': r['can_create'] ?? 1,
         'can_view_reminders': r['can_view_reminders'] ?? 0,
         'can_view_history': r['can_view_history'] ?? 0,
+      },
+    );
+  }
+
+  static Future<void> _upsertPaymentRecord(
+      Connection conn, Map<String, dynamic> r) async {
+    await conn.execute(
+      Sql.named('''
+        INSERT INTO "payment_history"
+          (id,user_id,plan,billing_cycle,amount,currency,status,
+           stripe_payment_intent_id,created_at)
+        VALUES
+          (@id,@user_id,@plan,@billing_cycle,@amount,@currency,@status,
+           @stripe_payment_intent_id,@created_at)
+        ON CONFLICT (id) DO UPDATE SET
+          status=EXCLUDED.status
+      '''),
+      parameters: {
+        'id': r['id'],
+        'user_id': r['user_id'],
+        'plan': r['plan'],
+        'billing_cycle': r['billing_cycle'],
+        'amount': r['amount'],
+        'currency': r['currency'] ?? 'EUR',
+        'status': r['status'] ?? 'succeeded',
+        'stripe_payment_intent_id': r['stripe_payment_intent_id'],
+        'created_at': r['created_at'],
       },
     );
   }

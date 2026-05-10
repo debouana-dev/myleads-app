@@ -108,16 +108,18 @@ class AppL10n {
   String get authInternetRequiredSignup => _en
       ? 'An internet connection is required to create an account'
       : 'Une connexion internet est requise pour créer un compte';
-  String get authFirstLastNameRequired =>
-      _en ? 'First and last name are required' : 'Prénom et nom sont obligatoires';
+  String get authFirstLastNameRequired => _en
+      ? 'First and last name are required'
+      : 'Prénom et nom sont obligatoires';
   String get authEmailAlreadyUsed => _en
       ? 'An account already exists for this email'
       : 'Un compte existe déjà pour cet email';
   String get authPhoneAlreadyUsed => _en
       ? 'An account already exists for this phone number'
       : 'Un compte existe déjà pour ce numéro de téléphone';
-  String authGoogleFailed(String error) =>
-      _en ? 'Google sign-in failed: $error' : 'Connexion Google échouée: $error';
+  String authGoogleFailed(String error) => _en
+      ? 'Google sign-in failed: $error'
+      : 'Connexion Google échouée: $error';
   String get authAppleNoEmail =>
       _en ? 'Apple did not provide an email' : "Apple n'a pas fourni d'email";
   String authAppleFailed(String error) =>
@@ -125,8 +127,7 @@ class AppL10n {
   String authOAuthEmailConflict(String provider) => _en
       ? 'This email is already linked to a $provider account.'
       : 'Cet email est déjà associé à un compte $provider.';
-  String get authInvalidPlan =>
-      _en ? 'Invalid plan' : 'Forfait invalide';
+  String get authInvalidPlan => _en ? 'Invalid plan' : 'Forfait invalide';
   String get authInternetRequiredDelete => _en
       ? 'An internet connection is required to delete your account'
       : 'Une connexion internet est requise pour supprimer votre compte';
@@ -159,8 +160,9 @@ class AppL10n {
       : 'Aucun code de récupération en attente. Veuillez en demander un nouveau.';
   String get authInvalidRecoveryCode =>
       _en ? 'Invalid recovery code' : 'Code de récupération invalide';
-  String get authNoAccountForEmailRecovery =>
-      _en ? 'No account associated with this email' : 'Aucun compte associé à cet email';
+  String get authNoAccountForEmailRecovery => _en
+      ? 'No account associated with this email'
+      : 'Aucun compte associé à cet email';
   String authOAuthNoRecovery(String provider) => _en
       ? 'This account uses $provider. Code recovery is not available for this account type.'
       : "Ce compte utilise $provider. La récupération par code n'est pas disponible pour ce type de compte.";
@@ -602,6 +604,25 @@ class AppL10n {
   String get statusPaid => _en ? 'Paid' : 'Payé';
   String get statusFailed => _en ? 'Failed' : 'Échoué';
   String get statusPending => _en ? 'Pending' : 'En attente';
+  String get billingCycleMonthly => _en ? 'Monthly' : 'Mensuel';
+  String get billingCycleYearly => _en ? 'Yearly' : 'Annuel';
+  String get yearlySavings => _en ? 'Save 16%' : 'Économisez 16%';
+  String get paymentSuccess => _en ? 'Payment successful' : 'Paiement réussi';
+  String get paymentCancelled => _en ? 'Payment cancelled' : 'Paiement annulé';
+  String get paymentFailed => _en ? 'Payment failed' : 'Paiement échoué';
+  String get billingCycleLabel =>
+      _en ? 'BILLING CYCLE' : 'CYCLE DE FACTURATION';
+  String premiumYearlyPrice(AppCurrency c, {double eurToTargetRate = 1.08}) =>
+      c == AppCurrency.usd
+          ? '\$${(35.88 * eurToTargetRate).toStringAsFixed(2)}'
+          : '35.88€';
+  String businessYearlyPrice(AppCurrency c, {double eurToTargetRate = 1.08}) =>
+      c == AppCurrency.usd
+          ? '\$${(71.88 * eurToTargetRate).toStringAsFixed(2)}'
+          : '71.88€';
+  String premiumYearlyPeriod(AppL10n l10n) => l10n.isEnglish ? '/year' : '/ an';
+  String businessYearlyPeriod(AppL10n l10n) =>
+      l10n.isEnglish ? '/user/year' : '/ utilisateur / an';
 
   // ─── Scan ─────────────────────────────────────────────────────────────────
   String get scanTitle => _en ? 'Scanner' : 'Scanner';
@@ -981,14 +1002,23 @@ class AppL10n {
       c == AppCurrency.usd
           ? '\$${(2.99 * eurToTargetRate).toStringAsFixed(2)}'
           : '2.99€';
-  String premiumPeriod(AppCurrency c) =>
-      c == AppCurrency.usd ? '/month' : '/ mois';
+  String premiumPeriod(AppL10n l10n) => l10n.isEnglish ? '/month' : '/ mois';
   String businessPrice(AppCurrency c, {double eurToTargetRate = 1.08}) =>
       c == AppCurrency.usd
           ? '\$${(5.99 * eurToTargetRate).toStringAsFixed(2)}'
           : '5.99€';
-  String businessPeriod(AppCurrency c) =>
-      c == AppCurrency.usd ? '/user/month' : '/ utilisateur / mois';
+  String businessPeriod(AppL10n l10n) =>
+      l10n.isEnglish ? '/user/month' : '/ utilisateur / mois';
+
+  String subPremiumPrice(AppCurrency c, {double eurToTargetRate = 1.08}) =>
+      c == AppCurrency.usd
+          ? '\$${(3.59 * eurToTargetRate).toStringAsFixed(2)}'
+          : '3.59€';
+  String subBusinessPrice(AppCurrency c, {double eurToTargetRate = 1.08}) =>
+      c == AppCurrency.usd
+          ? '\$${(7.19 * eurToTargetRate).toStringAsFixed(2)}'
+          : '7.19€';
+
   String currencySymbol(AppCurrency c) => c == AppCurrency.usd ? '\$' : '€';
 }
 

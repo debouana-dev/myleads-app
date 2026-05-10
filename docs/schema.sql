@@ -183,6 +183,28 @@ CREATE INDEX IF NOT EXISTS "idx_org_members_user" ON "organization_members" ("us
 
 
 -- ============================================================
+-- TABLE: payment_history  (v13)
+-- One row per successful Stripe payment.
+-- Records billing cycle (monthly/yearly) and the Stripe
+-- Payment Intent ID for dispute resolution.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS "payment_history" (
+  "id"                        VARCHAR(36)   NOT NULL,
+  "user_id"                   VARCHAR(36)   NOT NULL,
+  "plan"                      VARCHAR(20)   NOT NULL,
+  "billing_cycle"             VARCHAR(10)   NOT NULL,
+  "amount"                    NUMERIC(8,2)  NOT NULL,
+  "currency"                  CHAR(3)       NOT NULL DEFAULT 'EUR',
+  "status"                    VARCHAR(20)   NOT NULL DEFAULT 'succeeded',
+  "stripe_payment_intent_id"  VARCHAR(255)  NOT NULL,
+  "created_at"                VARCHAR(50)   NOT NULL,
+
+  PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "idx_payment_history_user" ON "payment_history" ("user_id");
+
+
+-- ============================================================
 -- UPGRADE SCRIPT — run this section against an existing cloud DB
 -- to bring it to v12.  Every statement is idempotent (safe to
 -- re-run).  Execute in order; stop on first error and investigate.
@@ -224,6 +246,21 @@ UPDATE "organization_members"
 ALTER TABLE "organizations"
   ALTER COLUMN "invite_code" TYPE CHAR(8);
 
+-- v13: Stripe payment history
+CREATE TABLE IF NOT EXISTS "payment_history" (
+  "id"                        VARCHAR(36)   NOT NULL,
+  "user_id"                   VARCHAR(36)   NOT NULL,
+  "plan"                      VARCHAR(20)   NOT NULL,
+  "billing_cycle"             VARCHAR(10)   NOT NULL,
+  "amount"                    NUMERIC(8,2)  NOT NULL,
+  "currency"                  CHAR(3)       NOT NULL DEFAULT 'EUR',
+  "status"                    VARCHAR(20)   NOT NULL DEFAULT 'succeeded',
+  "stripe_payment_intent_id"  VARCHAR(255)  NOT NULL,
+  "created_at"                VARCHAR(50)   NOT NULL,
+  PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "idx_payment_history_user" ON "payment_history" ("user_id");
+
 
 -- ============================================================
 -- Schema version history
@@ -238,4 +275,5 @@ ALTER TABLE "organizations"
 -- v11   : users.last_sync_at — per-user timestamp of last successful sync
 -- v12   : organization_members.can_view_history — controls visibility of history
 --         records authored by other org members on shared contacts
+-- v13   : payment_history table — Stripe payment records (plan, cycle, amount)
 -- ============================================================
