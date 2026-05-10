@@ -612,6 +612,12 @@ class AppL10n {
   String get paymentFailed => _en ? 'Payment failed' : 'Paiement échoué';
   String get billingCycleLabel =>
       _en ? 'BILLING CYCLE' : 'CYCLE DE FACTURATION';
+  String get paymentMethodCard => _en ? 'Card' : 'Carte bancaire';
+  String get paymentMethodLink => 'Link';
+  String get paymentMethodAmazonPay => 'Amazon Pay';
+  String get paymentMethodApplePay => 'Apple Pay';
+  String get paymentMethodGooglePay => 'Google Pay';
+  String get paymentMethodUnknown => _en ? 'Unknown' : 'Inconnu';
   String premiumYearlyPrice(AppCurrency c, {double eurToTargetRate = 1.08}) =>
       c == AppCurrency.usd
           ? '\$${(35.88 * eurToTargetRate).toStringAsFixed(2)}'

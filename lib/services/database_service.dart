@@ -27,7 +27,7 @@ import 'web_db_factory_stub.dart'
 class DatabaseService {
   static Database? _db;
   static const _dbName = 'myleads.db';
-  static const _dbVersion = 14;
+  static const _dbVersion = 15;
 
   // ── Remote sync callbacks ──────────────────────────────────────────────────
   // Wired once at startup by RemoteSyncService.wireDatabase().
@@ -280,6 +280,13 @@ class DatabaseService {
       await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_payment_history_user ON payment_history(user_id)');
     }
+    if (oldVersion < 15) {
+      // v14 → v15: payment method type column on payment history
+      try {
+        await db.execute(
+            "ALTER TABLE payment_history ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'card'");
+      } catch (_) {}
+    }
   }
 
   static Future<void> _onCreate(Database db, int version) async {
@@ -459,7 +466,7 @@ class DatabaseService {
     await db.execute(
         'CREATE INDEX idx_org_members_user ON organization_members(user_id)');
 
-    // ----- PAYMENT HISTORY (v13) -----
+    // ----- PAYMENT HISTORY (v13, payment_method added v15) -----
     await db.execute('''
       CREATE TABLE payment_history (
         id TEXT PRIMARY KEY,
@@ -470,6 +477,7 @@ class DatabaseService {
         currency TEXT NOT NULL DEFAULT 'EUR',
         status TEXT NOT NULL DEFAULT 'succeeded',
         stripe_payment_intent_id TEXT NOT NULL,
+        payment_method TEXT NOT NULL DEFAULT 'card',
         created_at TEXT NOT NULL
       )
     ''');
