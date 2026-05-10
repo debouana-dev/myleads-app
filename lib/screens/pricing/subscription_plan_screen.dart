@@ -21,14 +21,80 @@ class SubscriptionPlanScreen extends ConsumerStatefulWidget {
       _SubscriptionPlanScreenState();
 }
 
-class _SubscriptionPlanScreenState
-    extends ConsumerState<SubscriptionPlanScreen> {
+class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
+    with WidgetsBindingObserver {
   String? _loadingPlan;
-  String _billingCycle = 'monthly'; // 'monthly' | 'yearly'
+  String _billingCycle = 'yearly'; // 'monthly' | 'yearly'
+  bool _recoveringPayment = false;
 
   static const _uuid = Uuid();
 
   bool get _stripeReady => AppConfig.stripePublishableKey.isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Check for a payment that completed while the app was backgrounded
+    // during a previous Link/redirect session (e.g. cold-start recovery).
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _recoverPendingPayment());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Fired when the user returns from the external browser after a Link
+      // payment. presentPaymentSheet() may have been dismissed already; this
+      // is the safety-net that checks the real outcome server-side.
+      _recoverPendingPayment();
+    }
+  }
+
+  Future<void> _recoverPendingPayment() async {
+    // Skip while _selectPlan() is running to avoid a duplicate payment_history
+    // row for the same Stripe payment intent.
+    if (_recoveringPayment || _loadingPlan != null) return;
+    _recoveringPayment = true;
+    try {
+      // Cold-start path: main.dart called checkAtStartup() and cached the result
+      // before the Riverpod tree was built. Consume that result first (no extra
+      // network call). Falls back to a live check for the warm-resume path where
+      // the process survived but the PaymentSheet was dismissed mid-redirect.
+      final recovery = StripeService.consumeStartupRecovery() ??
+          await StripeService.checkPendingPayment();
+      if (!mounted || recovery == null || !recovery.result.success) return;
+
+      final l10n = ref.read(l10nProvider);
+      final amount = _priceAmount(recovery.plan, recovery.billingCycle);
+      // Use the paymentIntentId as the record primary key so that
+      // ConflictAlgorithm.ignore in insertPaymentRecord silently skips a
+      // duplicate when main.dart already inserted the same record on cold-start.
+      final piId = recovery.result.paymentIntentId ?? '';
+      final record = PaymentRecord(
+        id: piId.isNotEmpty ? piId : _uuid.v4(),
+        userId: StorageService.currentUserId,
+        plan: recovery.plan,
+        billingCycle: recovery.billingCycle,
+        amount: amount,
+        currency: 'EUR',
+        status: 'succeeded',
+        stripePaymentIntentId: piId,
+        createdAt: DateTime.now().toIso8601String(),
+      );
+      await DatabaseService.insertPaymentRecord(record);
+      await ref.read(authProvider.notifier).changePlan(recovery.plan);
+      if (mounted) _showSnack(l10n.paymentSuccess, AppColors.success);
+    } finally {
+      _recoveringPayment = false;
+    }
+  }
 
   Future<void> _selectPlan(String planId) async {
     final l10n = ref.read(l10nProvider);
@@ -46,7 +112,8 @@ class _SubscriptionPlanScreenState
 
     // Paid plan — Stripe PaymentSheet.
     if (!_stripeReady) {
-      _showSnack('Stripe not configured (set stripePublishableKey in AppConfig)',
+      _showSnack(
+          'Stripe not configured (set stripePublishableKey in AppConfig)',
           AppColors.warning);
       return;
     }
@@ -91,9 +158,10 @@ class _SubscriptionPlanScreenState
     }
   }
 
-  double _priceAmount(String planId) {
-    if (planId == 'premium') return _billingCycle == 'yearly' ? 29.99 : 2.99;
-    if (planId == 'business') return _billingCycle == 'yearly' ? 59.99 : 5.99;
+  double _priceAmount(String planId, [String? cycle]) {
+    final c = cycle ?? _billingCycle;
+    if (planId == 'premium') return c == 'yearly' ? 35.88 : 3.59;
+    if (planId == 'business') return c == 'yearly' ? 71.88 : 7.19;
     return 0;
   }
 
@@ -209,11 +277,13 @@ class _SubscriptionPlanScreenState
                   _PlanCard(
                     title: l10n.premiumPlanName,
                     price: isYearly
-                        ? l10n.premiumYearlyPrice(currency, eurToTargetRate: eurToUsd)
-                        : l10n.premiumPrice(currency, eurToTargetRate: eurToUsd),
+                        ? l10n.premiumYearlyPrice(currency,
+                            eurToTargetRate: eurToUsd)
+                        : l10n.subPremiumPrice(currency,
+                            eurToTargetRate: eurToUsd),
                     period: isYearly
-                        ? l10n.premiumYearlyPeriod(currency)
-                        : l10n.premiumPeriod(currency),
+                        ? l10n.premiumYearlyPeriod(l10n)
+                        : l10n.premiumPeriod(l10n),
                     description: l10n.premiumPlanDesc,
                     features: _premiumFeatures(l10n),
                     isPopular: true,
@@ -230,11 +300,13 @@ class _SubscriptionPlanScreenState
                   _PlanCard(
                     title: l10n.businessPlanName,
                     price: isYearly
-                        ? l10n.businessYearlyPrice(currency, eurToTargetRate: eurToUsd)
-                        : l10n.businessPrice(currency, eurToTargetRate: eurToUsd),
+                        ? l10n.businessYearlyPrice(currency,
+                            eurToTargetRate: eurToUsd)
+                        : l10n.subBusinessPrice(currency,
+                            eurToTargetRate: eurToUsd),
                     period: isYearly
-                        ? l10n.businessYearlyPeriod(currency)
-                        : l10n.businessPeriod(currency),
+                        ? l10n.businessYearlyPeriod(l10n)
+                        : l10n.businessPeriod(l10n),
                     description: l10n.businessPlanDesc,
                     features: _businessFeatures(l10n),
                     isPopular: false,
@@ -399,8 +471,7 @@ class _BillingToggle extends StatelessWidget {
       child: Row(
         children: [
           _tab(context, 'monthly', monthlyLabel),
-          _tab(context, 'yearly', yearlyLabel,
-              badge: yearlySavingsLabel),
+          _tab(context, 'yearly', yearlyLabel, badge: yearlySavingsLabel),
         ],
       ),
     );

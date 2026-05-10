@@ -55,3 +55,24 @@ exports.createPaymentIntent = onCall(
     };
   }
 );
+
+/**
+ * Returns the current status of a Payment Intent.
+ * Used by the Flutter app to verify payment outcome after returning from a
+ * Link or bank-redirect browser flow where the PaymentSheet was dismissed.
+ *
+ * Request data: { paymentIntentId }
+ * Returns:      { status }  — Stripe PaymentIntent status string
+ */
+exports.getPaymentStatus = onCall(
+  { region: 'europe-west1', invoker: 'public', enforceAppCheck: false, secrets: [stripeSecretKey] },
+  async (request) => {
+    const { paymentIntentId } = request.data;
+    if (!paymentIntentId || typeof paymentIntentId !== 'string') {
+      throw new HttpsError('invalid-argument', 'Missing or invalid paymentIntentId');
+    }
+    const stripe = Stripe(stripeSecretKey.value());
+    const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+    return { status: pi.status };
+  }
+);

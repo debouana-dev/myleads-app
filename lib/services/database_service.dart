@@ -1056,7 +1056,12 @@ class DatabaseService {
   static Future<void> insertPaymentRecord(PaymentRecord record) async {
     final db = await database;
     final row = record.toRow();
-    await db.insert('payment_history', row);
+    // ConflictAlgorithm.ignore makes this idempotent: main.dart inserts the
+    // record on cold-start before the widget tree builds, and
+    // SubscriptionPlanScreen may insert it again on resume — same primary key,
+    // second insert is silently skipped.
+    await db.insert('payment_history', row,
+        conflictAlgorithm: ConflictAlgorithm.ignore);
     _onRemoteUpsert?.call('payment_history', row);
   }
 
