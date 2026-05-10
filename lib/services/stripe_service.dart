@@ -20,11 +20,13 @@ class PaymentCheckoutResult {
   final String? paymentIntentId;
   final String?
       errorCode; // 'cancelled' | 'failed' | 'network_error' | 'invalid_plan'
+  final String paymentMethod; // 'card' | 'link' | 'amazon_pay' | 'unknown'
 
   const PaymentCheckoutResult({
     required this.success,
     this.paymentIntentId,
     this.errorCode,
+    this.paymentMethod = 'card',
   });
 }
 
@@ -148,7 +150,10 @@ class StripeService {
             'StripeService: recovery — payment succeeded (client check)',
           );
           return PendingPaymentRecovery(
-            result: PaymentCheckoutResult(success: true, paymentIntentId: piId),
+            result: PaymentCheckoutResult(
+              success: true,
+              paymentIntentId: piId,
+            ),
             plan: plan,
             billingCycle: billingCycle,
           );

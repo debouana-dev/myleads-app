@@ -183,10 +183,11 @@ CREATE INDEX IF NOT EXISTS "idx_org_members_user" ON "organization_members" ("us
 
 
 -- ============================================================
--- TABLE: payment_history  (v13)
+-- TABLE: payment_history  (v13, payment_method added v15)
 -- One row per successful Stripe payment.
--- Records billing cycle (monthly/yearly) and the Stripe
--- Payment Intent ID for dispute resolution.
+-- Records billing cycle (monthly/yearly), the Stripe
+-- Payment Intent ID for dispute resolution, and the payment
+-- method type used (card, link, amazon_pay, etc.).
 -- ============================================================
 CREATE TABLE IF NOT EXISTS "payment_history" (
   "id"                        VARCHAR(36)   NOT NULL,
@@ -197,6 +198,7 @@ CREATE TABLE IF NOT EXISTS "payment_history" (
   "currency"                  CHAR(3)       NOT NULL DEFAULT 'EUR',
   "status"                    VARCHAR(20)   NOT NULL DEFAULT 'succeeded',
   "stripe_payment_intent_id"  VARCHAR(255)  NOT NULL,
+  "payment_method"            VARCHAR(50)   NOT NULL DEFAULT 'card',
   "created_at"                VARCHAR(50)   NOT NULL,
 
   PRIMARY KEY ("id")
@@ -256,10 +258,15 @@ CREATE TABLE IF NOT EXISTS "payment_history" (
   "currency"                  CHAR(3)       NOT NULL DEFAULT 'EUR',
   "status"                    VARCHAR(20)   NOT NULL DEFAULT 'succeeded',
   "stripe_payment_intent_id"  VARCHAR(255)  NOT NULL,
+  "payment_method"            VARCHAR(50)   NOT NULL DEFAULT 'card',
   "created_at"                VARCHAR(50)   NOT NULL,
   PRIMARY KEY ("id")
 );
 CREATE INDEX IF NOT EXISTS "idx_payment_history_user" ON "payment_history" ("user_id");
+
+-- v15: payment method type column on payment history
+ALTER TABLE "payment_history"
+  ADD COLUMN IF NOT EXISTS "payment_method" VARCHAR(50) NOT NULL DEFAULT 'card';
 
 
 -- ============================================================
@@ -276,4 +283,5 @@ CREATE INDEX IF NOT EXISTS "idx_payment_history_user" ON "payment_history" ("use
 -- v12   : organization_members.can_view_history — controls visibility of history
 --         records authored by other org members on shared contacts
 -- v13   : payment_history table — Stripe payment records (plan, cycle, amount)
+-- v15   : payment_history.payment_method — Stripe payment method type
 -- ============================================================

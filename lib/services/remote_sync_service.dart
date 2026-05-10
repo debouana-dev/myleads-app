@@ -327,6 +327,7 @@ class RemoteSyncService {
         "currency"                  CHAR(3)       NOT NULL DEFAULT 'EUR',
         "status"                    VARCHAR(20)   NOT NULL DEFAULT 'succeeded',
         "stripe_payment_intent_id"  VARCHAR(255)  NOT NULL,
+        "payment_method"            VARCHAR(50)   NOT NULL DEFAULT 'card',
         "created_at"                VARCHAR(50)   NOT NULL,
         PRIMARY KEY ("id")
       )
@@ -334,6 +335,12 @@ class RemoteSyncService {
     await conn.execute(
       'CREATE INDEX IF NOT EXISTS "idx_payment_history_user" ON "payment_history" ("user_id")',
     );
+    // v15: add payment_method column to existing payment_history tables.
+    try {
+      await conn.execute(
+        "ALTER TABLE \"payment_history\" ADD COLUMN IF NOT EXISTS \"payment_method\" VARCHAR(50) NOT NULL DEFAULT 'card'",
+      );
+    } catch (_) {}
   }
 
   // ── Cloud user helpers ───────────────────────────────────────────────────────
@@ -1021,6 +1028,7 @@ class RemoteSyncService {
             'currency': r['currency'] ?? 'EUR',
             'status': r['status'] ?? 'succeeded',
             'stripe_payment_intent_id': r['stripe_payment_intent_id'],
+            'payment_method': r['payment_method'] ?? 'card',
             'created_at': r['created_at'],
           });
         }
@@ -1325,12 +1333,13 @@ class RemoteSyncService {
       Sql.named('''
         INSERT INTO "payment_history"
           (id,user_id,plan,billing_cycle,amount,currency,status,
-           stripe_payment_intent_id,created_at)
+           stripe_payment_intent_id,payment_method,created_at)
         VALUES
           (@id,@user_id,@plan,@billing_cycle,@amount,@currency,@status,
-           @stripe_payment_intent_id,@created_at)
+           @stripe_payment_intent_id,@payment_method,@created_at)
         ON CONFLICT (id) DO UPDATE SET
-          status=EXCLUDED.status
+          status=EXCLUDED.status,
+          payment_method=EXCLUDED.payment_method
       '''),
       parameters: {
         'id': r['id'],
@@ -1341,6 +1350,7 @@ class RemoteSyncService {
         'currency': r['currency'] ?? 'EUR',
         'status': r['status'] ?? 'succeeded',
         'stripe_payment_intent_id': r['stripe_payment_intent_id'],
+        'payment_method': r['payment_method'] ?? 'card',
         'created_at': r['created_at'],
       },
     );

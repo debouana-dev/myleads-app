@@ -69,6 +69,7 @@ Future<void> _applyStartupPaymentRecovery() async {
       currency: 'EUR',
       status: 'succeeded',
       stripePaymentIntentId: piId,
+      paymentMethod: recovery.result.paymentMethod,
       createdAt: DateTime.now().toIso8601String(),
     ));
   }

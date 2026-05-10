@@ -52,6 +52,7 @@ class _PaymentHistoryScreenState extends ConsumerState<PaymentHistoryScreen> {
         currency: r.currency,
         date: DateTime.tryParse(r.createdAt) ?? DateTime.now(),
         status: status,
+        paymentMethod: r.paymentMethod,
       );
     }).toList();
   }
@@ -388,18 +389,24 @@ class _TransactionCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Expanded(
-                      child: Text(
-                        transaction.id,
-                        style: TextStyle(
-                          fontSize: 11,
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.credit_card_rounded,
+                          size: 12,
                           color: AppColors.hint(context),
-                          letterSpacing: 0.3,
                         ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _methodLabel(transaction.paymentMethod, l10n),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.hint(context),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 3),
@@ -420,7 +427,7 @@ class _TransactionCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _formatDate(transaction.date),
+                  _formatDateTime(transaction.date),
                   style: TextStyle(
                     fontSize: 12,
                     color: AppColors.secondary(context),
@@ -456,12 +463,31 @@ class _TransactionCard extends StatelessWidget {
     }
   }
 
-  String _formatDate(DateTime d) {
+  String _formatDateTime(DateTime d) {
     const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
-    return '${d.day} ${months[d.month - 1]} ${d.year}';
+    final h = d.hour.toString().padLeft(2, '0');
+    final m = d.minute.toString().padLeft(2, '0');
+    return '${d.day} ${months[d.month - 1]} ${d.year} · $h:$m';
+  }
+
+  String _methodLabel(String method, AppL10n l10n) {
+    switch (method) {
+      case 'card':
+        return l10n.paymentMethodCard;
+      case 'link':
+        return l10n.paymentMethodLink;
+      case 'amazon_pay':
+        return l10n.paymentMethodAmazonPay;
+      case 'apple_pay':
+        return l10n.paymentMethodApplePay;
+      case 'google_pay':
+        return l10n.paymentMethodGooglePay;
+      default:
+        return method.isNotEmpty ? method : l10n.paymentMethodCard;
+    }
   }
 }
 
@@ -477,6 +503,7 @@ class _Transaction {
   final String currency;
   final DateTime date;
   final _TxStatus status;
+  final String paymentMethod;
 
   const _Transaction({
     required this.id,
@@ -486,5 +513,6 @@ class _Transaction {
     required this.currency,
     required this.date,
     required this.status,
+    this.paymentMethod = 'card',
   });
 }
