@@ -625,11 +625,9 @@ class DatabaseService {
         'id': u.id,
         'email_enc': EncryptionService.encryptText(u.email),
         'email_lookup': _hashLookup(Validators.normalizeEmail(u.email)),
-        'first_name_enc': EncryptionService.encryptText(u.firstName),
-        'last_name_enc': EncryptionService.encryptText(u.lastName),
-        'nickname_enc': u.nickname != null
-            ? EncryptionService.encryptText(u.nickname!)
-            : null,
+        'first_name_enc': u.firstName,
+        'last_name_enc': u.lastName,
+        'nickname_enc': u.nickname,
         'phone_enc':
             u.phone != null ? EncryptionService.encryptText(u.phone!) : null,
         'phone_lookup': u.phone != null && u.phone!.trim().isNotEmpty
@@ -638,15 +636,9 @@ class DatabaseService {
         // date_of_birth_enc column is kept in schema for v5→v6 migration
         // compatibility but no longer written (doc v7: DoB removed).
         'date_of_birth_enc': null,
-        'company_name_enc': u.companyName != null
-            ? EncryptionService.encryptText(u.companyName!)
-            : null,
-        'company_role_enc': u.companyRole != null
-            ? EncryptionService.encryptText(u.companyRole!)
-            : null,
-        'biography_enc': u.biography != null
-            ? EncryptionService.encryptText(u.biography!)
-            : null,
+        'company_name_enc': u.companyName,
+        'company_role_enc': u.companyRole,
+        'biography_enc': u.biography,
         'password_hash': u.passwordHash,
         'auth_provider': u.authProvider,
         'session_token': u.sessionToken,
@@ -666,26 +658,17 @@ class DatabaseService {
     return UserAccount(
       id: row['id'] as String,
       email: EncryptionService.decryptText(row['email_enc'] as String?),
-      firstName:
-          EncryptionService.decryptText(row['first_name_enc'] as String?),
-      lastName: EncryptionService.decryptText(row['last_name_enc'] as String?),
-      nickname: row['nickname_enc'] != null
-          ? EncryptionService.decryptText(row['nickname_enc'] as String?)
-          : null,
+      firstName: row['first_name_enc'] as String,
+      lastName: row['last_name_enc'] as String,
+      nickname: row['nickname_enc'] as String?,
       phone: row['phone_enc'] != null
           ? EncryptionService.decryptText(row['phone_enc'] as String?)
           : null,
       // dateOfBirth removed per doc v7 — column left untouched for any
       // legacy rows but no longer read into the model.
-      companyName: row['company_name_enc'] != null
-          ? EncryptionService.decryptText(row['company_name_enc'] as String?)
-          : null,
-      companyRole: row['company_role_enc'] != null
-          ? EncryptionService.decryptText(row['company_role_enc'] as String?)
-          : null,
-      biography: row['biography_enc'] != null
-          ? EncryptionService.decryptText(row['biography_enc'] as String?)
-          : null,
+      companyName: row['company_name_enc'] as String?,
+      companyRole: row['company_role_enc'] as String?,
+      biography: row['biography_enc'] as String?,
       passwordHash: row['password_hash'] as String,
       authProvider: row['auth_provider'] as String? ?? 'email',
       sessionToken: row['session_token'] as String?,
