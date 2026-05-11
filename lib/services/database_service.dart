@@ -4,7 +4,6 @@ import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../models/app_notification.dart';
@@ -1562,6 +1561,12 @@ class DatabaseService {
     return rows.isNotEmpty;
   }
 
+  static Future<bool> isOrganizationActive(String orgId) async {
+    final org = await findOrganizationById(orgId);
+    if (org == null) return false;
+    return !org.isSuspended && !org.isExpired;
+  }
+
   /// Update the edit/create/view-reminders/view-history privileges for a single member.
   static Future<void> updateMemberPrivileges({
     required String orgId,
@@ -1589,9 +1594,10 @@ class DatabaseService {
       whereArgs: [orgId, userId],
       limit: 1,
     );
-    if (rows.isNotEmpty)
+    if (rows.isNotEmpty) {
       _onRemoteUpsert?.call(
           'organization_members', Map<String, dynamic>.from(rows.first));
+    }
   }
 
   /// Load all contacts owned by any active member of [orgId], with
@@ -1948,9 +1954,10 @@ class DatabaseService {
       whereArgs: [orgId, userId],
       limit: 1,
     );
-    if (rows.isNotEmpty)
+    if (rows.isNotEmpty) {
       _onRemoteUpsert?.call(
           'organization_members', Map<String, dynamic>.from(rows.first));
+    }
   }
 
   /// Transfer all contacts owned by [fromUserId] to the organization's admin.
@@ -2052,9 +2059,10 @@ class DatabaseService {
     );
     final rows = await db.query('organizations',
         where: 'id = ?', whereArgs: [orgId], limit: 1);
-    if (rows.isNotEmpty)
+    if (rows.isNotEmpty) {
       _onRemoteUpsert?.call(
           'organizations', Map<String, dynamic>.from(rows.first));
+    }
   }
 
   // =====================================================================

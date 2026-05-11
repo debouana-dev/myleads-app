@@ -112,8 +112,11 @@ class StorageService {
   static Future<String> getEffectivePlan() async {
     final user = _cachedUser;
     if (user == null) return 'free';
-    if (await DatabaseService.isUserAssignedToOrganization(user.id))
+    if (user.organizationId != null &&
+        await DatabaseService.isUserAssignedToOrganization(user.id) &&
+        await DatabaseService.isOrganizationActive(user.organizationId!)) {
       return 'business';
+    }
     return user.plan;
   }
 

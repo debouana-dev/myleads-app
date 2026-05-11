@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/contact.dart';
 import '../models/interaction.dart';
+import '../models/plan_features.dart';
 import '../services/database_service.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
@@ -117,22 +118,34 @@ class ContactsNotifier extends StateNotifier<ContactsState> {
     final user = StorageService.currentUser;
     List<Contact> contacts;
     if (user?.organizationId != null) {
-      // Suspended members see only their own contacts (which includes any
-      // duplicate contacts that were not transferred to admin on suspension).
-      final memberStatus = await DatabaseService.getMemberStatus(
-        userId: _ownerId,
-        orgId: user!.organizationId!,
-      );
-      if (memberStatus == 'suspended') {
-        contacts = await StorageService.getAllContacts();
+      final orgActive =
+          await DatabaseService.isOrganizationActive(user!.organizationId!);
+      if (orgActive) {
+        // Suspended members see only their own contacts (which includes any
+        // duplicate contacts that were not transferred to admin on suspension).
+        final memberStatus = await DatabaseService.getMemberStatus(
+          userId: _ownerId,
+          orgId: user.organizationId!,
+        );
+        if (memberStatus == 'suspended') {
+          contacts = await StorageService.getAllContacts();
+        } else {
+          contacts = await DatabaseService.getAllContactsForOrganization(
+              user.organizationId!);
+        }
       } else {
-        // Active org member: shared view with org-level deduplication applied.
-        contacts = await DatabaseService.getAllContactsForOrganization(
-            user.organizationId!);
+        // Org is expired/suspended; fall back to the user's personal contact set.
+        contacts = await StorageService.getAllContacts();
       }
     } else {
       contacts = await StorageService.getAllContacts();
     }
+
+    final effectivePlan = await StorageService.getEffectivePlan();
+    if (effectivePlan == 'free') {
+      contacts = contacts.take(PlanFeatures.free.maxContacts).toList();
+    }
+
     if (contacts.isEmpty && user?.organizationId == null) {
       await _seedDemoData();
     } else {
@@ -320,11 +333,20 @@ class ContactsNotifier extends StateNotifier<ContactsState> {
 
   // ============== CRUD ==============
 
+  static const String freeContactLimitError = 'free_contact_limit_reached';
+
   Future<ContactResult> addContact(Contact contact) async {
     final user = StorageService.currentUser;
     final ownerId = _ownerId;
     if (ownerId.isEmpty) {
       return const ContactResult.failure('Vous devez être connecté');
+    }
+
+    final effectivePlan = await StorageService.getEffectivePlan();
+    final planFeatures = PlanFeatures.fromString(effectivePlan);
+    if (!planFeatures.hasUnlimitedContacts &&
+        state.contacts.length >= planFeatures.maxContacts) {
+      return const ContactResult.failure(freeContactLimitError);
     }
 
     // Privilege check: can this user create contacts?

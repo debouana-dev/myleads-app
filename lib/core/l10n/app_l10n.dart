@@ -654,6 +654,9 @@ class AppL10n {
   String get scanCard => _en ? 'Card' : 'Carte';
   String get scanQR => _en ? 'QR Code' : 'QR Code';
   String get scanNFC => _en ? 'NFC' : 'NFC';
+  String get scanQrPlanLocked => _en
+      ? 'QR scanning is available on Premium and Business plans.'
+      : 'Le scan QR est disponible uniquement sur les plans Premium et Business.';
   String get cardDetected => _en ? 'Card detected!' : 'Carte détectée !';
   String get cameraUnavailable =>
       _en ? 'Camera unavailable' : 'Caméra non disponible';
@@ -918,6 +921,15 @@ class AppL10n {
   String get exportInfoBox => _en
       ? 'Choose a CRM format for CSV to ensure compatibility. vCard and TXT are universal.'
       : "Choisissez un format CRM pour le CSV afin d'assurer la compatibilité. vCard et TXT sont universels.";
+  String get exportPlanLocked => _en
+      ? 'Export is available on Premium and Business plans only.'
+      : 'L’export est disponible uniquement sur les plans Premium et Business.';
+  String get exportPlanLockedInfo => _en
+      ? 'Exporting contacts is reserved for Premium and Business subscribers.'
+      : 'L’export des contacts est réservé aux abonnés Premium et Business.';
+  String get freeContactLimitReached => _en
+      ? 'Free plan users can save up to 10 contacts.'
+      : 'Les utilisateurs du plan gratuit peuvent enregistrer jusqu’à 10 contacts.';
 
   String importSuccess(int created, int skipped) {
     final base = _en

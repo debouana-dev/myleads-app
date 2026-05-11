@@ -36,12 +36,18 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     super.initState();
     final d = widget.ocrData;
     final hasOcr = d.isNotEmpty;
-    _firstNameCtrl = TextEditingController(text: d['firstName'] ?? (hasOcr ? '' : 'Karen'));
-    _lastNameCtrl = TextEditingController(text: d['lastName'] ?? (hasOcr ? '' : 'Ambassa'));
-    _jobTitleCtrl = TextEditingController(text: d['jobTitle'] ?? (hasOcr ? '' : 'CEO'));
-    _companyCtrl = TextEditingController(text: d['company'] ?? (hasOcr ? '' : 'GreenTech Cameroon'));
-    _phoneCtrl = TextEditingController(text: d['phone'] ?? (hasOcr ? '' : '+237 6 99 88 77 66'));
-    _emailCtrl = TextEditingController(text: d['email'] ?? (hasOcr ? '' : 'karen@greentech.cm'));
+    _firstNameCtrl =
+        TextEditingController(text: d['firstName'] ?? (hasOcr ? '' : 'Karen'));
+    _lastNameCtrl =
+        TextEditingController(text: d['lastName'] ?? (hasOcr ? '' : 'Ambassa'));
+    _jobTitleCtrl =
+        TextEditingController(text: d['jobTitle'] ?? (hasOcr ? '' : 'CEO'));
+    _companyCtrl = TextEditingController(
+        text: d['company'] ?? (hasOcr ? '' : 'GreenTech Cameroon'));
+    _phoneCtrl = TextEditingController(
+        text: d['phone'] ?? (hasOcr ? '' : '+237 6 99 88 77 66'));
+    _emailCtrl = TextEditingController(
+        text: d['email'] ?? (hasOcr ? '' : 'karen@greentech.cm'));
     _sourceCtrl = TextEditingController(
         text: d['source'] ?? (hasOcr ? '' : 'Salon Luxembourg 2026'));
     _project1Ctrl = TextEditingController(
@@ -49,7 +55,8 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     _project1BudgetCtrl = TextEditingController(
         text: d['project1Budget'] ?? (hasOcr ? '' : '15 000 €'));
     _project2Ctrl = TextEditingController(text: d['project2'] ?? '');
-    _project2BudgetCtrl = TextEditingController(text: d['project2Budget'] ?? '');
+    _project2BudgetCtrl =
+        TextEditingController(text: d['project2Budget'] ?? '');
     _notesCtrl = TextEditingController(
         text: d['notes'] ??
             (hasOcr
@@ -123,18 +130,20 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       photoPath: _photoPath,
     );
 
-    final result = await ref.read(contactsProvider.notifier).addContact(contact);
+    final result =
+        await ref.read(contactsProvider.notifier).addContact(contact);
 
     if (!mounted) return;
 
     if (!result.isSuccess) {
+      final l10n = ref.read(l10nProvider);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
               const Icon(Icons.error_outline, color: Colors.white, size: 20),
               const SizedBox(width: 10),
-              Expanded(child: Text(result.error!)),
+              Expanded(child: Text(_localizedError(result.error!, l10n))),
             ],
           ),
           backgroundColor: AppColors.hot,
@@ -163,6 +172,13 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     );
     await Future.delayed(const Duration(milliseconds: 800));
     if (mounted) context.go('/main');
+  }
+
+  String _localizedError(String error, AppL10n l10n) {
+    if (error == ContactsNotifier.freeContactLimitError) {
+      return l10n.freeContactLimitReached;
+    }
+    return error;
   }
 
   @override
@@ -201,7 +217,8 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                           color: Colors.white.withOpacity(0.12),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                        child: const Icon(Icons.arrow_back,
+                            color: Colors.white, size: 20),
                       ),
                     ),
                   ],
@@ -225,7 +242,8 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                 ),
                 const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                   decoration: BoxDecoration(
                     color: AppColors.success.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(20),
@@ -233,7 +251,8 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.check_circle, color: AppColors.success, size: 14),
+                      const Icon(Icons.check_circle,
+                          color: AppColors.success, size: 14),
                       const SizedBox(width: 6),
                       Text(
                         l10n.ocrConfidence,
@@ -261,8 +280,10 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                   _buildField(l10n.lastName, _lastNameCtrl),
                   _buildField(l10n.jobTitleLabel, _jobTitleCtrl),
                   _buildField(l10n.companyLabel, _companyCtrl),
-                  _buildField(l10n.phoneLabel, _phoneCtrl, type: TextInputType.phone),
-                  _buildField(l10n.emailLabel, _emailCtrl, type: TextInputType.emailAddress),
+                  _buildField(l10n.phoneLabel, _phoneCtrl,
+                      type: TextInputType.phone),
+                  _buildField(l10n.emailLabel, _emailCtrl,
+                      type: TextInputType.emailAddress),
                   _buildField(l10n.sourceLabel, _sourceCtrl),
                   _buildField(l10n.project1Review, _project1Ctrl),
                   _buildField(l10n.project1BudgetReview, _project1BudgetCtrl),
@@ -298,7 +319,8 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                         },
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 6),
                           decoration: BoxDecoration(
                             color: selected
                                 ? AppColors.accent
@@ -335,13 +357,19 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      _buildQuickAction(const Icon(Icons.phone, size: 20), l10n.callLabel, AppColors.success),
+                      _buildQuickAction(const Icon(Icons.phone, size: 20),
+                          l10n.callLabel, AppColors.success),
                       const SizedBox(width: 10),
-                      _buildQuickAction(const FaIcon(FontAwesomeIcons.whatsapp, size: 20), l10n.whatsappLabel, const Color(0xFF25D366)),
+                      _buildQuickAction(
+                          const FaIcon(FontAwesomeIcons.whatsapp, size: 20),
+                          l10n.whatsappLabel,
+                          const Color(0xFF25D366)),
                       const SizedBox(width: 10),
-                      _buildQuickAction(const Icon(Icons.email, size: 20), l10n.emailActionLabel, AppColors.primary),
+                      _buildQuickAction(const Icon(Icons.email, size: 20),
+                          l10n.emailActionLabel, AppColors.primary),
                       const SizedBox(width: 10),
-                      _buildQuickAction(const Icon(Icons.sms, size: 20), l10n.smsLabel, AppColors.warm),
+                      _buildQuickAction(const Icon(Icons.sms, size: 20),
+                          l10n.smsLabel, AppColors.warm),
                     ],
                   ),
                   const SizedBox(height: 100),
@@ -384,7 +412,8 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                       ),
                       child: Text(
                         l10n.saveButton,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w700),
                       ),
                     ),
                   ),
@@ -422,7 +451,8 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
             decoration: InputDecoration(
               filled: true,
               fillColor: AppColors.card,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: const BorderSide(color: AppColors.border, width: 2),
