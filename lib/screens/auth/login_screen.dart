@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/constants/app_strings.dart';
 import '../../core/l10n/app_l10n.dart';
 import '../../core/theme/app_colors.dart';
+
 import '../../providers/auth_provider.dart';
 import '../../providers/contacts_provider.dart';
 import '../../providers/organization_provider.dart';
@@ -78,9 +78,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       await ref.read(organizationProvider.notifier).loadForCurrentUser();
       if (mounted) context.go('/main');
     } else {
-      // If login failed because email is not verified, redirect to verification
-      final error = ref.read(authProvider).error ?? '';
-      if (error.contains('vérifier votre email')) {
+      final authState = ref.read(authProvider);
+      if (authState.requiresEmailVerification) {
         context.push('/email-verification', extra: email);
       }
     }

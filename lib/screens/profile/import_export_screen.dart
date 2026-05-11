@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/l10n/app_l10n.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/contact.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/contacts_provider.dart';
 import '../../services/contact_import_export_service.dart';
 import '../../services/storage_service.dart';
@@ -112,18 +113,30 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
     setState(() => _isLoading = true);
 
     int created = 0, skipped = 0;
+    var hitLimit = false;
     final notifier = ref.read(contactsProvider.notifier);
     for (final contact in parsed) {
       try {
         final res = await notifier.addContact(contact);
-        res.isSuccess ? created++ : skipped++;
+        if (res.isSuccess) {
+          created++;
+        } else {
+          skipped++;
+          if (res.error == ContactsNotifier.freeContactLimitError) {
+            hitLimit = true;
+          }
+        }
       } catch (_) {
         skipped++;
       }
     }
 
     setState(() => _isLoading = false);
-    _setResult(l10n.importSuccess(created, skipped));
+    if (created == 0 && hitLimit) {
+      _setResult(l10n.freeContactLimitReached, isError: true);
+    } else {
+      _setResult(l10n.importSuccess(created, skipped));
+    }
   }
 
   // ─── Export flow ──────────────────────────────────────────────────────────
@@ -222,6 +235,9 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
   @override
   Widget build(BuildContext context) {
     final l10n = ref.watch(l10nProvider);
+    final isFreePlan = ref
+        .watch(effectivePlanProvider)
+        .maybeWhen(data: (plan) => plan == 'free', orElse: () => true);
 
     return Scaffold(
       backgroundColor: AppColors.bg(context),
@@ -234,7 +250,7 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
               controller: _tab,
               children: [
                 _buildImportTab(context, l10n),
-                _buildExportTab(context, l10n),
+                _buildExportTab(context, l10n, isFreePlan),
               ],
             ),
           ),
@@ -485,7 +501,7 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
 
   // ─── Export tab ───────────────────────────────────────────────────────────
 
-  Widget _buildExportTab(BuildContext context, AppL10n l10n) {
+  Widget _buildExportTab(BuildContext context, AppL10n l10n, bool isFreePlan) {
     final contactCount = ref.watch(contactsProvider).contacts.length;
 
     return SingleChildScrollView(
@@ -530,7 +546,9 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
             color: AppColors.success,
             title: 'CSV',
             subtitle: l10n.csvExportDesc(_crmLabel(l10n, _crmFormat)),
-            onTap: () => _export('csv'),
+            onTap: isFreePlan
+                ? () => _setResult(l10n.exportPlanLocked, isError: true)
+                : () => _export('csv'),
           ),
           const SizedBox(height: 10),
           _formatCard(
@@ -539,7 +557,9 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
             color: AppColors.primary,
             title: 'vCard (.vcf)',
             subtitle: l10n.vcardExportDesc,
-            onTap: () => _export('vcf'),
+            onTap: isFreePlan
+                ? () => _setResult(l10n.exportPlanLocked, isError: true)
+                : () => _export('vcf'),
           ),
           const SizedBox(height: 10),
           _formatCard(
@@ -548,10 +568,15 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
             color: AppColors.warm,
             title: 'TXT',
             subtitle: l10n.txtExportDesc,
-            onTap: () => _export('txt'),
+            onTap: isFreePlan
+                ? () => _setResult(l10n.exportPlanLocked, isError: true)
+                : () => _export('txt'),
           ),
           const SizedBox(height: 24),
-          _infoBox(context, l10n.exportInfoBox),
+          _infoBox(
+            context,
+            isFreePlan ? l10n.exportPlanLockedInfo : l10n.exportInfoBox,
+          ),
         ],
       ),
     );
@@ -616,8 +641,7 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
           onTap: () => setState(() => _crmFormat = opt.$1),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               color: isSelected
                   ? AppColors.primary
@@ -635,9 +659,8 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
                 Icon(
                   opt.$3,
                   size: 14,
-                  color: isSelected
-                      ? Colors.white
-                      : AppColors.secondary(context),
+                  color:
+                      isSelected ? Colors.white : AppColors.secondary(context),
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -862,8 +885,7 @@ class _ImportPreviewDialog extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.bg(context),
                 borderRadius: BorderRadius.circular(10),
-                border:
-                    Border.all(color: AppColors.borderColor(context)),
+                border: Border.all(color: AppColors.borderColor(context)),
               ),
               child: ListView.separated(
                 shrinkWrap: true,
@@ -877,8 +899,8 @@ class _ImportPreviewDialog extends StatelessWidget {
                 itemBuilder: (_, i) {
                   final c = preview[i];
                   return Padding(
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 6, horizontal: 4),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
                     child: Row(
                       children: [
                         Container(
@@ -902,8 +924,7 @@ class _ImportPreviewDialog extends StatelessWidget {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 c.fullName.isEmpty ? '—' : c.fullName,
@@ -979,11 +1000,36 @@ class _TxtFormatGuide extends StatelessWidget {
     ('Last Name:', true, 'Contact last name', 'Nom de famille du contact'),
     ('Job Title:', false, 'Position or role', 'Poste ou fonction'),
     ('Company:', false, 'Company or organisation', 'Société ou organisation'),
-    ('Phone:', false, 'Phone number (required if no email)', 'Téléphone (obligatoire si pas d\'email)'),
-    ('Email:', false, 'Email address (required if no phone)', 'Email (obligatoire si pas de téléphone)'),
-    ('Status:', false, 'Hot Lead / Warm Lead / Cold Lead', 'Hot Lead / Warm Lead / Cold Lead'),
-    ('Source:', false, 'Where the contact was met', 'Lieu ou événement de rencontre'),
-    ('Tags:', false, 'Comma-separated labels', 'Étiquettes séparées par des virgules'),
+    (
+      'Phone:',
+      false,
+      'Phone number (required if no email)',
+      'Téléphone (obligatoire si pas d\'email)'
+    ),
+    (
+      'Email:',
+      false,
+      'Email address (required if no phone)',
+      'Email (obligatoire si pas de téléphone)'
+    ),
+    (
+      'Status:',
+      false,
+      'Hot Lead / Warm Lead / Cold Lead',
+      'Hot Lead / Warm Lead / Cold Lead'
+    ),
+    (
+      'Source:',
+      false,
+      'Where the contact was met',
+      'Lieu ou événement de rencontre'
+    ),
+    (
+      'Tags:',
+      false,
+      'Comma-separated labels',
+      'Étiquettes séparées par des virgules'
+    ),
     ('Notes:', false, 'Free-form notes', 'Notes libres'),
   ];
 
@@ -1150,8 +1196,7 @@ Status: Warm Lead''';
               ),
               // Required / optional badge
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: required
                       ? AppColors.hot.withOpacity(0.1)
@@ -1361,10 +1406,10 @@ class _CsvFormatGuide extends StatelessWidget {
       color: AppColors.onSurface(context),
     );
 
-    Widget hcell(String t) =>
-        Expanded(child: Text(t, style: headerStyle, overflow: TextOverflow.ellipsis));
-    Widget dcell(String t) =>
-        Expanded(child: Text(t, style: cellStyle, overflow: TextOverflow.ellipsis));
+    Widget hcell(String t) => Expanded(
+        child: Text(t, style: headerStyle, overflow: TextOverflow.ellipsis));
+    Widget dcell(String t) => Expanded(
+        child: Text(t, style: cellStyle, overflow: TextOverflow.ellipsis));
 
     return Container(
       decoration: BoxDecoration(
@@ -1478,15 +1523,57 @@ class _VcardFormatGuide extends StatelessWidget {
   // (property, example, description_en, description_fr, required)
   static const _props = [
     ('FN:', 'Jean Dupont', 'Full display name', 'Nom complet affiché', false),
-    ('N:', 'Dupont;Jean;;;', 'Structured name — N:Last;First;;;', 'Nom structuré — N:Nom;Prénom;;;', false),
-    ('ORG:', 'Acme Corp', 'Company or organisation', 'Société ou organisation', false),
+    (
+      'N:',
+      'Dupont;Jean;;;',
+      'Structured name — N:Last;First;;;',
+      'Nom structuré — N:Nom;Prénom;;;',
+      false
+    ),
+    (
+      'ORG:',
+      'Acme Corp',
+      'Company or organisation',
+      'Société ou organisation',
+      false
+    ),
     ('TITLE:', 'CEO', 'Job title or role', 'Poste ou fonction', false),
-    ('TEL;TYPE=WORK,VOICE:', '+33612345678', 'Phone number', 'Numéro de téléphone', false),
-    ('EMAIL;TYPE=WORK:', 'jean@acme.com', 'Email address', 'Adresse email', false),
+    (
+      'TEL;TYPE=WORK,VOICE:',
+      '+33612345678',
+      'Phone number',
+      'Numéro de téléphone',
+      false
+    ),
+    (
+      'EMAIL;TYPE=WORK:',
+      'jean@acme.com',
+      'Email address',
+      'Adresse email',
+      false
+    ),
     ('NOTE:', 'Met at conference', 'Free-form notes', 'Notes libres', false),
-    ('CATEGORIES:', 'VIP,Partner', 'Tags, comma-separated', 'Tags, séparés par des virgules', false),
-    ('X-ME2LEADS-STATUS:', 'hot', 'hot / warm / cold', 'hot / warm / cold', false),
-    ('X-ME2LEADS-SOURCE:', 'Conference 2024', 'Contact source', 'Source du contact', false),
+    (
+      'CATEGORIES:',
+      'VIP,Partner',
+      'Tags, comma-separated',
+      'Tags, séparés par des virgules',
+      false
+    ),
+    (
+      'X-ME2LEADS-STATUS:',
+      'hot',
+      'hot / warm / cold',
+      'hot / warm / cold',
+      false
+    ),
+    (
+      'X-ME2LEADS-SOURCE:',
+      'Conference 2024',
+      'Contact source',
+      'Source du contact',
+      false
+    ),
   ];
 
   static const _template = 'BEGIN:VCARD\n'

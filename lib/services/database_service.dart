@@ -4,7 +4,6 @@ import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../models/app_notification.dart';
@@ -542,11 +541,9 @@ class DatabaseService {
         'id': u.id,
         'email_enc': EncryptionService.encryptText(u.email),
         'email_lookup': _hashLookup(Validators.normalizeEmail(u.email)),
-        'first_name_enc': EncryptionService.encryptText(u.firstName),
-        'last_name_enc': EncryptionService.encryptText(u.lastName),
-        'nickname_enc': u.nickname != null
-            ? EncryptionService.encryptText(u.nickname!)
-            : null,
+        'first_name_enc': u.firstName,
+        'last_name_enc': u.lastName,
+        'nickname_enc': u.nickname,
         'phone_enc':
             u.phone != null ? EncryptionService.encryptText(u.phone!) : null,
         'phone_lookup': u.phone != null && u.phone!.trim().isNotEmpty
@@ -555,15 +552,9 @@ class DatabaseService {
         // date_of_birth_enc column is kept in schema for v5→v6 migration
         // compatibility but no longer written (doc v7: DoB removed).
         'date_of_birth_enc': null,
-        'company_name_enc': u.companyName != null
-            ? EncryptionService.encryptText(u.companyName!)
-            : null,
-        'company_role_enc': u.companyRole != null
-            ? EncryptionService.encryptText(u.companyRole!)
-            : null,
-        'biography_enc': u.biography != null
-            ? EncryptionService.encryptText(u.biography!)
-            : null,
+        'company_name_enc': u.companyName,
+        'company_role_enc': u.companyRole,
+        'biography_enc': u.biography,
         'password_hash': u.passwordHash,
         'auth_provider': u.authProvider,
         'session_token': u.sessionToken,
@@ -583,24 +574,17 @@ class DatabaseService {
     return UserAccount(
       id: row['id'] as String,
       email: EncryptionService.decryptText(row['email_enc'] as String?),
-      firstName:
-      EncryptionService.decryptText(row['first_name_enc'] as String?),
-      lastName: EncryptionService.decryptText(row['last_name_enc'] as String?),
-      nickname: row['nickname_enc'] != null
-          ? EncryptionService.decryptText(row['nickname_enc'] as String?)
-          : null,
+      firstName: row['first_name_enc'] as String,
+      lastName: row['last_name_enc'] as String,
+      nickname: row['nickname_enc'] as String?,
       phone: row['phone_enc'] != null
           ? EncryptionService.decryptText(row['phone_enc'] as String?)
           : null,
-      companyName: row['company_name_enc'] != null
-          ? EncryptionService.decryptText(row['company_name_enc'] as String?)
-          : null,
-      companyRole: row['company_role_enc'] != null
-          ? EncryptionService.decryptText(row['company_role_enc'] as String?)
-          : null,
-      biography: row['biography_enc'] != null
-          ? EncryptionService.decryptText(row['biography_enc'] as String?)
-          : null,
+      // dateOfBirth removed per doc v7 — column left untouched for any
+      // legacy rows but no longer read into the model.
+      companyName: row['company_name_enc'] as String?,
+      companyRole: row['company_role_enc'] as String?,
+      biography: row['biography_enc'] as String?,
       passwordHash: row['password_hash'] as String,
       authProvider: row['auth_provider'] as String? ?? 'email',
       sessionToken: row['session_token'] as String?,
@@ -1388,6 +1372,12 @@ class DatabaseService {
     return rows.isNotEmpty;
   }
 
+  static Future<bool> isOrganizationActive(String orgId) async {
+    final org = await findOrganizationById(orgId);
+    if (org == null) return false;
+    return !org.isSuspended && !org.isExpired;
+  }
+
   /// Update the edit/create/view-reminders/view-history privileges for a single member.
   static Future<void> updateMemberPrivileges({
     required String orgId,
@@ -1409,12 +1399,16 @@ class DatabaseService {
       where: 'organization_id = ? AND user_id = ?',
       whereArgs: [orgId, userId],
     );
-    final rows = await db.query('organization_members',
-        where: 'organization_id = ? AND user_id = ?',
-        whereArgs: [orgId, userId], limit: 1);
-    if (rows.isNotEmpty)
+    final rows = await db.query(
+      'organization_members',
+      where: 'organization_id = ? AND user_id = ?',
+      whereArgs: [orgId, userId],
+      limit: 1,
+    );
+    if (rows.isNotEmpty) {
       _onRemoteUpsert?.call(
           'organization_members', Map<String, dynamic>.from(rows.first));
+    }
   }
 
   static Future<List<Contact>> getAllContactsForOrganization(String orgId) async {
@@ -1644,16 +1638,37 @@ class DatabaseService {
     required String status,
   }) async {
     final db = await database;
-    await db.update('organization_members', {'status': status},
-        where: 'organization_id = ? AND user_id = ?', whereArgs: [orgId, userId]);
-    final rows = await db.query('organization_members',
-        where: 'organization_id = ? AND user_id = ?',
-        whereArgs: [orgId, userId], limit: 1);
-    if (rows.isNotEmpty)
+    await db.update(
+      'organization_members',
+      {'status': status},
+      where: 'organization_id = ? AND user_id = ?',
+      whereArgs: [orgId, userId],
+    );
+    final rows = await db.query(
+      'organization_members',
+      where: 'organization_id = ? AND user_id = ?',
+      whereArgs: [orgId, userId],
+      limit: 1,
+    );
+    if (rows.isNotEmpty) {
       _onRemoteUpsert?.call(
           'organization_members', Map<String, dynamic>.from(rows.first));
+    }
   }
 
+  /// Transfer all contacts owned by [fromUserId] to the organization's admin.
+  ///
+  /// When a member is suspended, removed, or deletes their account, their
+  /// org contacts must not disappear. This method reassigns [owner_id] to the
+  /// admin so the contacts remain visible and editable in the org workspace.
+  ///
+  /// If a transferred contact's [phone_lookup] or [email_lookup] would
+  /// collide with an existing admin contact (violating the per-owner unique
+  /// index), the lookup field is cleared — the encrypted data is preserved and
+  /// the contact is still transferred; only the deduplication hash is lost.
+  ///
+  /// Returns the admin's user id on success, or null when the org / admin
+  /// cannot be found, or when [fromUserId] is the admin themselves.
   static Future<String?> transferOrgContactsToAdmin({
     required String fromUserId,
     required String orgId,
@@ -1711,9 +1726,10 @@ class DatabaseService {
         where: 'id = ?', whereArgs: [orgId]);
     final rows = await db.query('organizations',
         where: 'id = ?', whereArgs: [orgId], limit: 1);
-    if (rows.isNotEmpty)
+    if (rows.isNotEmpty) {
       _onRemoteUpsert?.call(
           'organizations', Map<String, dynamic>.from(rows.first));
+    }
   }
 
   // =====================================================================

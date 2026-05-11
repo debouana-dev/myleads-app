@@ -145,7 +145,7 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
     setState(() => _saving = false);
 
     if (!result.isSuccess) {
-      _showError(result.error!);
+      _showError(_localizedError(result.error!, l10n));
       return;
     }
 
@@ -160,8 +160,7 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
         ),
         backgroundColor: AppColors.primary,
         behavior: SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
 
@@ -186,6 +185,13 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
+  }
+
+  String _localizedError(String error, AppL10n l10n) {
+    if (error == ContactsNotifier.freeContactLimitError) {
+      return l10n.freeContactLimitReached;
+    }
+    return error;
   }
 
   @override
@@ -294,13 +300,18 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
                                   borderRadius: BorderRadius.circular(24),
                                   image: _photoPath != null
                                       ? DecorationImage(
-                                          image: FileImage(File(PhotoStorageService.resolveAbsolutePath(_photoPath)!)),
+                                          image: FileImage(File(
+                                              PhotoStorageService
+                                                  .resolveAbsolutePath(
+                                                      _photoPath)!)),
                                           fit: BoxFit.cover,
                                         )
                                       : null,
                                 ),
                                 child: _photoPath == null
-                                    ? Icon(Icons.person, size: 36, color: AppColors.hint(context))
+                                    ? Icon(Icons.person,
+                                        size: 36,
+                                        color: AppColors.hint(context))
                                     : null,
                               ),
                               Positioned(
@@ -312,9 +323,11 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
                                   decoration: BoxDecoration(
                                     color: AppColors.accent,
                                     shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white, width: 2),
+                                    border: Border.all(
+                                        color: Colors.white, width: 2),
                                   ),
-                                  child: const Icon(Icons.camera_alt, size: 12, color: AppColors.primary),
+                                  child: const Icon(Icons.camera_alt,
+                                      size: 12, color: AppColors.primary),
                                 ),
                               ),
                             ],
@@ -527,8 +540,8 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
                           height: 22,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.5,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(AppColors.primary),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                AppColors.primary),
                           ),
                         )
                       : Text(
@@ -580,11 +593,13 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: AppColors.borderColor(context), width: 2),
+                borderSide:
+                    BorderSide(color: AppColors.borderColor(context), width: 2),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: AppColors.borderColor(context), width: 2),
+                borderSide:
+                    BorderSide(color: AppColors.borderColor(context), width: 2),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),

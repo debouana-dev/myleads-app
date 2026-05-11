@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
@@ -18,13 +19,17 @@ class RemindersState {
   });
 
   List<Reminder> get todayReminders {
-    final list = reminders.where((r) => r.isToday && !r.isCompleted && !r.isLate).toList();
+    final list = reminders
+        .where((r) => r.isToday && !r.isCompleted && !r.isLate)
+        .toList();
     list.sort((a, b) => a.startDateTime.compareTo(b.startDateTime));
     return list;
   }
 
   List<Reminder> get weekReminders {
-    final list = reminders.where((r) => r.isThisWeek && !r.isToday && !r.isCompleted && !r.isLate).toList();
+    final list = reminders
+        .where((r) => r.isThisWeek && !r.isToday && !r.isCompleted && !r.isLate)
+        .toList();
     list.sort((a, b) => a.startDateTime.compareTo(b.startDateTime));
     return list;
   }
@@ -52,7 +57,8 @@ class RemindersState {
   List<Reminder> get completedReminders => doneReminders;
 
   List<Reminder> getRemindersForContact(String contactId) {
-    final list = reminders.where((r) => r.contactIds.contains(contactId)).toList();
+    final list =
+        reminders.where((r) => r.contactIds.contains(contactId)).toList();
     list.sort((a, b) => a.startDateTime.compareTo(b.startDateTime));
     return list;
   }
@@ -67,8 +73,16 @@ class RemindersState {
 
 class RemindersNotifier extends StateNotifier<RemindersState> {
   RemindersNotifier() : super(const RemindersState()) {
-    _load();
+    _load().then((_) async {
+      _lastSyncAt =
+          await DatabaseService.getUserLastSync(StorageService.currentUserId);
+      _syncCheckTimer = Timer.periodic(
+          const Duration(seconds: 30), (_) => _checkForSyncUpdate());
+    });
   }
+
+  Timer? _syncCheckTimer;
+  String? _lastSyncAt;
 
   Future<void> _load() async {
     final user = StorageService.currentUser;
@@ -121,7 +135,9 @@ class RemindersNotifier extends StateNotifier<RemindersState> {
   Future<void> updateReminder(Reminder reminder) async {
     await DatabaseService.updateReminder(reminder);
     state = state.copyWith(
-      reminders: state.reminders.map((r) => r.id == reminder.id ? reminder : r).toList(),
+      reminders: state.reminders
+          .map((r) => r.id == reminder.id ? reminder : r)
+          .toList(),
     );
     if (!reminder.isCompleted) {
       NotificationService.scheduleAllReminderNotifications(reminder);
@@ -138,7 +154,8 @@ class RemindersNotifier extends StateNotifier<RemindersState> {
 
   Future<void> deleteReminder(String id) async {
     await DatabaseService.deleteReminder(id);
-    state = state.copyWith(reminders: state.reminders.where((r) => r.id != id).toList());
+    state = state.copyWith(
+        reminders: state.reminders.where((r) => r.id != id).toList());
     // Cancel any pending OS alarm so stale pushes don't fire.
     NotificationService.cancelReminderScheduledNotification(id);
   }
@@ -149,8 +166,25 @@ class RemindersNotifier extends StateNotifier<RemindersState> {
 
   Future<void> refresh() => _load();
   Future<void> reload() => _load();
+
+  Future<void> _checkForSyncUpdate() async {
+    final userId = StorageService.currentUserId;
+    if (userId.isEmpty) return;
+    final currentSyncAt = await DatabaseService.getUserLastSync(userId);
+    if (currentSyncAt != null && currentSyncAt != _lastSyncAt) {
+      _lastSyncAt = currentSyncAt;
+      await _load();
+    }
+  }
+
+  @override
+  void dispose() {
+    _syncCheckTimer?.cancel();
+    super.dispose();
+  }
 }
 
-final remindersProvider = StateNotifierProvider<RemindersNotifier, RemindersState>((ref) {
+final remindersProvider =
+    StateNotifierProvider<RemindersNotifier, RemindersState>((ref) {
   return RemindersNotifier();
 });

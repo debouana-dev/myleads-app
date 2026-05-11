@@ -7,8 +7,10 @@ import '../../core/l10n/app_l10n.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/user_account.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/contacts_provider.dart';
 import '../../providers/currency_provider.dart';
 import '../../providers/organization_provider.dart';
+import '../../providers/reminders_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/storage_service.dart';
@@ -185,6 +187,11 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
       final err = await ref.read(authProvider.notifier).changePlan(planId);
       if (!mounted) return;
       setState(() => _loadingPlan = null);
+      if (err == null) {
+        await ref.read(contactsProvider.notifier).reload();
+        await ref.read(remindersProvider.notifier).reload();
+        await ref.read(organizationProvider.notifier).loadForCurrentUser();
+      }
       _showSnack(err == null ? l10n.planChangedSuccess : l10n.planChangeError,
           err == null ? AppColors.success : AppColors.error);
       return;

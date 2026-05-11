@@ -43,6 +43,7 @@ class AuthState {
   final String userEmail;
   final String? userPhotoPath;
   final String? error;
+  final bool requiresEmailVerification;
 
   /// Current subscription plan: 'free' | 'premium' | 'business'.
   final String plan;
@@ -60,6 +61,7 @@ class AuthState {
     this.userEmail = '',
     this.userPhotoPath,
     this.error,
+    this.requiresEmailVerification = false,
     this.plan = 'free',
     this.planExpiresAt,
     this.subscriptionBillingCycle,
@@ -74,6 +76,7 @@ class AuthState {
     String? error,
     bool clearError = false,
     bool clearPhoto = false,
+    bool? requiresEmailVerification,
     String? plan,
     Object? planExpiresAt = _authSentinel,
     Object? subscriptionBillingCycle = _authSentinel,
@@ -85,6 +88,8 @@ class AuthState {
       userEmail: userEmail ?? this.userEmail,
       userPhotoPath: clearPhoto ? null : (userPhotoPath ?? this.userPhotoPath),
       error: clearError ? null : (error ?? this.error),
+      requiresEmailVerification:
+          requiresEmailVerification ?? this.requiresEmailVerification,
       plan: plan ?? this.plan,
       planExpiresAt: identical(planExpiresAt, _authSentinel)
           ? this.planExpiresAt
@@ -121,7 +126,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     final emailErr = Validators.validateEmail(email);
     if (emailErr != null) {
-      state = state.copyWith(isLoading: false, error: emailErr);
+      state = state.copyWith(
+        isLoading: false,
+        error: emailErr,
+        requiresEmailVerification: false,
+      );
       return false;
     }
 
@@ -142,6 +151,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = state.copyWith(
           isLoading: false,
           error: _l10n.authCloudConnectionError,
+          requiresEmailVerification: false,
         );
         return false;
       }
@@ -157,6 +167,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = state.copyWith(
           isLoading: false,
           error: _l10n.authNoAccountForEmail,
+          requiresEmailVerification: false,
         );
         return false;
       }
@@ -167,6 +178,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         isLoading: false,
         error: _l10n.authWrongProvider(providerName),
+        requiresEmailVerification: false,
       );
       return false;
     }
@@ -175,6 +187,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         isLoading: false,
         error: _l10n.authInvalidCredentials,
+        requiresEmailVerification: false,
       );
       return false;
     }
@@ -186,6 +199,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         isLoading: false,
         error: _l10n.authEmailNotVerified(email),
+        requiresEmailVerification: true,
       );
       return false;
     }
@@ -217,7 +231,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       userEmail: updated.email,
       plan: updated.plan,
       clearError: true,
+      requiresEmailVerification: false,
     );
+
+    if (await StorageService.getEffectivePlan() == 'business') {
+      await scheduleBusinessSync();
+    }
 
     // When the user record was pulled from the cloud, bring their data too.
     if (importedFromCloud) {

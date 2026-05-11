@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../core/l10n/app_l10n.dart';
 import '../../core/theme/app_colors.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/ocr_parser.dart';
 import '../../services/ocr_service_stub.dart'
     if (dart.library.io) '../../services/ocr_service_mobile.dart'
@@ -248,6 +249,9 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
   @override
   Widget build(BuildContext context) {
     final l10n = ref.watch(l10nProvider);
+    final isFreePlan = ref
+        .watch(effectivePlanProvider)
+        .maybeWhen(data: (plan) => plan == 'free', orElse: () => true);
     final bottomInset = (88.0 + MediaQuery.of(context).padding.bottom) / 4;
 
     return Scaffold(
@@ -271,8 +275,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
             ),
 
           // Solid black background for NFC mode (no camera needed).
-          if (_mode == ScanMode.nfc)
-            Container(color: Colors.black),
+          if (_mode == ScanMode.nfc) Container(color: Colors.black),
 
           // Top bar
           _buildTopBar(context, l10n),
@@ -301,7 +304,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
             bottom: 160 + bottomInset,
             left: 0,
             right: 0,
-            child: _buildModeSelector(l10n),
+            child: _buildModeSelector(l10n, isFreePlan),
           ),
 
           // Capture button
@@ -444,11 +447,14 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
 
     return [
       // Top-left
-      bracket(top: 0, left: 0, right: -1, bottom: -1, flipH: false, flipV: false),
+      bracket(
+          top: 0, left: 0, right: -1, bottom: -1, flipH: false, flipV: false),
       // Top-right
-      bracket(top: 0, left: -1, right: 0, bottom: -1, flipH: true, flipV: false),
+      bracket(
+          top: 0, left: -1, right: 0, bottom: -1, flipH: true, flipV: false),
       // Bottom-left
-      bracket(top: -1, left: 0, right: -1, bottom: 0, flipH: false, flipV: true),
+      bracket(
+          top: -1, left: 0, right: -1, bottom: 0, flipH: false, flipV: true),
       // Bottom-right
       bracket(top: -1, left: -1, right: 0, bottom: 0, flipH: true, flipV: true),
     ];
@@ -458,7 +464,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
   // Mode selector (Carte / QR Code / NFC)
   // ----------------------------------------------------------
 
-  Widget _buildModeSelector(AppL10n l10n) {
+  Widget _buildModeSelector(AppL10n l10n, bool isFreePlan) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -473,7 +479,10 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
           label: l10n.scanQR,
           icon: Icons.qr_code_scanner_rounded,
           active: _mode == ScanMode.qr,
-          onTap: () => _switchMode(ScanMode.qr),
+          enabled: !isFreePlan,
+          onTap: isFreePlan
+              ? () => _showFeatureLocked(l10n, l10n.scanQrPlanLocked)
+              : () => _switchMode(ScanMode.qr),
         ),
         // const SizedBox(width: 12),
         // _ModeButton(
@@ -513,6 +522,37 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
         ),
       ),
     );
+  }
+
+  void _showFeatureLocked(AppL10n l10n, String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.lock_outline_rounded,
+                  color: AppColors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.hot,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          duration: const Duration(seconds: 2),
+        ),
+      );
   }
 }
 
@@ -560,6 +600,7 @@ class _ModeButton extends StatelessWidget {
   final String label;
   final IconData icon;
   final bool active;
+  final bool enabled;
   final VoidCallback onTap;
 
   const _ModeButton({
@@ -567,24 +608,29 @@ class _ModeButton extends StatelessWidget {
     required this.icon,
     required this.active,
     required this.onTap,
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: enabled ? onTap : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeInOut,
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         decoration: BoxDecoration(
           gradient: active ? AppColors.accentGradient : null,
-          color: active ? null : AppColors.white.withOpacity(0.08),
+          color: active
+              ? null
+              : AppColors.white.withOpacity(enabled ? 0.08 : 0.04),
           borderRadius: BorderRadius.circular(24),
           border: active
               ? null
               : Border.all(
-                  color: AppColors.white.withOpacity(0.15),
+                  color: enabled
+                      ? AppColors.white.withOpacity(0.15)
+                      : AppColors.white.withOpacity(0.08),
                 ),
         ),
         child: Row(
@@ -593,9 +639,8 @@ class _ModeButton extends StatelessWidget {
             Icon(
               icon,
               size: 16,
-              color: active
-                  ? AppColors.white
-                  : AppColors.white.withOpacity(0.6),
+              color:
+                  active ? AppColors.white : AppColors.white.withOpacity(0.6),
             ),
             const SizedBox(width: 6),
             Text(
@@ -603,9 +648,8 @@ class _ModeButton extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                color: active
-                    ? AppColors.white
-                    : AppColors.white.withOpacity(0.6),
+                color:
+                    active ? AppColors.white : AppColors.white.withOpacity(0.6),
               ),
             ),
           ],

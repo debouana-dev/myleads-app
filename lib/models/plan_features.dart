@@ -11,7 +11,8 @@ class PlanFeatures {
 
   static const PlanFeatures free = PlanFeatures._(SubscriptionPlan.free);
   static const PlanFeatures premium = PlanFeatures._(SubscriptionPlan.premium);
-  static const PlanFeatures business = PlanFeatures._(SubscriptionPlan.business);
+  static const PlanFeatures business =
+      PlanFeatures._(SubscriptionPlan.business);
 
   static PlanFeatures fromString(String? s) {
     switch (s) {
@@ -44,7 +45,7 @@ class PlanFeatures {
 
   // ── Import / Export ─────────────────────────────────────────────────────────
   bool get hasExport => plan != SubscriptionPlan.free;
-  bool get hasImport => plan != SubscriptionPlan.free;
+  bool get hasImport => true;
 
   // ── Cloud & AI enrichment ───────────────────────────────────────────────────
   bool get hasCloudSync => plan != SubscriptionPlan.free;

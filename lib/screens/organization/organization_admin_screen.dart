@@ -1027,7 +1027,7 @@ class _MemberCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        member.email,
+                        member.role,
                         style: TextStyle(
                             fontSize: 12, color: AppColors.secondary(context)),
                         overflow: TextOverflow.ellipsis,
@@ -1142,7 +1142,7 @@ class _MemberManagementSheet extends ConsumerWidget {
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
                               color: AppColors.onSurface(context))),
-                      Text(member.email,
+                      Text(member.role,
                           style: TextStyle(
                               fontSize: 12,
                               color: AppColors.secondary(context))),

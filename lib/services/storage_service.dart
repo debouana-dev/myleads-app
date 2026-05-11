@@ -107,13 +107,16 @@ class StorageService {
   /// Falls back to 'free' when no session is active.
   static String get userPlan => _cachedUser?.plan ?? 'free';
 
-  /// Effective plan: 'business' if the user belongs to an organization,
+  /// Effective plan: 'business' if the user belongs to an active organization,
   /// otherwise the stored personal subscription plan.
   static Future<String> getEffectivePlan() async {
     final user = _cachedUser;
     if (user == null) return 'free';
-    if (await DatabaseService.isUserAssignedToOrganization(user.id))
+    if (user.organizationId != null &&
+        await DatabaseService.isUserAssignedToOrganization(user.id) &&
+        await DatabaseService.isOrganizationActive(user.organizationId!)) {
       return 'business';
+    }
     return user.plan;
   }
 
