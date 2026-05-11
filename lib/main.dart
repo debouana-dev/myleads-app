@@ -1,5 +1,6 @@
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -101,11 +102,15 @@ void main() async {
   } catch (e, st) {
     debugPrint('Firebase.initializeApp failed: $e\n$st');
   }
+  if (kDebugMode) {
+    await DatabaseService.debugCheckAllTables(); // ← ici
+  }
 
   final stripeKey = AppConfig.stripePublishableKey;
   if (stripeKey.isNotEmpty) {
     try {
       Stripe.publishableKey = stripeKey;
+      //Stripe.instance.setMerchantIdentifier('merchant.com.debouana.myleads');
       await Stripe.instance.applySettings().timeout(const Duration(seconds: 5));
       // Check for a payment that completed while the app was killed during a
       // Link / Amazon Pay redirect. The result is cached in StripeService and

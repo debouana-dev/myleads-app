@@ -58,7 +58,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyB2I8NJ78pqu4Ceu3qG0s7tPN80nvv8v38',
-    appId: '1:772969451694:android:5a7c7da609d2ef522ddd3f',
+    appId: '1:772969451694:android:0f73a92f1000ca0c2ddd3f',
     messagingSenderId: '772969451694',
     projectId: 'me2leads',
     storageBucket: 'me2leads.firebasestorage.app',
@@ -66,10 +66,13 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyC8g0vYwXexCGmFnlLPvJ1MmrH_lfU7IKU',
-    appId: '1:772969451694:ios:45932d3fe84df0452ddd3f',
+    appId: '1:772969451694:ios:15cdbb7a3e1efd752ddd3f',
     messagingSenderId: '772969451694',
     projectId: 'me2leads',
     storageBucket: 'me2leads.firebasestorage.app',
-    iosBundleId: 'com.debouana.myleads',
+    androidClientId: '772969451694-9e71lctlt1rqdhavob115f16s35vroes.apps.googleusercontent.com',
+    iosClientId: '772969451694-uhaj2hrsuvd98egqfnq090gaikvenl26.apps.googleusercontent.com',
+    iosBundleId: 'com.debouana.me2leads',
   );
+
 }

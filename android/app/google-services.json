@@ -7,20 +7,12 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:772969451694:android:5a7c7da609d2ef522ddd3f",
+        "mobilesdk_app_id": "1:772969451694:android:0f73a92f1000ca0c2ddd3f",
         "android_client_info": {
-          "package_name": "com.debouana.myleads"
+          "package_name": "com.debouana.me2leads"
         }
       },
       "oauth_client": [
-        {
-          "client_id": "772969451694-9e71lctlt1rqdhavob115f16s35vroes.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.debouana.myleads",
-            "certificate_hash": "68a76c5bb363fa3da03c001ba563256b5f155e8e"
-          }
-        },
         {
           "client_id": "772969451694-npt8ctok5nbm0g6sl6t7ttmn6q7cbgqb.apps.googleusercontent.com",
           "client_type": 3

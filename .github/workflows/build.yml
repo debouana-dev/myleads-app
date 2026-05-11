@@ -81,9 +81,36 @@ jobs:
               plist = plistlib.load(f)
           plist['CFBundleDisplayName'] = 'Me2Leads'
           plist['CFBundleName'] = 'Me2Leads'
+          # Add Apple Pay merchant ID for Stripe payments
+          plist['com.apple.developer.in-app-payments'] = ['merchant.com.debouana.myleads']
           with open(path, 'wb') as f:
               plistlib.dump(plist, f)
           print('ios/Runner/Info.plist patched')
+          PYEOF
+
+      - name: Patch iOS entitlements for Apple Pay
+        run: |
+          python3 << 'PYEOF'
+          import plistlib
+          import os
+
+          entitlements_path = 'ios/Runner/Runner.entitlements'
+          if not os.path.exists(entitlements_path):
+              # Create entitlements file if it doesn't exist
+              entitlements = {
+                  'com.apple.developer.in-app-payments': ['merchant.com.debouana.myleads']
+              }
+              with open(entitlements_path, 'wb') as f:
+                  plistlib.dump(entitlements, f)
+              print('Runner.entitlements created')
+          else:
+              # Patch existing entitlements
+              with open(entitlements_path, 'rb') as f:
+                  entitlements = plistlib.load(f)
+              entitlements['com.apple.developer.in-app-payments'] = ['merchant.com.debouana.myleads']
+              with open(entitlements_path, 'wb') as f:
+                  plistlib.dump(entitlements, f)
+              print('Runner.entitlements patched')
           PYEOF
 
       - name: Add ProGuard rules for ML Kit

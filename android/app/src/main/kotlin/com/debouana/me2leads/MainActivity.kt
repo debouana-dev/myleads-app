@@ -1,4 +1,4 @@
-package com.debouana.myleads
+package com.debouana.me2leads
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 

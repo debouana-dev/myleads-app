@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -268,6 +269,15 @@ class StripeService {
           appearance: const PaymentSheetAppearance(
             colors: PaymentSheetAppearanceColors(primary: Color(0xFF0B3C5D)),
           ),
+          googlePay: const PaymentSheetGooglePay(
+            merchantCountryCode: 'FR',
+            currencyCode: 'EUR',
+            testEnv: kDebugMode,
+          ),
+          /*applePay: PaymentSheetApplePay(
+            merchantCountryCode: 'FR',
+            //merchantIdentifier: 'merchant.com.debouana.myleads',
+          ),*/
           // Required for redirect-based methods (Link, Amazon Pay, bank
           // redirects). Android declares this scheme in the intent-filter
           // so the deep link routes back to MainActivity.
