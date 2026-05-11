@@ -262,8 +262,12 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
     final currency = ref.watch(settingsProvider).currency;
     final eurToUsd = ref.watch(eurToUsdRateProvider);
     final authState = ref.watch(authProvider);
+    final effectivePlan = ref.watch(effectivePlanProvider).maybeWhen(
+          data: (plan) => plan,
+          orElse: () => authState.plan,
+        );
     final orgState = ref.watch(organizationProvider);
-    final currentPlan = authState.plan;
+    final currentPlan = effectivePlan;
     final planExpiresAt = authState.planExpiresAt;
     final billingCycle = authState.subscriptionBillingCycle;
     final isYearly = _billingCycle == 'yearly';

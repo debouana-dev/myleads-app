@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/contact.dart';
@@ -107,6 +106,16 @@ class StorageService {
   /// Current user's subscription plan, read directly from the cached user row.
   /// Falls back to 'free' when no session is active.
   static String get userPlan => _cachedUser?.plan ?? 'free';
+
+  /// Effective plan: 'business' if the user belongs to an organization,
+  /// otherwise the stored personal subscription plan.
+  static Future<String> getEffectivePlan() async {
+    final user = _cachedUser;
+    if (user == null) return 'free';
+    if (await DatabaseService.isUserAssignedToOrganization(user.id))
+      return 'business';
+    return user.plan;
+  }
 
   /// Kept for backwards-compatibility. Plan changes should go through
   /// [AuthNotifier.changePlan], which persists to the database.

@@ -89,9 +89,10 @@ class AuthState {
       planExpiresAt: identical(planExpiresAt, _authSentinel)
           ? this.planExpiresAt
           : planExpiresAt as DateTime?,
-      subscriptionBillingCycle: identical(subscriptionBillingCycle, _authSentinel)
-          ? this.subscriptionBillingCycle
-          : subscriptionBillingCycle as String?,
+      subscriptionBillingCycle:
+          identical(subscriptionBillingCycle, _authSentinel)
+              ? this.subscriptionBillingCycle
+              : subscriptionBillingCycle as String?,
     );
   }
 }
@@ -497,7 +498,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       plan: user.plan,
       clearError: true,
     );
-    if (user.plan == 'business') await scheduleBusinessSync();
+    if (await StorageService.getEffectivePlan() == 'business') {
+      await scheduleBusinessSync();
+    }
     return true;
   }
 
@@ -541,7 +544,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       subscriptionBillingCycle: subscriptionBillingCycle,
     );
 
-    if (plan == 'business') {
+    if (await StorageService.getEffectivePlan() == 'business') {
       await scheduleBusinessSync();
     } else {
       await cancelBusinessSync();
@@ -549,8 +552,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     // Manage subscription renewal push notifications.
     if (plan == 'free') {
-      unawaited(NotificationService.cancelSubscriptionRenewalNotifications(
-          user.id));
+      unawaited(
+          NotificationService.cancelSubscriptionRenewalNotifications(user.id));
     } else {
       unawaited(NotificationService.scheduleSubscriptionRenewalNotifications(
         userId: user.id,
@@ -1044,6 +1047,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
   String _emailLookup(String email) =>
       DatabaseService.lookupHashForEmail(email);
 }
+
+final effectivePlanProvider = FutureProvider<String>((ref) async {
+  ref.watch(authProvider);
+  return StorageService.getEffectivePlan();
+});
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   return AuthNotifier(ref);
