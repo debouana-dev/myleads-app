@@ -42,36 +42,12 @@ class StorageService {
       final user = await DatabaseService.findUserById(userId);
       if (user != null && user.sessionToken == token) {
         _cachedUser = user;
-        // Seed a Business-plan test account on first install (idempotent).
-        await _seedTestAccount();
       } else {
         // Stale or invalidated session — wipe it.
         await _secure.delete(key: _kCurrentUserId);
         await _secure.delete(key: _kCurrentSessionToken);
       }
     }
-  }
-
-  static Future<void> _seedTestAccount() async {
-    const testEmail = 'test@debouana.com';
-    if (await DatabaseService.isEmailTaken(testEmail)) return;
-
-    final now = DateTime(2026, 1, 10, 9, 0, 0);
-    await DatabaseService.insertUser(UserAccount(
-      id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-      email: testEmail,
-      firstName: 'Sophie',
-      lastName: 'Martin',
-      phone: '+33612345678',
-      companyName: 'De Bouana SARL',
-      companyRole: 'Chef de Projet',
-      biography: 'Compte de test – plan Business.',
-      passwordHash: EncryptionService.hashPassword('Password@123'),
-      emailVerified: true,
-      plan: 'business',
-      createdAt: now,
-      passwordChangedAt: now,
-    ));
   }
 
   // -------- Session --------
