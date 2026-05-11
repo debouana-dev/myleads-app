@@ -356,9 +356,6 @@ class OrgNotifier extends StateNotifier<OrgState> {
       final updated = user.copyWith(
         organizationId: org.id,
         orgRole: 'member',
-        plan: 'business',
-        planExpiresAt: null,
-        subscriptionBillingCycle: null,
       );
       await DatabaseService.updateUser(updated);
       await StorageService.setCurrentSession(updated, user.sessionToken ?? '');
@@ -395,16 +392,6 @@ class OrgNotifier extends StateNotifier<OrgState> {
       await DatabaseService.transferNonDuplicateContactsToAdmin(
           fromUserId: targetUserId, orgId: org.id);
       await DatabaseService.removeOrgMember(org.id, targetUserId);
-
-      // Revoke Business plan from removed member.
-      final removedUser = await DatabaseService.findUserById(targetUserId);
-      if (removedUser != null) {
-        await DatabaseService.updateUser(removedUser.copyWith(
-          plan: 'free',
-          planExpiresAt: null,
-          subscriptionBillingCycle: null,
-        ));
-      }
 
       await refreshMembers();
       return null;
@@ -448,9 +435,6 @@ class OrgNotifier extends StateNotifier<OrgState> {
         final updated = user.copyWith(
           organizationId: null,
           orgRole: null,
-          plan: 'free',
-          planExpiresAt: null,
-          subscriptionBillingCycle: null,
         );
         await DatabaseService.updateUser(updated);
         await StorageService.setCurrentSession(
@@ -475,16 +459,16 @@ class OrgNotifier extends StateNotifier<OrgState> {
 
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      // Downgrade all non-admin members to free before deleting.
+      // Preserve personal subscription plans for members when the org is deleted.
+      // Their effective Business entitlement is removed by clearing org membership.
       final members = await DatabaseService.getMembersForOrganization(org.id);
       for (final m in members) {
         if (m.userId == user.id) continue; // admin handled below
         final memberUser = await DatabaseService.findUserById(m.userId);
         if (memberUser != null) {
           await DatabaseService.updateUser(memberUser.copyWith(
-            plan: 'free',
-            planExpiresAt: null,
-            subscriptionBillingCycle: null,
+            organizationId: null,
+            orgRole: null,
           ));
         }
       }
@@ -492,16 +476,12 @@ class OrgNotifier extends StateNotifier<OrgState> {
       await DatabaseService.deleteOrganization(org.id);
 
       // Downgrade admin and clear their org fields.
-      final downgraded = user.copyWith(
+      final updated = user.copyWith(
         organizationId: null,
         orgRole: null,
-        plan: 'free',
-        planExpiresAt: null,
-        subscriptionBillingCycle: null,
       );
-      await DatabaseService.updateUser(downgraded);
-      await StorageService.setCurrentSession(
-          downgraded, user.sessionToken ?? '');
+      await DatabaseService.updateUser(updated);
+      await StorageService.setCurrentSession(updated, user.sessionToken ?? '');
       await cancelBusinessSync();
 
       state = const OrgState();

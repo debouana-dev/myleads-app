@@ -121,8 +121,9 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = ref.watch(l10nProvider);
-    final plan = ref.watch(authProvider).plan;
-    final locked = plan == 'free';
+    final effectivePlan = ref.watch(effectivePlanProvider);
+    final locked = effectivePlan.maybeWhen(
+        data: (plan) => plan == 'free', orElse: () => true);
 
     return Scaffold(
       backgroundColor: AppColors.bg(context),
@@ -154,7 +155,8 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
                       color: Colors.white.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                    child: const Icon(Icons.arrow_back,
+                        color: Colors.white, size: 20),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -246,7 +248,8 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
                             height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2.5,
-                              valueColor: AlwaysStoppedAnimation(AppColors.primary),
+                              valueColor:
+                                  AlwaysStoppedAnimation(AppColors.primary),
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -280,7 +283,8 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
                               children: [
                                 Text(l10n.syncSuccess,
                                     style: const TextStyle(
-                                        fontSize: 14, fontWeight: FontWeight.w700)),
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700)),
                                 const SizedBox(height: 2),
                                 Text(
                                   l10n.syncResultLabel(

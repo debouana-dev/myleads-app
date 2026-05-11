@@ -50,12 +50,10 @@ class RemoteSyncService {
   // background tasks don't run all 6 CREATE TABLE statements on every call.
   static bool _schemaReady = false;
 
-  // ── Plan gate ────────────────────────────────────────────────────────────────
-
-  /// Returns true when the current user's plan allows full data-table sync
+  /// Returns true when the current user's effective plan allows full data-table sync
   /// (premium or business). The `users` table is always synced regardless.
-  static bool get _hasSyncPlan {
-    final plan = StorageService.userPlan;
+  static Future<bool> _hasSyncPlan() async {
+    final plan = await StorageService.getEffectivePlan();
     return plan == 'premium' || plan == 'business';
   }
 
@@ -550,7 +548,7 @@ class RemoteSyncService {
           await _upsertUser(conn, row);
           return;
         }
-        if (!_hasSyncPlan) return;
+        if (!(await _hasSyncPlan())) return;
         switch (table) {
           case 'contacts':
             await _upsertContact(conn, row);
@@ -562,7 +560,7 @@ class RemoteSyncService {
             await _upsertOrganization(conn, row);
           case 'organization_members':
             await _upsertOrgMember(conn, row);
-          case 'payment_history':      
+          case 'payment_history':
             await _upsertPaymentRecord(conn, row);
         }
       });
@@ -573,7 +571,7 @@ class RemoteSyncService {
   /// Data-table deletes require a premium or business plan.
   static Future<void> _deleteRowBackground(String table, String id) =>
       _fireAndForget((conn) async {
-        if (!_hasSyncPlan) return;
+        if (!(await _hasSyncPlan())) return;
         if (table == 'contacts') {
           await conn.execute(
             Sql.named('DELETE FROM "interactions" WHERE "contact_id" = @id'),
@@ -630,7 +628,7 @@ class RemoteSyncService {
     }
 
     // Photo migration and data-table push are restricted to premium/business.
-    if (_hasSyncPlan) {
+    if (await _hasSyncPlan()) {
       // Migrate old absolute photo paths → relative, then upload to FTP.
       // Must run before the PostgreSQL upserts so the remote DB receives
       // platform-neutral relative paths.
@@ -652,7 +650,7 @@ class RemoteSyncService {
       var reminderCount = 0;
       var interactionCount = 0;
 
-      if (_hasSyncPlan) {
+      if (await _hasSyncPlan()) {
         // Contacts
         final contacts = await DatabaseService.getRawContactRows(userId);
         for (final row in contacts) {
@@ -904,7 +902,7 @@ class RemoteSyncService {
       }
 
       // Data-table pull is restricted to premium / business plans.
-      if (!_hasSyncPlan) {
+      if (!(await _hasSyncPlan())) {
         final now = DateTime.now().toIso8601String();
         await DatabaseService.updateUserLastSync(userId, now);
         return const SyncResult(success: true);
@@ -1036,7 +1034,7 @@ class RemoteSyncService {
       }
 
       // ── Payment history ───────────────────────────────────────────────────
-      if (_hasSyncPlan) {
+      if (await _hasSyncPlan()) {
         final payRes = await conn.execute(
           Sql.named('SELECT * FROM "payment_history" WHERE "user_id" = @uid'),
           parameters: {'uid': userId},
@@ -1361,7 +1359,8 @@ class RemoteSyncService {
         Sql.named('DELETE FROM "organizations" WHERE "id" = @id'),
         parameters: {'id': orgId},
       );
-      debugPrint('RemoteSyncService: org $orgId permanently deleted from cloud');
+      debugPrint(
+          'RemoteSyncService: org $orgId permanently deleted from cloud');
     } catch (e) {
       debugPrint('RemoteSyncService.deleteOrganizationDataFromCloud: $e');
     } finally {

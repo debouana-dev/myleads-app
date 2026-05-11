@@ -1538,6 +1538,30 @@ class DatabaseService {
     return rows.isNotEmpty;
   }
 
+  static Future<bool> isUserActiveInOrganization(String userId) async {
+    final db = await database;
+    final rows = await db.query(
+      'organization_members',
+      where: 'user_id = ? AND status = ?',
+      whereArgs: [userId, 'active'],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  /// Returns true when the given user belongs to any organization,
+  /// regardless of their membership status.
+  static Future<bool> isUserAssignedToOrganization(String userId) async {
+    final db = await database;
+    final rows = await db.query(
+      'organization_members',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
   /// Update the edit/create/view-reminders/view-history privileges for a single member.
   static Future<void> updateMemberPrivileges({
     required String orgId,

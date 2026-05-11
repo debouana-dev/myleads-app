@@ -11,7 +11,7 @@ import 'remote_sync_service.dart';
 import 'storage_service.dart';
 import 'subscription_service.dart';
 
-const _kPeriodicTaskName    = 'myleads_notification_check';
+const _kPeriodicTaskName = 'myleads_notification_check';
 const _kBusinessSyncTaskName = 'myleads_business_sync';
 
 /// Entry point called by WorkManager in a background isolate.
@@ -33,14 +33,14 @@ void callbackDispatcher() {
 
       if (task == _kBusinessSyncTaskName) {
         // Belt-and-suspenders plan check — skip silently if plan was downgraded.
-        if (StorageService.userPlan != 'business') return true;
+        if (await StorageService.getEffectivePlan() != 'business') return true;
         await RemoteSyncService.push(ownerId);
         await RemoteSyncService.pull(ownerId);
         return true;
       }
 
       final reminders = await DatabaseService.getAllRemindersForOwner(ownerId);
-      final contacts  = await DatabaseService.getAllContactsForOwner(ownerId);
+      final contacts = await DatabaseService.getAllContactsForOwner(ownerId);
 
       await NotificationService.runPeriodicCheck(
         reminders: reminders,
@@ -66,7 +66,7 @@ Future<void> initBackgroundTasks() async {
       existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
       constraints: Constraints(networkType: NetworkType.notRequired),
     );
-    if (StorageService.userPlan == 'business') {
+    if (await StorageService.getEffectivePlan() == 'business') {
       await scheduleBusinessSync();
     }
   } catch (_) {}

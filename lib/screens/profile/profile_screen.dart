@@ -79,12 +79,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Widget build(BuildContext context) {
     final l10n = ref.watch(l10nProvider);
     final auth = ref.watch(authProvider);
+    final effectivePlan = ref.watch(effectivePlanProvider).maybeWhen(
+          data: (plan) => plan,
+          orElse: () => auth.plan,
+        );
     final contacts = ref.watch(contactsProvider);
     final orgState = ref.watch(organizationProvider);
     final hasOrg = orgState.organization != null;
     final orgRole = StorageService.currentUser?.orgRole;
-    final displayName =
-        auth.userName.isEmpty ? (l10n.isEnglish ? 'User' : 'Utilisateur') : auth.userName;
+    final displayName = auth.userName.isEmpty
+        ? (l10n.isEnglish ? 'User' : 'Utilisateur')
+        : auth.userName;
     final displayEmail = auth.userEmail.isEmpty ? '—' : auth.userEmail;
     final displayInitials = _initialsFor(displayName);
 
@@ -134,7 +139,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             ),
                             image: auth.userPhotoPath != null && !kIsWeb
                                 ? DecorationImage(
-                                    image: FileImage(File(PhotoStorageService.resolveAbsolutePath(auth.userPhotoPath)!)),
+                                    image: FileImage(File(
+                                        PhotoStorageService.resolveAbsolutePath(
+                                            auth.userPhotoPath)!)),
                                     fit: BoxFit.cover,
                                   )
                                 : null,
@@ -161,8 +168,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             decoration: BoxDecoration(
                               color: AppColors.accent,
                               shape: BoxShape.circle,
-                              border:
-                                  Border.all(color: Colors.white, width: 2),
+                              border: Border.all(color: Colors.white, width: 2),
                             ),
                             child: const Icon(Icons.camera_alt,
                                 size: 14, color: AppColors.primary),
@@ -253,10 +259,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     context,
                     Icons.cloud_upload_rounded,
                     l10n.syncLabel,
-                    auth.plan == 'free' ? l10n.syncLockedDesc : l10n.syncDesc,
+                    effectivePlan == 'free'
+                        ? l10n.syncLockedDesc
+                        : l10n.syncDesc,
                     AppColors.success.withOpacity(0.1),
                     AppColors.success,
-                    () => auth.plan == 'free'
+                    () => effectivePlan == 'free'
                         ? context.push('/pricing')
                         : context.push('/sync'),
                   ),
