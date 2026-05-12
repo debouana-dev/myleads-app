@@ -313,7 +313,7 @@ class ContactImportExportService {
         'status', 'rating', 'priority', 'lead_status', 'x_me2leads_status',
       ])),
       ownerId: ownerId,
-      captureMethod: 'manual',
+      captureMethod: 'imported',
     );
   }
 
@@ -376,7 +376,7 @@ class ContactImportExportService {
       tags: tags,
       status: status,
       ownerId: ownerId,
-      captureMethod: 'manual',
+      captureMethod: 'imported',
     );
   }
 
@@ -421,7 +421,7 @@ class ContactImportExportService {
       tags: _parseTags(map['tags'] ?? ''),
       status: _resolveStatus(map['status'] ?? ''),
       ownerId: ownerId,
-      captureMethod: 'manual',
+      captureMethod: 'imported',
       createdAt: createdAt,
     );
   }
