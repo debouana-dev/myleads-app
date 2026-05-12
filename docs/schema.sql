@@ -167,12 +167,12 @@ CREATE TABLE IF NOT EXISTS "organizations" (
 
 
 -- ============================================================
--- TABLE: organization_members  (v7 + v8 privileges + v10 reminder access + v12 history access + v18 member profile denormalization)
+-- TABLE: organization_members  (v7 + v8 privileges + v10 reminder access + v12 history access + v18 member profile denormalization + v20 export access)
 -- role: admin | member
 -- status: active | suspended
 -- Denormalized member profile fields are stored here for fast local display.
--- can_edit / can_create / can_view_reminders / can_view_history: per-member flags.
--- Admins always have all four set to 1 regardless of stored value.
+-- can_edit / can_create / can_view_reminders / can_view_history / can_export_contacts: per-member flags.
+-- Admins always have all five set to 1 regardless of stored value.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS "organization_members" (
   "id"                  VARCHAR(36)  NOT NULL,
@@ -192,6 +192,7 @@ CREATE TABLE IF NOT EXISTS "organization_members" (
   "can_create"          SMALLINT     NOT NULL DEFAULT 1,
   "can_view_reminders"  SMALLINT     NOT NULL DEFAULT 0,
   "can_view_history"    SMALLINT     NOT NULL DEFAULT 0,
+  "can_export_contacts" SMALLINT     NOT NULL DEFAULT 0,
 
   PRIMARY KEY ("id"),
   UNIQUE ("organization_id", "user_id")
@@ -315,6 +316,11 @@ ALTER TABLE "organizations"
 ALTER TABLE "payment_history"
   ADD COLUMN IF NOT EXISTS "transaction_id" VARCHAR(10) NOT NULL DEFAULT '';
 
+-- v20: per-member permission to export shared org contacts
+ALTER TABLE "organization_members"
+  ADD COLUMN IF NOT EXISTS "can_export_contacts" SMALLINT NOT NULL DEFAULT 0;
+UPDATE "organization_members" SET "can_export_contacts" = 1 WHERE "role" = 'admin';
+
 -- ============================================================
 -- Schema version history
 -- ============================================================
@@ -338,4 +344,6 @@ ALTER TABLE "payment_history"
 -- v18   : organization_members first_name + last_name + nickname + company +
 --         biography + photo_path — denormalized member profile fields for org display
 -- v19   : payment_history.transaction_id — human-readable receipt ID (M2L + 7 digits)
+-- v20   : organization_members.can_export_contacts — controls whether a member
+--         can export shared org contacts (default 0; admins always 1)
 -- ============================================================

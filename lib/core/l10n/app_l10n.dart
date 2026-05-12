@@ -793,6 +793,8 @@ class AppL10n {
   String get viewHistoryPrivilege => _en
       ? 'Can view shared contact history'
       : "Peut voir l'historique des contacts partagés";
+  String get exportPrivilege =>
+      _en ? 'Can export shared contacts' : 'Peut exporter les contacts partagés';
   String get memberManagement => _en ? 'Manage member' : 'Gérer le membre';
   String get youLabel => _en ? '(you)' : '(vous)';
   String get suspendMember => _en ? 'Suspend' : 'Suspendre';
