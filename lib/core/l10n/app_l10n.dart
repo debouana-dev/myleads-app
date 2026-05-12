@@ -48,7 +48,7 @@ class AppL10n {
 
   // ─── Auth – Common ───────────────────────────────────────────────────────
   String get emailLabel => _en ? 'Email' : 'Email';
-  String get emailHint => 'votre@email.com';
+  String get emailHint => _en ? 'your@email.com' : 'votre@email.com';
   String get passwordLabel => _en ? 'Password' : 'Mot de passe';
   String get passwordHint => '••••••••';
   String get orContinueWith => _en ? 'or continue with' : 'ou continuer avec';
@@ -649,8 +649,7 @@ class AppL10n {
   // ─── Transaction Details ──────────────────────────────────────────────────
   String get transactionDetails =>
       _en ? 'Transaction Details' : 'Détails de la transaction';
-  String get validityPeriod =>
-      _en ? 'Validity Period' : 'Période de validité';
+  String get validityPeriod => _en ? 'Validity Period' : 'Période de validité';
   String get validUntil => _en ? 'Valid until' : 'Valable jusqu\'au';
   String get exportAsPdf => _en ? 'Export as PDF' : 'Exporter en PDF';
   String get numberOfLicenses => _en ? 'Licenses' : 'Licences';
