@@ -288,6 +288,13 @@ class RemoteSyncService {
         "role"               VARCHAR(20) NOT NULL DEFAULT 'member',
         "status"             VARCHAR(20) NOT NULL DEFAULT 'active',
         "joined_at"          VARCHAR(50) NOT NULL,
+        "first_name"         VARCHAR(255) NOT NULL,
+        "last_name"          VARCHAR(255) NOT NULL,
+        "email"              VARCHAR(255),
+        "nickname"           VARCHAR(255),
+        "company"            VARCHAR(255),
+        "biography"          TEXT,
+        "photo_path"         TEXT,
         "can_edit"           SMALLINT    NOT NULL DEFAULT 0,
         "can_create"         SMALLINT    NOT NULL DEFAULT 1,
         "can_view_reminders" SMALLINT    NOT NULL DEFAULT 0,
@@ -314,6 +321,29 @@ class RemoteSyncService {
     );
     await conn.execute(
       'UPDATE "organization_members" SET "can_view_history" = 1 WHERE "role" = \'admin\' AND "can_view_history" = 0',
+    );
+
+    // v18: denormalized member profile fields on org membership rows.
+    await conn.execute(
+      'ALTER TABLE "organization_members" ADD COLUMN IF NOT EXISTS "first_name" VARCHAR(255) NOT NULL DEFAULT \'\'',
+    );
+    await conn.execute(
+      'ALTER TABLE "organization_members" ADD COLUMN IF NOT EXISTS "last_name" VARCHAR(255) NOT NULL DEFAULT \'\'',
+    );
+    await conn.execute(
+      'ALTER TABLE "organization_members" ADD COLUMN IF NOT EXISTS "email" VARCHAR(255)',
+    );
+    await conn.execute(
+      'ALTER TABLE "organization_members" ADD COLUMN IF NOT EXISTS "nickname" VARCHAR(255)',
+    );
+    await conn.execute(
+      'ALTER TABLE "organization_members" ADD COLUMN IF NOT EXISTS "company" VARCHAR(255)',
+    );
+    await conn.execute(
+      'ALTER TABLE "organization_members" ADD COLUMN IF NOT EXISTS "biography" TEXT',
+    );
+    await conn.execute(
+      'ALTER TABLE "organization_members" ADD COLUMN IF NOT EXISTS "photo_path" TEXT',
     );
 
     // v13: Stripe payment history table.
@@ -1374,12 +1404,17 @@ class RemoteSyncService {
       Sql.named('''
         INSERT INTO "organization_members"
           (id,organization_id,user_id,role,status,joined_at,
+           first_name,last_name,email,nickname,company,biography,photo_path,
            can_edit,can_create,can_view_reminders,can_view_history)
         VALUES
           (@id,@organization_id,@user_id,@role,@status,@joined_at,
+           @first_name,@last_name,@email,@nickname,@company,@biography,@photo_path,
            @can_edit,@can_create,@can_view_reminders,@can_view_history)
         ON CONFLICT (id) DO UPDATE SET
           role=EXCLUDED.role,status=EXCLUDED.status,
+          first_name=EXCLUDED.first_name,last_name=EXCLUDED.last_name,
+          email=EXCLUDED.email,nickname=EXCLUDED.nickname,company=EXCLUDED.company,
+          biography=EXCLUDED.biography,photo_path=EXCLUDED.photo_path,
           can_edit=EXCLUDED.can_edit,can_create=EXCLUDED.can_create,
           can_view_reminders=EXCLUDED.can_view_reminders,
           can_view_history=EXCLUDED.can_view_history
@@ -1391,6 +1426,13 @@ class RemoteSyncService {
         'role': r['role'] ?? 'member',
         'status': r['status'] ?? 'active',
         'joined_at': r['joined_at'],
+        'first_name': r['first_name'] ?? '',
+        'last_name': r['last_name'] ?? '',
+        'email': r['email'],
+        'nickname': r['nickname'],
+        'company': r['company'],
+        'biography': r['biography'],
+        'photo_path': r['photo_path'],
         'can_edit': r['can_edit'] ?? 0,
         'can_create': r['can_create'] ?? 1,
         'can_view_reminders': r['can_view_reminders'] ?? 0,
