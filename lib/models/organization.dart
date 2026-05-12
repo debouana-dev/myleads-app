@@ -5,10 +5,12 @@ class Organization {
   final String ownerId; // admin's user id
   final String inviteCode; // 8-char alphanumeric code for joining
   final DateTime createdAt;
-  final int licenseCount;           // number of Business licenses purchased (includes admin)
+  final int
+      licenseCount; // number of Business licenses purchased (includes admin)
   final DateTime? orgPlanExpiresAt; // when org licenses expire
-  final String orgStatus;           // 'active' | 'suspended'
-  final DateTime? orgSuspendedAt;   // when org was suspended (for 6-month deletion timer)
+  final String orgStatus; // 'active' | 'suspended'
+  final DateTime?
+      orgSuspendedAt; // when org was suspended (for 6-month deletion timer)
 
   Organization({
     required this.id,
@@ -55,7 +57,8 @@ class Organization {
       licenseCount: licenseCount ?? this.licenseCount,
       orgPlanExpiresAt: orgPlanExpiresAt ?? this.orgPlanExpiresAt,
       orgStatus: orgStatus ?? this.orgStatus,
-      orgSuspendedAt: clearOrgSuspendedAt ? null : (orgSuspendedAt ?? this.orgSuspendedAt),
+      orgSuspendedAt:
+          clearOrgSuspendedAt ? null : (orgSuspendedAt ?? this.orgSuspendedAt),
     );
   }
 }
@@ -71,13 +74,18 @@ class OrgMember {
   // Denormalized user info (populated at load time).
   final String firstName;
   final String lastName;
-  final String email;
+  final String? email;
+  final String? nickname;
+  final String? company;
+  final String? biography;
   final String? photoPath;
   final int contactCount;
-  final bool canEdit;          // may edit any org contact (admin always true)
-  final bool canCreate;        // may create new contacts (admin always true)
-  final bool canViewReminders; // may view reminders on shared contacts (admin always true)
-  final bool canViewHistory;   // may view history records authored by other members (admin always true)
+  final bool canEdit; // may edit any org contact (admin always true)
+  final bool canCreate; // may create new contacts (admin always true)
+  final bool
+      canViewReminders; // may view reminders on shared contacts (admin always true)
+  final bool
+      canViewHistory; // may view history records authored by other members (admin always true)
 
   OrgMember({
     required this.id,
@@ -88,7 +96,10 @@ class OrgMember {
     DateTime? joinedAt,
     required this.firstName,
     required this.lastName,
-    required this.email,
+    this.email,
+    this.nickname,
+    this.company,
+    this.biography,
     this.photoPath,
     this.contactCount = 0,
     this.canEdit = false,
@@ -109,6 +120,9 @@ class OrgMember {
     String? firstName,
     String? lastName,
     String? email,
+    String? nickname,
+    String? company,
+    String? biography,
     String? photoPath,
     int? contactCount,
     bool? canEdit,
@@ -126,6 +140,9 @@ class OrgMember {
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
       email: email ?? this.email,
+      nickname: nickname ?? this.nickname,
+      company: company ?? this.company,
+      biography: biography ?? this.biography,
       photoPath: photoPath ?? this.photoPath,
       contactCount: contactCount ?? this.contactCount,
       canEdit: canEdit ?? this.canEdit,

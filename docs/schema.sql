@@ -1,5 +1,5 @@
 -- ============================================================
--- me2leads  —  PostgreSQL schema v17
+-- me2leads  —  PostgreSQL schema v18
 -- PostgreSQL 14+
 -- Source of truth: lib/services/remote_sync_service.dart (_ensureSchema)
 --
@@ -167,9 +167,10 @@ CREATE TABLE IF NOT EXISTS "organizations" (
 
 
 -- ============================================================
--- TABLE: organization_members  (v7 + v8 privileges + v10 reminder access + v12 history access)
+-- TABLE: organization_members  (v7 + v8 privileges + v10 reminder access + v12 history access + v18 member profile denormalization)
 -- role: admin | member
 -- status: active | suspended
+-- Denormalized member profile fields are stored here for fast local display.
 -- can_edit / can_create / can_view_reminders / can_view_history: per-member flags.
 -- Admins always have all four set to 1 regardless of stored value.
 -- ============================================================
@@ -180,6 +181,13 @@ CREATE TABLE IF NOT EXISTS "organization_members" (
   "role"                VARCHAR(20)  NOT NULL DEFAULT 'member',
   "status"              VARCHAR(20)  NOT NULL DEFAULT 'active',
   "joined_at"           VARCHAR(50)  NOT NULL,
+  "first_name"          VARCHAR(255) NOT NULL DEFAULT '',
+  "last_name"           VARCHAR(255) NOT NULL DEFAULT '',
+  "email"               VARCHAR(255),
+  "nickname"            VARCHAR(255),
+  "company"             VARCHAR(255),
+  "biography"           TEXT,
+  "photo_path"          TEXT,
   "can_edit"            SMALLINT     NOT NULL DEFAULT 0,
   "can_create"          SMALLINT     NOT NULL DEFAULT 1,
   "can_view_reminders"  SMALLINT     NOT NULL DEFAULT 0,
@@ -218,7 +226,7 @@ CREATE INDEX IF NOT EXISTS "idx_payment_history_user" ON "payment_history" ("use
 
 -- ============================================================
 -- UPGRADE SCRIPT — run this section against an existing cloud DB
--- to bring it to v12.  Every statement is idempotent (safe to
+-- to bring it to v18.  Every statement is idempotent (safe to
 -- re-run).  Execute in order; stop on first error and investigate.
 -- ============================================================
 
@@ -252,6 +260,16 @@ ALTER TABLE "organization_members"
 UPDATE "organization_members"
   SET "can_view_history" = 1
   WHERE "role" = 'admin';
+
+-- v18: denormalized member profile fields on organization_members
+ALTER TABLE "organization_members"
+  ADD COLUMN IF NOT EXISTS "first_name" VARCHAR(255) NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS "last_name" VARCHAR(255) NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS "email" VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS "nickname" VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS "company" VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS "biography" TEXT,
+  ADD COLUMN IF NOT EXISTS "photo_path" TEXT;
 
 -- fix: widen invite_code from CHAR(6) to CHAR(8) — the app generator
 -- has always produced 8-character codes; CHAR(6) was a documentation error.
@@ -311,4 +329,6 @@ ALTER TABLE "organizations"
 -- v17   : organizations.license_count + org_plan_expires_at + org_status +
 --         org_suspended_at — per-org Business license pool with expiry,
 --         suspension, and 6-month cloud deletion lifecycle
+-- v18   : organization_members first_name + last_name + nickname + company +
+--         biography + photo_path — denormalized member profile fields for org display
 -- ============================================================

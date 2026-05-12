@@ -197,6 +197,13 @@ Future<void> _createSchema(Database db, int version) async {
       role TEXT NOT NULL DEFAULT 'member',
       status TEXT NOT NULL DEFAULT 'active',
       joined_at TEXT NOT NULL,
+      first_name TEXT NOT NULL,
+      last_name TEXT NOT NULL,
+      email TEXT,
+      nickname TEXT,
+      company TEXT,
+      biography TEXT,
+      photo_path TEXT,
       can_edit INTEGER NOT NULL DEFAULT 0,
       can_create INTEGER NOT NULL DEFAULT 1,
       can_view_reminders INTEGER NOT NULL DEFAULT 0,
@@ -367,7 +374,8 @@ void main() {
       await _seedUsers();
       await DatabaseService.insertOrganization(_makeOrg());
 
-      final found = await DatabaseService.findOrganizationByInviteCode('acme1234');
+      final found =
+          await DatabaseService.findOrganizationByInviteCode('acme1234');
       expect(found, isNotNull);
       expect(found!.id, equals(_orgId));
     });
@@ -377,7 +385,8 @@ void main() {
       final org = _makeOrg();
       await DatabaseService.insertOrganization(org);
 
-      await DatabaseService.updateOrganization(org.copyWith(name: 'Globex Inc'));
+      await DatabaseService.updateOrganization(
+          org.copyWith(name: 'Globex Inc'));
 
       final updated = await DatabaseService.findOrganizationById(_orgId);
       expect(updated!.name, equals('Globex Inc'));
@@ -445,8 +454,8 @@ void main() {
       final members = await DatabaseService.getMembersForOrganization(_orgId);
       final bob = members.firstWhere((m) => m.userId == _member1Id);
       expect(bob.role, equals('member'));
-      expect(bob.canCreate, isTrue);     // default = 1
-      expect(bob.canEdit, isFalse);      // default = 0
+      expect(bob.canCreate, isTrue); // default = 1
+      expect(bob.canEdit, isFalse); // default = 0
       expect(bob.canViewReminders, isFalse);
       expect(bob.canViewHistory, isFalse);
     });
@@ -565,6 +574,50 @@ void main() {
       expect(bob.firstName, equals('Bob'));
       expect(bob.lastName, equals('Member'));
       expect(bob.email, equals('bob@acme.com'));
+    });
+
+    test('updateUser propagates profile changes into organization_members',
+        () async {
+      await DatabaseService.insertOrgMember(
+        id: 'mem-bob',
+        orgId: _orgId,
+        userId: _member1Id,
+        role: 'member',
+      );
+
+      final updated =
+          (await DatabaseService.findUserById(_member1Id))!.copyWith(
+        firstName: 'Robert',
+        lastName: 'Memberson',
+        email: 'robert@acme.com',
+        nickname: 'Rob',
+        companyName: 'Acme Subsidiary',
+        biography: 'Updated member bio',
+        photoPath: 'profile_pictures/$_member1Id/robert.jpg',
+      );
+
+      await DatabaseService.updateUser(updated);
+
+      final rows = await DatabaseService.getRawOrgMemberRows(_orgId);
+      final bobRow = rows.firstWhere((r) => r['user_id'] == _member1Id);
+      expect(bobRow['first_name'], equals('Robert'));
+      expect(bobRow['last_name'], equals('Memberson'));
+      expect(bobRow['email'], equals('robert@acme.com'));
+      expect(bobRow['nickname'], equals('Rob'));
+      expect(bobRow['company'], equals('Acme Subsidiary'));
+      expect(bobRow['biography'], equals('Updated member bio'));
+      expect(bobRow['photo_path'],
+          equals('profile_pictures/$_member1Id/robert.jpg'));
+
+      final members = await DatabaseService.getMembersForOrganization(_orgId);
+      final bob = members.firstWhere((m) => m.userId == _member1Id);
+      expect(bob.firstName, equals('Robert'));
+      expect(bob.lastName, equals('Memberson'));
+      expect(bob.email, equals('robert@acme.com'));
+      expect(bob.nickname, equals('Rob'));
+      expect(bob.company, equals('Acme Subsidiary'));
+      expect(bob.biography, equals('Updated member bio'));
+      expect(bob.photoPath, equals('profile_pictures/$_member1Id/robert.jpg'));
     });
   });
 
@@ -707,10 +760,14 @@ void main() {
       final earlier = DateTime(2026, 1, 1);
       final later = DateTime(2026, 6, 1);
       await DatabaseService.insertContact(_makeContact(
-          id: 'early', ownerId: _adminId, phone: '+33611111111',
+          id: 'early',
+          ownerId: _adminId,
+          phone: '+33611111111',
           createdAt: earlier));
       await DatabaseService.insertContact(_makeContact(
-          id: 'late', ownerId: _member1Id, phone: '+33611111111',
+          id: 'late',
+          ownerId: _member1Id,
+          phone: '+33611111111',
           createdAt: later));
 
       final contacts =
@@ -724,10 +781,14 @@ void main() {
       final earlier = DateTime(2026, 1, 1);
       final later = DateTime(2026, 6, 1);
       await DatabaseService.insertContact(_makeContact(
-          id: 'e-first', ownerId: _adminId, email: 'dupe@test.com',
+          id: 'e-first',
+          ownerId: _adminId,
+          email: 'dupe@test.com',
           createdAt: earlier));
       await DatabaseService.insertContact(_makeContact(
-          id: 'e-second', ownerId: _member2Id, email: 'dupe@test.com',
+          id: 'e-second',
+          ownerId: _member2Id,
+          email: 'dupe@test.com',
           createdAt: later));
 
       final contacts =
@@ -737,10 +798,10 @@ void main() {
     });
 
     test('suspended member contacts excluded from org view', () async {
-      await DatabaseService.insertContact(
-          _makeContact(id: 'active-c', ownerId: _adminId, phone: '+33600000001'));
-      await DatabaseService.insertContact(
-          _makeContact(id: 'suspended-c', ownerId: _member1Id, phone: '+33600000099'));
+      await DatabaseService.insertContact(_makeContact(
+          id: 'active-c', ownerId: _adminId, phone: '+33600000001'));
+      await DatabaseService.insertContact(_makeContact(
+          id: 'suspended-c', ownerId: _member1Id, phone: '+33600000099'));
 
       await DatabaseService.updateMemberStatus(
           orgId: _orgId, userId: _member1Id, status: 'suspended');
@@ -751,14 +812,17 @@ void main() {
       expect(contacts.map((c) => c.id), isNot(contains('suspended-c')));
     });
 
-    test('getOrgDeduplicatedContactCount matches actual deduplication', () async {
+    test('getOrgDeduplicatedContactCount matches actual deduplication',
+        () async {
       await DatabaseService.insertContact(
           _makeContact(id: 'u1', ownerId: _adminId, phone: '+33600000001'));
       await DatabaseService.insertContact(
           _makeContact(id: 'u2', ownerId: _member1Id, phone: '+33600000002'));
       // Duplicate of u1 (same phone)
       await DatabaseService.insertContact(_makeContact(
-          id: 'dup', ownerId: _member2Id, phone: '+33600000001',
+          id: 'dup',
+          ownerId: _member2Id,
+          phone: '+33600000001',
           createdAt: DateTime(2026, 12, 1)));
 
       final count =
@@ -786,10 +850,10 @@ void main() {
 
       await DatabaseService.insertContact(
           _makeContact(id: contactId, ownerId: _adminId));
-      await DatabaseService.insertReminder(
-          _makeReminder(id: 'r-admin', ownerId: _adminId, contactId: contactId));
-      await DatabaseService.insertReminder(
-          _makeReminder(id: 'r-bob', ownerId: _member1Id, contactId: contactId));
+      await DatabaseService.insertReminder(_makeReminder(
+          id: 'r-admin', ownerId: _adminId, contactId: contactId));
+      await DatabaseService.insertReminder(_makeReminder(
+          id: 'r-bob', ownerId: _member1Id, contactId: contactId));
     });
 
     test('canViewReminders=false returns only own reminders', () async {
@@ -829,8 +893,8 @@ void main() {
     });
 
     test('transferNonDuplicate moves unique contacts to admin', () async {
-      await DatabaseService.insertContact(
-          _makeContact(id: 'bob-unique', ownerId: _member1Id, phone: '+33699000001'));
+      await DatabaseService.insertContact(_makeContact(
+          id: 'bob-unique', ownerId: _member1Id, phone: '+33699000001'));
 
       final adminId = await DatabaseService.transferNonDuplicateContactsToAdmin(
           fromUserId: _member1Id, orgId: _orgId);
@@ -841,13 +905,14 @@ void main() {
       expect(adminContacts.map((c) => c.id), contains('bob-unique'));
     });
 
-    test('transferNonDuplicate leaves contacts that duplicate another member', () async {
+    test('transferNonDuplicate leaves contacts that duplicate another member',
+        () async {
       // Carol has the same phone as Bob → Bob's contact is a dup from Carol's perspective
       // when we transfer Bob's, Carol still owns hers.
-      await DatabaseService.insertContact(
-          _makeContact(id: 'bob-dup', ownerId: _member1Id, phone: '+33699111111'));
-      await DatabaseService.insertContact(
-          _makeContact(id: 'carol-same', ownerId: _member2Id, phone: '+33699111111'));
+      await DatabaseService.insertContact(_makeContact(
+          id: 'bob-dup', ownerId: _member1Id, phone: '+33699111111'));
+      await DatabaseService.insertContact(_makeContact(
+          id: 'carol-same', ownerId: _member2Id, phone: '+33699111111'));
 
       await DatabaseService.transferNonDuplicateContactsToAdmin(
           fromUserId: _member1Id, orgId: _orgId);
@@ -858,14 +923,16 @@ void main() {
       expect(bobContacts.map((c) => c.id), contains('bob-dup'));
     });
 
-    test('transferNonDuplicate treats admin-matching phone as a duplicate (stays with member)', () async {
+    test(
+        'transferNonDuplicate treats admin-matching phone as a duplicate (stays with member)',
+        () async {
       // Admin is also counted in "other active members", so if admin already has
       // a contact with the same phone, Bob's contact is treated as a duplicate
       // and stays with Bob — it is NOT transferred to avoid a double-copy.
-      await DatabaseService.insertContact(
-          _makeContact(id: 'admin-c', ownerId: _adminId, phone: '+33699222222'));
-      await DatabaseService.insertContact(
-          _makeContact(id: 'bob-c', ownerId: _member1Id, phone: '+33699222222'));
+      await DatabaseService.insertContact(_makeContact(
+          id: 'admin-c', ownerId: _adminId, phone: '+33699222222'));
+      await DatabaseService.insertContact(_makeContact(
+          id: 'bob-c', ownerId: _member1Id, phone: '+33699222222'));
 
       await DatabaseService.transferNonDuplicateContactsToAdmin(
           fromUserId: _member1Id, orgId: _orgId);
@@ -880,21 +947,23 @@ void main() {
       expect(adminContacts.map((c) => c.id), isNot(contains('bob-c')));
     });
 
-    test('transferNonDuplicate returns null when fromUser is the admin', () async {
+    test('transferNonDuplicate returns null when fromUser is the admin',
+        () async {
       final result = await DatabaseService.transferNonDuplicateContactsToAdmin(
           fromUserId: _adminId, orgId: _orgId);
       expect(result, isNull);
     });
 
-    test('transferOrgContactsToAdmin moves ALL contacts and nulls colliding lookups',
+    test(
+        'transferOrgContactsToAdmin moves ALL contacts and nulls colliding lookups',
         () async {
-      await DatabaseService.insertContact(
-          _makeContact(id: 'admin-existing', ownerId: _adminId, phone: '+33600001111'));
-      await DatabaseService.insertContact(
-          _makeContact(id: 'carol-new', ownerId: _member2Id, phone: '+33600009999'));
+      await DatabaseService.insertContact(_makeContact(
+          id: 'admin-existing', ownerId: _adminId, phone: '+33600001111'));
+      await DatabaseService.insertContact(_makeContact(
+          id: 'carol-new', ownerId: _member2Id, phone: '+33600009999'));
       // Same phone as admin → collision
-      await DatabaseService.insertContact(
-          _makeContact(id: 'carol-dup', ownerId: _member2Id, phone: '+33600001111'));
+      await DatabaseService.insertContact(_makeContact(
+          id: 'carol-dup', ownerId: _member2Id, phone: '+33600001111'));
 
       await DatabaseService.transferOrgContactsToAdmin(
           fromUserId: _member2Id, orgId: _orgId);
@@ -902,7 +971,8 @@ void main() {
       final adminContacts =
           await DatabaseService.getAllContactsForOwner(_adminId);
       final adminIds = adminContacts.map((c) => c.id).toSet();
-      expect(adminIds, containsAll(['admin-existing', 'carol-new', 'carol-dup']));
+      expect(
+          adminIds, containsAll(['admin-existing', 'carol-new', 'carol-dup']));
 
       // carol-dup collision → phone_lookup nulled
       final db = await DatabaseService.database;
@@ -939,8 +1009,11 @@ void main() {
 
     test('insertOrganization fires upsert callback with org table', () async {
       final newOrg = Organization(
-          id: 'org-new', name: 'NewCo', ownerId: _adminId,
-          inviteCode: 'NEWCO001', createdAt: DateTime(2026, 3, 1));
+          id: 'org-new',
+          name: 'NewCo',
+          ownerId: _adminId,
+          inviteCode: 'NEWCO001',
+          createdAt: DateTime(2026, 3, 1));
       await DatabaseService.insertOrganization(newOrg);
 
       final call = upsertCalls.firstWhere((c) => c.table == 'organizations');
@@ -959,7 +1032,9 @@ void main() {
 
     test('deleteOrganization fires delete callback', () async {
       final tempOrg = Organization(
-          id: 'org-temp', name: 'Temp', ownerId: _adminId,
+          id: 'org-temp',
+          name: 'Temp',
+          ownerId: _adminId,
           inviteCode: 'TEMP0001');
       await DatabaseService.insertOrganization(tempOrg);
       upsertCalls.clear();
@@ -1018,7 +1093,8 @@ void main() {
     });
 
     test('insertContact fires upsert callback', () async {
-      final c = _makeContact(id: 'hook-c', ownerId: _adminId, phone: '+33600000042');
+      final c =
+          _makeContact(id: 'hook-c', ownerId: _adminId, phone: '+33600000042');
       await DatabaseService.insertContact(c);
 
       final call = upsertCalls.firstWhere((c) => c.table == 'contacts');
@@ -1026,7 +1102,8 @@ void main() {
     });
 
     test('deleteContact fires delete callback', () async {
-      final c = _makeContact(id: 'hook-del', ownerId: _adminId, phone: '+33600000043');
+      final c = _makeContact(
+          id: 'hook-del', ownerId: _adminId, phone: '+33600000043');
       await DatabaseService.insertContact(c);
       upsertCalls.clear();
 
@@ -1054,7 +1131,8 @@ void main() {
     test('getRawOrganizationRow returns all required MySQL columns', () async {
       final row = await DatabaseService.getRawOrganizationRow(_orgId);
       expect(row, isNotNull);
-      expect(row!.keys, containsAll(['id', 'name', 'owner_id', 'invite_code', 'created_at']));
+      expect(row!.keys,
+          containsAll(['id', 'name', 'owner_id', 'invite_code', 'created_at']));
       expect(row['id'], equals(_orgId));
       expect(row['owner_id'], equals(_adminId));
     });
@@ -1063,10 +1141,20 @@ void main() {
       final rows = await DatabaseService.getRawOrgMemberRows(_orgId);
       expect(rows, hasLength(2));
       for (final row in rows) {
-        expect(row.keys, containsAll([
-          'id', 'organization_id', 'user_id', 'role', 'status', 'joined_at',
-          'can_edit', 'can_create', 'can_view_reminders', 'can_view_history',
-        ]));
+        expect(
+            row.keys,
+            containsAll([
+              'id',
+              'organization_id',
+              'user_id',
+              'role',
+              'status',
+              'joined_at',
+              'can_edit',
+              'can_create',
+              'can_view_reminders',
+              'can_view_history',
+            ]));
       }
       final adminRow = rows.firstWhere((r) => r['user_id'] == _adminId);
       expect(adminRow['can_edit'], equals(1));
@@ -1213,7 +1301,8 @@ void main() {
       expect(org!.inviteCode, equals('NEWCODE1'));
 
       // Old code no longer resolves.
-      final byOld = await DatabaseService.findOrganizationByInviteCode(_orgCode);
+      final byOld =
+          await DatabaseService.findOrganizationByInviteCode(_orgCode);
       expect(byOld, isNull);
     });
 
@@ -1222,7 +1311,8 @@ void main() {
       await DatabaseService.insertOrganization(_makeOrg());
       await DatabaseService.updateOrgInviteCode(_orgId, 'XYZXYZ12');
 
-      final found = await DatabaseService.findOrganizationByInviteCode('xyzxyz12');
+      final found =
+          await DatabaseService.findOrganizationByInviteCode('xyzxyz12');
       expect(found, isNotNull);
       expect(found!.id, equals(_orgId));
     });

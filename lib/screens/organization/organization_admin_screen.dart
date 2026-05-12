@@ -1142,7 +1142,7 @@ class _MemberManagementSheet extends ConsumerWidget {
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
                               color: AppColors.onSurface(context))),
-                      Text(member.role,
+                      Text(member.email ?? '',
                           style: TextStyle(
                               fontSize: 12,
                               color: AppColors.secondary(context))),

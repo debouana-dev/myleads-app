@@ -15,7 +15,7 @@ import '../models/user_account.dart';
 import '../core/utils/validators.dart';
 import 'encryption_service.dart';
 import 'web_db_factory_stub.dart'
-if (dart.library.html) 'web_db_factory_web.dart';
+    if (dart.library.html) 'web_db_factory_web.dart';
 
 /// Local SQLite database service.
 ///
@@ -26,7 +26,7 @@ if (dart.library.html) 'web_db_factory_web.dart';
 class DatabaseService {
   static Database? _db;
   static const _dbName = 'myleads.db';
-  static const _dbVersion = 17;
+  static const _dbVersion = 18;
 
   // ── Remote sync callbacks ──────────────────────────────────────────────────
   static void Function(String table, Map<String, dynamic> row)? _onRemoteUpsert;
@@ -102,19 +102,57 @@ class DatabaseService {
           'ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0');
     }
     if (oldVersion < 5) {
-      try { await db.execute("ALTER TABLE reminders ADD COLUMN contact_ids TEXT NOT NULL DEFAULT '[]'"); } catch (_) {}
-      try { await db.execute('ALTER TABLE reminders ADD COLUMN start_date_time TEXT'); } catch (_) {}
-      try { await db.execute('ALTER TABLE reminders ADD COLUMN end_date_time TEXT'); } catch (_) {}
-      try { await db.execute('ALTER TABLE reminders ADD COLUMN repeat_frequency TEXT'); } catch (_) {}
-      try { await db.execute("ALTER TABLE reminders ADD COLUMN note TEXT NOT NULL DEFAULT ''"); } catch (_) {}
-      try { await db.execute("ALTER TABLE reminders ADD COLUMN todo_action TEXT NOT NULL DEFAULT 'call'"); } catch (_) {}
-      try { await db.execute("ALTER TABLE reminders ADD COLUMN priority_v2 TEXT NOT NULL DEFAULT 'normal'"); } catch (_) {}
-      try { await db.execute("UPDATE reminders SET contact_ids = '[\"' || contact_id || '\"]' WHERE contact_id IS NOT NULL AND (contact_ids = '[]' OR contact_ids IS NULL)"); } catch (_) {}
-      try { await db.execute('UPDATE reminders SET start_date_time = due_date WHERE start_date_time IS NULL AND due_date IS NOT NULL'); } catch (_) {}
-      try { await db.execute("UPDATE reminders SET note = COALESCE(title, '') WHERE (note = '' OR note IS NULL) AND title IS NOT NULL"); } catch (_) {}
-      try { await db.execute("UPDATE reminders SET priority_v2 = 'very_important' WHERE priority = 'urgent'"); } catch (_) {}
-      try { await db.execute("UPDATE reminders SET priority_v2 = 'important' WHERE priority = 'soon'"); } catch (_) {}
-      try { await db.execute("UPDATE reminders SET priority_v2 = 'normal' WHERE priority = 'later' OR priority IS NULL"); } catch (_) {}
+      try {
+        await db.execute(
+            "ALTER TABLE reminders ADD COLUMN contact_ids TEXT NOT NULL DEFAULT '[]'");
+      } catch (_) {}
+      try {
+        await db
+            .execute('ALTER TABLE reminders ADD COLUMN start_date_time TEXT');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE reminders ADD COLUMN end_date_time TEXT');
+      } catch (_) {}
+      try {
+        await db
+            .execute('ALTER TABLE reminders ADD COLUMN repeat_frequency TEXT');
+      } catch (_) {}
+      try {
+        await db.execute(
+            "ALTER TABLE reminders ADD COLUMN note TEXT NOT NULL DEFAULT ''");
+      } catch (_) {}
+      try {
+        await db.execute(
+            "ALTER TABLE reminders ADD COLUMN todo_action TEXT NOT NULL DEFAULT 'call'");
+      } catch (_) {}
+      try {
+        await db.execute(
+            "ALTER TABLE reminders ADD COLUMN priority_v2 TEXT NOT NULL DEFAULT 'normal'");
+      } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE reminders SET contact_ids = '[\"' || contact_id || '\"]' WHERE contact_id IS NOT NULL AND (contact_ids = '[]' OR contact_ids IS NULL)");
+      } catch (_) {}
+      try {
+        await db.execute(
+            'UPDATE reminders SET start_date_time = due_date WHERE start_date_time IS NULL AND due_date IS NOT NULL');
+      } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE reminders SET note = COALESCE(title, '') WHERE (note = '' OR note IS NULL) AND title IS NOT NULL");
+      } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE reminders SET priority_v2 = 'very_important' WHERE priority = 'urgent'");
+      } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE reminders SET priority_v2 = 'important' WHERE priority = 'soon'");
+      } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE reminders SET priority_v2 = 'normal' WHERE priority = 'later' OR priority IS NULL");
+      } catch (_) {}
     }
     if (oldVersion < 6) {
       await db.execute('''
@@ -153,6 +191,12 @@ class DatabaseService {
           role TEXT NOT NULL DEFAULT 'member',
           status TEXT NOT NULL DEFAULT 'active',
           joined_at TEXT NOT NULL,
+          first_name TEXT NOT NULL,
+          last_name TEXT NOT NULL,
+          nickname TEXT,
+          company TEXT,
+          biography TEXT,
+          photo_path TEXT,
           FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
           UNIQUE (organization_id, user_id)
@@ -164,23 +208,49 @@ class DatabaseService {
           'CREATE INDEX IF NOT EXISTS idx_org_members_user ON organization_members(user_id)');
     }
     if (oldVersion < 8) {
-      try { await db.execute('ALTER TABLE organization_members ADD COLUMN can_edit INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
-      try { await db.execute('ALTER TABLE organization_members ADD COLUMN can_create INTEGER NOT NULL DEFAULT 1'); } catch (_) {}
-      try { await db.execute("UPDATE organization_members SET can_edit = 1, can_create = 1 WHERE role = 'admin'"); } catch (_) {}
+      try {
+        await db.execute(
+            'ALTER TABLE organization_members ADD COLUMN can_edit INTEGER NOT NULL DEFAULT 0');
+      } catch (_) {}
+      try {
+        await db.execute(
+            'ALTER TABLE organization_members ADD COLUMN can_create INTEGER NOT NULL DEFAULT 1');
+      } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE organization_members SET can_edit = 1, can_create = 1 WHERE role = 'admin'");
+      } catch (_) {}
     }
     if (oldVersion < 9) {
-      try { await db.execute("ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'"); } catch (_) {}
+      try {
+        await db.execute(
+            "ALTER TABLE users ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'");
+      } catch (_) {}
     }
     if (oldVersion < 10) {
-      try { await db.execute('ALTER TABLE organization_members ADD COLUMN can_view_reminders INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
-      try { await db.execute("UPDATE organization_members SET can_view_reminders = 1 WHERE role = 'admin'"); } catch (_) {}
+      try {
+        await db.execute(
+            'ALTER TABLE organization_members ADD COLUMN can_view_reminders INTEGER NOT NULL DEFAULT 0');
+      } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE organization_members SET can_view_reminders = 1 WHERE role = 'admin'");
+      } catch (_) {}
     }
     if (oldVersion < 11) {
-      try { await db.execute('ALTER TABLE users ADD COLUMN last_sync_at TEXT'); } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE users ADD COLUMN last_sync_at TEXT');
+      } catch (_) {}
     }
     if (oldVersion < 12) {
-      try { await db.execute('ALTER TABLE organization_members ADD COLUMN can_view_history INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
-      try { await db.execute("UPDATE organization_members SET can_view_history = 1 WHERE role = 'admin'"); } catch (_) {}
+      try {
+        await db.execute(
+            'ALTER TABLE organization_members ADD COLUMN can_view_history INTEGER NOT NULL DEFAULT 0');
+      } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE organization_members SET can_view_history = 1 WHERE role = 'admin'");
+      } catch (_) {}
     }
     if (oldVersion < 13) {
       // ✅ Créée avec TOUTES les colonnes finales dès v13
@@ -238,6 +308,37 @@ class DatabaseService {
       try {
         await db.execute(
             'ALTER TABLE organizations ADD COLUMN org_suspended_at TEXT');
+      } catch (_) {}
+    }
+    if (oldVersion < 18) {
+      // v17 → v18: denormalized member profile fields for organization_members
+      try {
+        await db.execute(
+            'ALTER TABLE organization_members ADD COLUMN first_name TEXT NOT NULL DEFAULT ""');
+      } catch (_) {}
+      try {
+        await db.execute(
+            'ALTER TABLE organization_members ADD COLUMN last_name TEXT NOT NULL DEFAULT ""');
+      } catch (_) {}
+      try {
+        await db
+            .execute('ALTER TABLE organization_members ADD COLUMN email TEXT');
+      } catch (_) {}
+      try {
+        await db.execute(
+            'ALTER TABLE organization_members ADD COLUMN nickname TEXT');
+      } catch (_) {}
+      try {
+        await db.execute(
+            'ALTER TABLE organization_members ADD COLUMN company TEXT');
+      } catch (_) {}
+      try {
+        await db.execute(
+            'ALTER TABLE organization_members ADD COLUMN biography TEXT');
+      } catch (_) {}
+      try {
+        await db.execute(
+            'ALTER TABLE organization_members ADD COLUMN photo_path TEXT');
       } catch (_) {}
     }
   }
@@ -415,6 +516,13 @@ class DatabaseService {
         role TEXT NOT NULL DEFAULT 'member',
         status TEXT NOT NULL DEFAULT 'active',
         joined_at TEXT NOT NULL,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        email TEXT,
+        nickname TEXT,
+        company TEXT,
+        biography TEXT,
+        photo_path TEXT,
         can_edit INTEGER NOT NULL DEFAULT 0,
         can_create INTEGER NOT NULL DEFAULT 1,
         can_view_reminders INTEGER NOT NULL DEFAULT 0,
@@ -486,7 +594,7 @@ class DatabaseService {
   static Future<UserAccount?> findUserById(String id) async {
     final db = await database;
     final rows =
-    await db.query('users', where: 'id = ?', whereArgs: [id], limit: 1);
+        await db.query('users', where: 'id = ?', whereArgs: [id], limit: 1);
     if (rows.isEmpty) return null;
     return _userFromRow(rows.first);
   }
@@ -502,7 +610,27 @@ class DatabaseService {
     final db = await database;
     final row = _userToRow(user);
     await db.update('users', row, where: 'id = ?', whereArgs: [user.id]);
+
+    final updatedMemberFields = {
+      'first_name': user.firstName,
+      'last_name': user.lastName,
+      'email': user.email,
+      'nickname': user.nickname,
+      'company': user.companyName,
+      'biography': user.biography,
+      'photo_path': user.photoPath,
+    };
+    await db.update('organization_members', updatedMemberFields,
+        where: 'user_id = ?', whereArgs: [user.id]);
+
     _onRemoteUpsert?.call('users', row);
+
+    final memberRows = await db.query('organization_members',
+        where: 'user_id = ?', whereArgs: [user.id]);
+    for (final memberRow in memberRows) {
+      _onRemoteUpsert?.call(
+          'organization_members', Map<String, dynamic>.from(memberRow));
+    }
   }
 
   static Future<void> updateUserSessionToken(
@@ -653,7 +781,7 @@ class DatabaseService {
   static Future<Contact?> findContactById(String id) async {
     final db = await database;
     final rows =
-    await db.query('contacts', where: 'id = ?', whereArgs: [id], limit: 1);
+        await db.query('contacts', where: 'id = ?', whereArgs: [id], limit: 1);
     if (rows.isEmpty) return null;
     return _contactFromRow(rows.first);
   }
@@ -702,18 +830,19 @@ class DatabaseService {
       final rows = await db.query(
         'contacts',
         where:
-        'owner_id = ? AND phone_lookup = ? ${excludeId != null ? 'AND id != ?' : ''}',
+            'owner_id = ? AND phone_lookup = ? ${excludeId != null ? 'AND id != ?' : ''}',
         whereArgs: [ownerId, phoneLookup, if (excludeId != null) excludeId],
         limit: 1,
       );
-      if (rows.isNotEmpty) return 'Un contact avec ce numéro de téléphone existe déjà';
+      if (rows.isNotEmpty)
+        return 'Un contact avec ce numéro de téléphone existe déjà';
     }
 
     if (emailLookup != null) {
       final rows = await db.query(
         'contacts',
         where:
-        'owner_id = ? AND email_lookup = ? ${excludeId != null ? 'AND id != ?' : ''}',
+            'owner_id = ? AND email_lookup = ? ${excludeId != null ? 'AND id != ?' : ''}',
         whereArgs: [ownerId, emailLookup, if (excludeId != null) excludeId],
         limit: 1,
       );
@@ -750,10 +879,19 @@ class DatabaseService {
     final args = <Object?>[ownerId, fn, ln];
 
     final orParts = <String>[];
-    if (phoneLookup != null) { orParts.add('phone_lookup = ?'); args.add(phoneLookup); }
-    if (emailLookup != null) { orParts.add('email_lookup = ?'); args.add(emailLookup); }
+    if (phoneLookup != null) {
+      orParts.add('phone_lookup = ?');
+      args.add(phoneLookup);
+    }
+    if (emailLookup != null) {
+      orParts.add('email_lookup = ?');
+      args.add(emailLookup);
+    }
     whereParts.add('(${orParts.join(' OR ')})');
-    if (excludeId != null) { whereParts.add('id != ?'); args.add(excludeId); }
+    if (excludeId != null) {
+      whereParts.add('id != ?');
+      args.add(excludeId);
+    }
 
     final rows = await db.query(
       'contacts',
@@ -765,35 +903,35 @@ class DatabaseService {
   }
 
   static Map<String, dynamic> _contactToRow(Contact c) => {
-    'id': c.id,
-    'owner_id': c.ownerId,
-    'first_name': c.firstName,
-    'last_name': c.lastName,
-    'job_title': c.jobTitle,
-    'company': c.company,
-    'phone': c.phone,
-    'email': c.email,
-    'phone_lookup': (c.phone != null && c.phone!.trim().isNotEmpty)
-        ? _hashLookup(Validators.normalizePhone(c.phone))
-        : null,
-    'email_lookup': (c.email != null && c.email!.trim().isNotEmpty)
-        ? _hashLookup(Validators.normalizeEmail(c.email))
-        : null,
-    'source': c.source,
-    'project_1': c.project1,
-    'project_1_budget': c.project1Budget,
-    'project_2': c.project2,
-    'project_2_budget': c.project2Budget,
-    'interest': c.interest,
-    'notes': c.notes,
-    'tags': jsonEncode(c.tags),
-    'status': c.status,
-    'created_at': c.createdAt.toIso8601String(),
-    'last_contact_date': c.lastContactDate?.toIso8601String(),
-    'avatar_color': c.avatarColor,
-    'capture_method': c.captureMethod,
-    'photo_path': c.photoPath,
-  };
+        'id': c.id,
+        'owner_id': c.ownerId,
+        'first_name': c.firstName,
+        'last_name': c.lastName,
+        'job_title': c.jobTitle,
+        'company': c.company,
+        'phone': c.phone,
+        'email': c.email,
+        'phone_lookup': (c.phone != null && c.phone!.trim().isNotEmpty)
+            ? _hashLookup(Validators.normalizePhone(c.phone))
+            : null,
+        'email_lookup': (c.email != null && c.email!.trim().isNotEmpty)
+            ? _hashLookup(Validators.normalizeEmail(c.email))
+            : null,
+        'source': c.source,
+        'project_1': c.project1,
+        'project_1_budget': c.project1Budget,
+        'project_2': c.project2,
+        'project_2_budget': c.project2Budget,
+        'interest': c.interest,
+        'notes': c.notes,
+        'tags': jsonEncode(c.tags),
+        'status': c.status,
+        'created_at': c.createdAt.toIso8601String(),
+        'last_contact_date': c.lastContactDate?.toIso8601String(),
+        'avatar_color': c.avatarColor,
+        'capture_method': c.captureMethod,
+        'photo_path': c.photoPath,
+      };
 
   static Contact _contactFromRow(Map<String, dynamic> row) {
     final phoneEnc = row['phone'] as String?;
@@ -860,7 +998,8 @@ class DatabaseService {
   static Future<void> updateReminder(Reminder reminder) async {
     final db = await database;
     final row = _reminderToRow(reminder);
-    await db.update('reminders', row, where: 'id = ?', whereArgs: [reminder.id]);
+    await db
+        .update('reminders', row, where: 'id = ?', whereArgs: [reminder.id]);
     _onRemoteUpsert?.call('reminders', row);
   }
 
@@ -873,9 +1012,14 @@ class DatabaseService {
   static Map<String, dynamic> _reminderToRow(Reminder r) {
     String legacyPriority;
     switch (r.priority) {
-      case 'very_important': legacyPriority = 'urgent'; break;
-      case 'important': legacyPriority = 'soon'; break;
-      default: legacyPriority = 'later';
+      case 'very_important':
+        legacyPriority = 'urgent';
+        break;
+      case 'important':
+        legacyPriority = 'soon';
+        break;
+      default:
+        legacyPriority = 'later';
     }
     return {
       'id': r.id,
@@ -903,7 +1047,8 @@ class DatabaseService {
     if (rawIds != null && rawIds.isNotEmpty && rawIds != '[]') {
       try {
         final decoded = jsonDecode(rawIds);
-        if (decoded is List) contactIds = decoded.map((e) => e.toString()).toList();
+        if (decoded is List)
+          contactIds = decoded.map((e) => e.toString()).toList();
       } catch (_) {}
     }
     if (contactIds.isEmpty) {
@@ -916,7 +1061,9 @@ class DatabaseService {
       if (v == null) return DateTime.now();
       if (v is int) return DateTime.fromMillisecondsSinceEpoch(v);
       if (v is String) {
-        try { return DateTime.parse(v); } catch (_) {
+        try {
+          return DateTime.parse(v);
+        } catch (_) {
           final asInt = int.tryParse(v);
           if (asInt != null) return DateTime.fromMillisecondsSinceEpoch(asInt);
         }
@@ -934,9 +1081,14 @@ class DatabaseService {
     if (priority.isEmpty) {
       final legacy = row['priority'] as String? ?? 'later';
       switch (legacy) {
-        case 'urgent': priority = 'very_important'; break;
-        case 'soon': priority = 'important'; break;
-        default: priority = 'normal';
+        case 'urgent':
+          priority = 'very_important';
+          break;
+        case 'soon':
+          priority = 'important';
+          break;
+        default:
+          priority = 'normal';
       }
     }
 
@@ -959,7 +1111,8 @@ class DatabaseService {
   // INTERACTIONS
   // =====================================================================
 
-  static Future<List<Interaction>> getInteractionsForContact(String contactId) async {
+  static Future<List<Interaction>> getInteractionsForContact(
+      String contactId) async {
     final db = await database;
     final rows = await db.query(
       'interactions',
@@ -978,13 +1131,13 @@ class DatabaseService {
   }
 
   static Map<String, dynamic> _interactionToRow(Interaction i) => {
-    'id': i.id,
-    'owner_id': i.ownerId,
-    'contact_id': i.contactId,
-    'type': i.type,
-    'content': i.content,
-    'created_at': i.createdAt.toIso8601String(),
-  };
+        'id': i.id,
+        'owner_id': i.ownerId,
+        'contact_id': i.contactId,
+        'type': i.type,
+        'content': i.content,
+        'created_at': i.createdAt.toIso8601String(),
+      };
 
   static Interaction _interactionFromRow(Map<String, dynamic> row) =>
       Interaction(
@@ -1000,18 +1153,21 @@ class DatabaseService {
   // PAYMENT METHODS
   // =====================================================================
 
-  static Future<List<PaymentMethod>> getPaymentMethodsForOwner(String ownerId) async {
+  static Future<List<PaymentMethod>> getPaymentMethodsForOwner(
+      String ownerId) async {
     final db = await database;
-    final rows = await db.query('payment_methods',
-        where: 'owner_id = ?', whereArgs: [ownerId]);
-    return rows.map((r) => PaymentMethod(
-      id: r['id'] as String,
-      userId: r['owner_id'] as String,
-      type: r['type'] as String,
-      label: r['label'] as String,
-      encryptedDetails: r['encrypted_details'] as String,
-      createdAt: DateTime.parse(r['created_at'] as String),
-    )).toList();
+    final rows = await db
+        .query('payment_methods', where: 'owner_id = ?', whereArgs: [ownerId]);
+    return rows
+        .map((r) => PaymentMethod(
+              id: r['id'] as String,
+              userId: r['owner_id'] as String,
+              type: r['type'] as String,
+              label: r['label'] as String,
+              encryptedDetails: r['encrypted_details'] as String,
+              createdAt: DateTime.parse(r['created_at'] as String),
+            ))
+        .toList();
   }
 
   static Future<void> insertPaymentMethod(PaymentMethod pm) async {
@@ -1058,7 +1214,7 @@ class DatabaseService {
       String userId) async {
     final db = await database;
     return (await db.query('payment_history',
-        where: 'user_id = ?', whereArgs: [userId]))
+            where: 'user_id = ?', whereArgs: [userId]))
         .map((r) => Map<String, dynamic>.from(r))
         .toList();
   }
@@ -1110,15 +1266,18 @@ class DatabaseService {
   static Future<void> deleteUserAndAllData(String userId) async {
     final db = await database;
     await db.transaction((txn) async {
-      await txn.delete('interactions', where: 'owner_id = ?', whereArgs: [userId]);
+      await txn
+          .delete('interactions', where: 'owner_id = ?', whereArgs: [userId]);
       await txn.delete('contacts', where: 'owner_id = ?', whereArgs: [userId]);
       await txn.delete('reminders', where: 'owner_id = ?', whereArgs: [userId]);
       await txn.delete('payment_methods',
           where: 'owner_id = ?', whereArgs: [userId]);
-      await txn.delete('notifications', where: 'owner_id = ?', whereArgs: [userId]);
+      await txn
+          .delete('notifications', where: 'owner_id = ?', whereArgs: [userId]);
       await txn.delete('organization_members',
           where: 'user_id = ?', whereArgs: [userId]);
-      await txn.delete('payment_history', where: 'user_id = ?', whereArgs: [userId]);
+      await txn
+          .delete('payment_history', where: 'user_id = ?', whereArgs: [userId]);
       await txn.delete('users', where: 'id = ?', whereArgs: [userId]);
     });
   }
@@ -1266,11 +1425,10 @@ class DatabaseService {
     for (final row in memberRows) {
       final userId = row['user_id'] as String;
       final user = await findUserById(userId);
-      if (user == null) continue;
-
       final contactRows = await db.query('contacts',
           columns: ['COUNT(*) as cnt'],
-          where: 'owner_id = ?', whereArgs: [userId]);
+          where: 'owner_id = ?',
+          whereArgs: [userId]);
       final contactCount = (contactRows.first['cnt'] as int?) ?? 0;
 
       final role = row['role'] as String? ?? 'member';
@@ -1282,14 +1440,18 @@ class DatabaseService {
         role: role,
         status: row['status'] as String? ?? 'active',
         joinedAt: DateTime.parse(row['joined_at'] as String),
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        photoPath: user.photoPath,
+        firstName: row['first_name'] as String? ?? user?.firstName ?? '',
+        lastName: row['last_name'] as String? ?? user?.lastName ?? '',
+        email: row['email'] as String? ?? user?.email,
+        nickname: row['nickname'] as String? ?? user?.nickname,
+        company: row['company'] as String? ?? user?.companyName,
+        biography: row['biography'] as String? ?? user?.biography,
+        photoPath: row['photo_path'] as String? ?? user?.photoPath,
         contactCount: contactCount,
         canEdit: isAdmin || (row['can_edit'] as int? ?? 0) == 1,
         canCreate: isAdmin || (row['can_create'] as int? ?? 1) == 1,
-        canViewReminders: isAdmin || (row['can_view_reminders'] as int? ?? 0) == 1,
+        canViewReminders:
+            isAdmin || (row['can_view_reminders'] as int? ?? 0) == 1,
         canViewHistory: isAdmin || (row['can_view_history'] as int? ?? 0) == 1,
       ));
     }
@@ -1304,6 +1466,7 @@ class DatabaseService {
   }) async {
     final db = await database;
     final isAdmin = role == 'admin';
+    final user = await findUserById(userId);
     final row = {
       'id': id,
       'organization_id': orgId,
@@ -1311,6 +1474,13 @@ class DatabaseService {
       'role': role,
       'status': 'active',
       'joined_at': DateTime.now().toIso8601String(),
+      'first_name': user?.firstName ?? '',
+      'last_name': user?.lastName ?? '',
+      'email': user?.email,
+      'nickname': user?.nickname,
+      'company': user?.companyName,
+      'biography': user?.biography,
+      'photo_path': user?.photoPath,
       'can_edit': isAdmin ? 1 : 0,
       'can_create': 1,
       'can_view_reminders': isAdmin ? 1 : 0,
@@ -1326,7 +1496,8 @@ class DatabaseService {
     final memberRows = await db.query('organization_members',
         columns: ['id'],
         where: 'organization_id = ? AND user_id = ?',
-        whereArgs: [orgId, userId], limit: 1);
+        whereArgs: [orgId, userId],
+        limit: 1);
     await db.transaction((txn) async {
       await txn.delete('organization_members',
           where: 'organization_id = ? AND user_id = ?',
@@ -1344,7 +1515,8 @@ class DatabaseService {
     final db = await database;
     final rows = await db.query('organization_members',
         where: 'organization_id = ? AND user_id = ?',
-        whereArgs: [orgId, userId], limit: 1);
+        whereArgs: [orgId, userId],
+        limit: 1);
     return rows.isNotEmpty;
   }
 
@@ -1411,7 +1583,8 @@ class DatabaseService {
     }
   }
 
-  static Future<List<Contact>> getAllContactsForOrganization(String orgId) async {
+  static Future<List<Contact>> getAllContactsForOrganization(
+      String orgId) async {
     final db = await database;
     final memberRows = await db.query('organization_members',
         columns: ['user_id'],
@@ -1446,7 +1619,8 @@ class DatabaseService {
     final rows = await db.query('organization_members',
         columns: ['status'],
         where: 'organization_id = ? AND user_id = ?',
-        whereArgs: [orgId, userId], limit: 1);
+        whereArgs: [orgId, userId],
+        limit: 1);
     if (rows.isEmpty) return null;
     return rows.first['status'] as String?;
   }
@@ -1462,7 +1636,7 @@ class DatabaseService {
     final placeholders = ids.map((_) => '?').join(', ');
     final rows = await db.rawQuery(
       'SELECT phone_lookup, email_lookup FROM contacts '
-          'WHERE owner_id IN ($placeholders) ORDER BY created_at ASC',
+      'WHERE owner_id IN ($placeholders) ORDER BY created_at ASC',
       ids,
     );
     final seenPhone = <String>{};
@@ -1484,8 +1658,8 @@ class DatabaseService {
     required String orgId,
   }) async {
     final db = await database;
-    final orgRows = await db.query('organizations', columns: ['owner_id'],
-        where: 'id = ?', whereArgs: [orgId], limit: 1);
+    final orgRows = await db.query('organizations',
+        columns: ['owner_id'], where: 'id = ?', whereArgs: [orgId], limit: 1);
     if (orgRows.isEmpty) return null;
     final adminId = orgRows.first['owner_id'] as String;
     if (adminId == fromUserId) return null;
@@ -1494,7 +1668,8 @@ class DatabaseService {
         columns: ['user_id'],
         where: "organization_id = ? AND status = 'active' AND user_id != ?",
         whereArgs: [orgId, fromUserId]);
-    final otherIds = otherMemberRows.map((r) => r['user_id'] as String).toList();
+    final otherIds =
+        otherMemberRows.map((r) => r['user_id'] as String).toList();
 
     final otherPhoneLookups = <String>{};
     final otherEmailLookups = <String>{};
@@ -1511,29 +1686,33 @@ class DatabaseService {
       }
     }
 
-    final memberContacts = await db.query('contacts',
-        where: 'owner_id = ?', whereArgs: [fromUserId]);
+    final memberContacts = await db
+        .query('contacts', where: 'owner_id = ?', whereArgs: [fromUserId]);
     final transferredIds = <String>[];
     await db.transaction((txn) async {
       for (final row in memberContacts) {
         final contactId = row['id'] as String;
         final phoneLookup = row['phone_lookup'] as String?;
         final emailLookup = row['email_lookup'] as String?;
-        final isDuplicate =
-            (phoneLookup != null && otherPhoneLookups.contains(phoneLookup)) ||
-                (emailLookup != null && otherEmailLookups.contains(emailLookup));
+        final isDuplicate = (phoneLookup != null &&
+                otherPhoneLookups.contains(phoneLookup)) ||
+            (emailLookup != null && otherEmailLookups.contains(emailLookup));
         if (isDuplicate) continue;
         final updates = <String, Object?>{'owner_id': adminId};
         if (phoneLookup != null) {
-          final conflict = await txn.query('contacts', columns: ['id'],
+          final conflict = await txn.query('contacts',
+              columns: ['id'],
               where: 'owner_id = ? AND phone_lookup = ?',
-              whereArgs: [adminId, phoneLookup], limit: 1);
+              whereArgs: [adminId, phoneLookup],
+              limit: 1);
           if (conflict.isNotEmpty) updates['phone_lookup'] = null;
         }
         if (emailLookup != null) {
-          final conflict = await txn.query('contacts', columns: ['id'],
+          final conflict = await txn.query('contacts',
+              columns: ['id'],
               where: 'owner_id = ? AND email_lookup = ?',
-              whereArgs: [adminId, emailLookup], limit: 1);
+              whereArgs: [adminId, emailLookup],
+              limit: 1);
           if (conflict.isNotEmpty) updates['email_lookup'] = null;
         }
         await txn.update('contacts', updates,
@@ -1563,7 +1742,8 @@ class DatabaseService {
     final rows = await db.query('organization_members',
         columns: ['role', 'can_edit'],
         where: 'organization_id = ? AND user_id = ?',
-        whereArgs: [orgId, userId], limit: 1);
+        whereArgs: [orgId, userId],
+        limit: 1);
     if (rows.isEmpty) return false;
     final role = rows.first['role'] as String? ?? 'member';
     if (role == 'admin') return true;
@@ -1579,7 +1759,8 @@ class DatabaseService {
     final rows = await db.query('organization_members',
         columns: ['role', 'can_create'],
         where: 'organization_id = ? AND user_id = ?',
-        whereArgs: [orgId, userId], limit: 1);
+        whereArgs: [orgId, userId],
+        limit: 1);
     if (rows.isEmpty) return true;
     final role = rows.first['role'] as String? ?? 'member';
     if (role == 'admin') return true;
@@ -1587,28 +1768,51 @@ class DatabaseService {
   }
 
   static Future<
-      ({bool canEdit, bool canCreate, bool canViewReminders, bool canViewHistory})>
-  getMemberPrivileges({
+      ({
+        bool canEdit,
+        bool canCreate,
+        bool canViewReminders,
+        bool canViewHistory
+      })> getMemberPrivileges({
     required String userId,
     required String? orgId,
   }) async {
     if (orgId == null) {
-      return (canEdit: true, canCreate: true, canViewReminders: true, canViewHistory: true);
+      return (
+        canEdit: true,
+        canCreate: true,
+        canViewReminders: true,
+        canViewHistory: true
+      );
     }
     final db = await database;
     final rows = await db.query('organization_members',
-        columns: ['role', 'can_edit', 'can_create', 'can_view_reminders', 'can_view_history'],
+        columns: [
+          'role',
+          'can_edit',
+          'can_create',
+          'can_view_reminders',
+          'can_view_history'
+        ],
         where: 'organization_id = ? AND user_id = ?',
-        whereArgs: [orgId, userId], limit: 1);
+        whereArgs: [orgId, userId],
+        limit: 1);
     if (rows.isEmpty) {
-      return (canEdit: true, canCreate: true, canViewReminders: true, canViewHistory: true);
+      return (
+        canEdit: true,
+        canCreate: true,
+        canViewReminders: true,
+        canViewHistory: true
+      );
     }
     final isAdmin = (rows.first['role'] as String?) == 'admin';
     return (
-    canEdit: isAdmin || (rows.first['can_edit'] as int? ?? 0) == 1,
-    canCreate: isAdmin || (rows.first['can_create'] as int? ?? 1) == 1,
-    canViewReminders: isAdmin || (rows.first['can_view_reminders'] as int? ?? 0) == 1,
-    canViewHistory: isAdmin || (rows.first['can_view_history'] as int? ?? 0) == 1,
+      canEdit: isAdmin || (rows.first['can_edit'] as int? ?? 0) == 1,
+      canCreate: isAdmin || (rows.first['can_create'] as int? ?? 1) == 1,
+      canViewReminders:
+          isAdmin || (rows.first['can_view_reminders'] as int? ?? 0) == 1,
+      canViewHistory:
+          isAdmin || (rows.first['can_view_history'] as int? ?? 0) == 1,
     );
   }
 
@@ -1674,14 +1878,14 @@ class DatabaseService {
     required String orgId,
   }) async {
     final db = await database;
-    final orgRows = await db.query('organizations', columns: ['owner_id'],
-        where: 'id = ?', whereArgs: [orgId], limit: 1);
+    final orgRows = await db.query('organizations',
+        columns: ['owner_id'], where: 'id = ?', whereArgs: [orgId], limit: 1);
     if (orgRows.isEmpty) return null;
     final adminId = orgRows.first['owner_id'] as String;
     if (adminId == fromUserId) return null;
 
-    final memberContacts = await db.query('contacts',
-        where: 'owner_id = ?', whereArgs: [fromUserId]);
+    final memberContacts = await db
+        .query('contacts', where: 'owner_id = ?', whereArgs: [fromUserId]);
     if (memberContacts.isEmpty) return adminId;
 
     final transferredIds = <String>[];
@@ -1692,15 +1896,19 @@ class DatabaseService {
         final emailLookup = row['email_lookup'] as String?;
         final updates = <String, Object?>{'owner_id': adminId};
         if (phoneLookup != null) {
-          final conflict = await txn.query('contacts', columns: ['id'],
+          final conflict = await txn.query('contacts',
+              columns: ['id'],
               where: 'owner_id = ? AND phone_lookup = ?',
-              whereArgs: [adminId, phoneLookup], limit: 1);
+              whereArgs: [adminId, phoneLookup],
+              limit: 1);
           if (conflict.isNotEmpty) updates['phone_lookup'] = null;
         }
         if (emailLookup != null) {
-          final conflict = await txn.query('contacts', columns: ['id'],
+          final conflict = await txn.query('contacts',
+              columns: ['id'],
               where: 'owner_id = ? AND email_lookup = ?',
-              whereArgs: [adminId, emailLookup], limit: 1);
+              whereArgs: [adminId, emailLookup],
+              limit: 1);
           if (conflict.isNotEmpty) updates['email_lookup'] = null;
         }
         await txn.update('contacts', updates,
@@ -1738,44 +1946,57 @@ class DatabaseService {
 
   static Future<Map<String, dynamic>?> getRawUserRow(String userId) async {
     final db = await database;
-    final rows = await db.query('users',
-        where: 'id = ?', whereArgs: [userId], limit: 1);
+    final rows =
+        await db.query('users', where: 'id = ?', whereArgs: [userId], limit: 1);
     return rows.isEmpty ? null : Map<String, dynamic>.from(rows.first);
   }
 
-  static Future<List<Map<String, dynamic>>> getRawContactRows(String ownerId) async {
+  static Future<List<Map<String, dynamic>>> getRawContactRows(
+      String ownerId) async {
     final db = await database;
-    return (await db.query('contacts', where: 'owner_id = ?', whereArgs: [ownerId]))
-        .map((r) => Map<String, dynamic>.from(r)).toList();
+    return (await db
+            .query('contacts', where: 'owner_id = ?', whereArgs: [ownerId]))
+        .map((r) => Map<String, dynamic>.from(r))
+        .toList();
   }
 
-  static Future<List<Map<String, dynamic>>> getRawReminderRows(String ownerId) async {
+  static Future<List<Map<String, dynamic>>> getRawReminderRows(
+      String ownerId) async {
     final db = await database;
-    return (await db.query('reminders', where: 'owner_id = ?', whereArgs: [ownerId]))
-        .map((r) => Map<String, dynamic>.from(r)).toList();
+    return (await db
+            .query('reminders', where: 'owner_id = ?', whereArgs: [ownerId]))
+        .map((r) => Map<String, dynamic>.from(r))
+        .toList();
   }
 
-  static Future<List<Map<String, dynamic>>> getRawInteractionRows(String ownerId) async {
+  static Future<List<Map<String, dynamic>>> getRawInteractionRows(
+      String ownerId) async {
     final db = await database;
-    return (await db.query('interactions', where: 'owner_id = ?', whereArgs: [ownerId]))
-        .map((r) => Map<String, dynamic>.from(r)).toList();
+    return (await db
+            .query('interactions', where: 'owner_id = ?', whereArgs: [ownerId]))
+        .map((r) => Map<String, dynamic>.from(r))
+        .toList();
   }
 
-  static Future<Map<String, dynamic>?> getRawOrganizationRow(String orgId) async {
+  static Future<Map<String, dynamic>?> getRawOrganizationRow(
+      String orgId) async {
     final db = await database;
     final rows = await db.query('organizations',
         where: 'id = ?', whereArgs: [orgId], limit: 1);
     return rows.isEmpty ? null : Map<String, dynamic>.from(rows.first);
   }
 
-  static Future<List<Map<String, dynamic>>> getRawOrgMemberRows(String orgId) async {
+  static Future<List<Map<String, dynamic>>> getRawOrgMemberRows(
+      String orgId) async {
     final db = await database;
     return (await db.query('organization_members',
-        where: 'organization_id = ?', whereArgs: [orgId]))
-        .map((r) => Map<String, dynamic>.from(r)).toList();
+            where: 'organization_id = ?', whereArgs: [orgId]))
+        .map((r) => Map<String, dynamic>.from(r))
+        .toList();
   }
 
-  static Future<void> upsertRawRow(String table, Map<String, dynamic> row) async {
+  static Future<void> upsertRawRow(
+      String table, Map<String, dynamic> row) async {
     final db = await database;
     await db.insert(table, row, conflictAlgorithm: ConflictAlgorithm.replace);
   }
@@ -1786,13 +2007,15 @@ class DatabaseService {
         where: 'id = ?', whereArgs: [userId]);
   }
 
-  static Future<void> updateContactPhotoPath(String contactId, String? path) async {
+  static Future<void> updateContactPhotoPath(
+      String contactId, String? path) async {
     final db = await database;
     await db.update('contacts', {'photo_path': path},
         where: 'id = ?', whereArgs: [contactId]);
   }
 
-  static Future<void> updateUserLastSync(String userId, String isoTimestamp) async {
+  static Future<void> updateUserLastSync(
+      String userId, String isoTimestamp) async {
     final db = await database;
     await db.update('users', {'last_sync_at': isoTimestamp},
         where: 'id = ?', whereArgs: [userId]);
@@ -1800,8 +2023,11 @@ class DatabaseService {
 
   static Future<String?> getUserLastSync(String userId) async {
     final db = await database;
-    final rows = await db.query('users', columns: ['last_sync_at'],
-        where: 'id = ?', whereArgs: [userId], limit: 1);
+    final rows = await db.query('users',
+        columns: ['last_sync_at'],
+        where: 'id = ?',
+        whereArgs: [userId],
+        limit: 1);
     if (rows.isEmpty) return null;
     return rows.first['last_sync_at'] as String?;
   }
@@ -1813,9 +2039,16 @@ class DatabaseService {
   static Future<void> debugCheckAllTables() async {
     final db = await database;
     final expectedTables = [
-      'users', 'contacts', 'reminders', 'interactions',
-      'payment_methods', 'payment_history', 'session',
-      'notifications', 'organizations', 'organization_members',
+      'users',
+      'contacts',
+      'reminders',
+      'interactions',
+      'payment_methods',
+      'payment_history',
+      'session',
+      'notifications',
+      'organizations',
+      'organization_members',
     ];
     final result = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
@@ -1830,8 +2063,9 @@ class DatabaseService {
     bool allOk = true;
     for (final table in expectedTables) {
       if (existingTables.contains(table)) {
-        final count = Sqflite.firstIntValue(
-            await db.rawQuery('SELECT COUNT(*) FROM "$table"')) ?? 0;
+        final countRow =
+            await db.rawQuery('SELECT COUNT(*) as cnt FROM "$table"');
+        final count = (countRow.first['cnt'] as int?) ?? 0;
         debugPrint('✅ $table ($count lignes)');
       } else {
         debugPrint('❌ $table — MANQUANTE');
@@ -1844,7 +2078,9 @@ class DatabaseService {
       debugPrint('⚠️  Tables inattendues : $unexpected');
     }
     debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    debugPrint(allOk ? '🎉 Toutes les tables sont présentes' : '🚨 Des tables manquent !');
+    debugPrint(allOk
+        ? '🎉 Toutes les tables sont présentes'
+        : '🚨 Des tables manquent !');
     debugPrint('📌 Version BD : $_dbVersion');
     debugPrint('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   }
