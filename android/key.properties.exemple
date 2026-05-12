@@ -1,0 +1,4 @@
+storePassword=me2leads
+keyPassword=me2leads
+keyAlias=me2leads
+storeFile=me2leads.jks

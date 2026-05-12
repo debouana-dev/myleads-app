@@ -503,7 +503,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         );
         return false;
       }
-      user = user.copyWith(sessionToken: token, lastLoginAt: DateTime.now());
+      user = user.copyWith(
+          sessionToken: token,
+          lastLoginAt: DateTime.now(),
+          firstName: firstName,
+          lastName: lastName);
       await DatabaseService.updateUser(user);
     }
 
