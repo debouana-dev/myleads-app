@@ -10,6 +10,7 @@ import '../../core/theme/app_colors.dart';
 import '../../models/contact.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/contacts_provider.dart';
+import '../../providers/organization_provider.dart';
 import '../../services/contact_import_export_service.dart';
 import '../../services/storage_service.dart';
 
@@ -238,6 +239,7 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
     final isFreePlan = ref
         .watch(effectivePlanProvider)
         .maybeWhen(data: (plan) => plan == 'free', orElse: () => true);
+    final canCreate = ref.watch(orgCanCreateProvider);
 
     return Scaffold(
       backgroundColor: AppColors.bg(context),
@@ -249,7 +251,7 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
             child: TabBarView(
               controller: _tab,
               children: [
-                _buildImportTab(context, l10n),
+                _buildImportTab(context, l10n, canCreate: canCreate),
                 _buildExportTab(context, l10n, isFreePlan),
               ],
             ),
@@ -402,7 +404,8 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
 
   // ─── Import tab ───────────────────────────────────────────────────────────
 
-  Widget _buildImportTab(BuildContext context, AppL10n l10n) {
+  Widget _buildImportTab(BuildContext context, AppL10n l10n,
+      {required bool canCreate}) {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
       child: Column(
@@ -422,7 +425,10 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
             color: AppColors.success,
             title: 'CSV',
             subtitle: l10n.csvImportDesc,
-            onTap: () => _pickAndImport(['csv', 'tsv']),
+            onTap: canCreate
+                ? () => _pickAndImport(['csv', 'tsv'])
+                : () => _setResult(l10n.importCreatePrivilegeLocked,
+                    isError: true),
           ),
           const SizedBox(height: 8),
           _guideToggle(
@@ -447,7 +453,10 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
             color: AppColors.primary,
             title: 'vCard (.vcf)',
             subtitle: l10n.vcardImportDesc,
-            onTap: () => _pickAndImport(['vcf', 'vcard']),
+            onTap: canCreate
+                ? () => _pickAndImport(['vcf', 'vcard'])
+                : () => _setResult(l10n.importCreatePrivilegeLocked,
+                    isError: true),
           ),
           const SizedBox(height: 8),
           _guideToggle(
@@ -474,7 +483,10 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
             color: AppColors.warm,
             title: 'TXT',
             subtitle: l10n.txtImportDesc,
-            onTap: () => _pickAndImport(['txt']),
+            onTap: canCreate
+                ? () => _pickAndImport(['txt'])
+                : () => _setResult(l10n.importCreatePrivilegeLocked,
+                    isError: true),
           ),
           const SizedBox(height: 8),
           _guideToggle(
@@ -493,7 +505,12 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
                 : const SizedBox.shrink(),
           ),
           const SizedBox(height: 24),
-          _infoBox(context, l10n.importInfoBox),
+          _infoBox(
+            context,
+            canCreate
+                ? l10n.importInfoBox
+                : l10n.importCreatePrivilegeLockedInfo,
+          ),
         ],
       ),
     );

@@ -928,8 +928,15 @@ class AppL10n {
       ? 'Exporting contacts is reserved for Premium and Business subscribers.'
       : 'L’export des contacts est réservé aux abonnés Premium et Business.';
   String get freeContactLimitReached => _en
-      ? 'Free plan users can save up to 10 contacts.'
-      : 'Les utilisateurs du plan gratuit peuvent enregistrer jusqu’à 10 contacts.';
+      ? "Free plan users can save up to 10 contacts."
+      : "Les utilisateurs du plan gratuit peuvent enregistrer jusqu’à 10 contacts.";
+
+  String get importCreatePrivilegeLocked => _en
+      ? "Your admin has restricted your permission to create contacts. Import is not available."
+      : "Votre administrateur a restreint votre permission de créer des contacts. L’importation n’est pas disponible.";
+  String get importCreatePrivilegeLockedInfo => _en
+      ? 'Importing contacts requires the "Create contacts" privilege. Ask your organization admin to grant it.'
+      : "L’importation de contacts nécessite le privilège \"Créer des contacts\". Demandez à votre administrateur de vous l’accorder.";
 
   String importSuccess(int created, int skipped) {
     final base = _en
