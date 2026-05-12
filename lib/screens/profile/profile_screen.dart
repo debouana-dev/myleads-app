@@ -10,6 +10,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/contacts_provider.dart';
 import '../../providers/organization_provider.dart';
 import '../../providers/reminders_provider.dart';
+import '../../services/ftp_photo_service.dart';
 import '../../services/photo_storage_service.dart';
 import '../../services/storage_service.dart';
 
@@ -41,6 +42,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         final savedPath =
             await PhotoStorageService.saveProfilePhoto(image.path);
         if (savedPath != null) {
+          // Upload to FTP immediately (fire-and-forget) for premium/business users
+          // so the photo is available when user logs in on another device
+          final user = StorageService.currentUser;
+          if (user != null &&
+              (user.plan == 'premium' || user.plan == 'business')) {
+            FtpPhotoService.uploadPhoto(savedPath).ignore();
+          }
+
           await ref.read(authProvider.notifier).updatePhoto(savedPath);
         }
       }

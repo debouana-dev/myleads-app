@@ -26,7 +26,8 @@ class FtpPhotoService {
   /// Returns true on success, false on any failure.  No-op on web.
   static Future<bool> uploadPhoto(String relativePath) async {
     if (kIsWeb) return false;
-    final localFile = PhotoStorageService.localFileForRelativePath(relativePath);
+    final localFile =
+        PhotoStorageService.localFileForRelativePath(relativePath);
     if (localFile == null || !await localFile.exists()) return false;
 
     return _withConnection((ftp) async {
@@ -45,7 +46,8 @@ class FtpPhotoService {
   /// No-op on web.
   static Future<bool> downloadPhoto(String relativePath) async {
     if (kIsWeb) return false;
-    final localFile = PhotoStorageService.localFileForRelativePath(relativePath);
+    final localFile =
+        PhotoStorageService.localFileForRelativePath(relativePath);
     if (localFile == null) return false;
     if (await localFile.exists()) return true; // already present
 
@@ -92,7 +94,7 @@ class FtpPhotoService {
       user: AppConfig.ftpUsername,
       pass: AppConfig.ftpPassword,
       showLog: false,
-      timeout: 30,
+      timeout: 90000, // 90s is a reasonable upper bound for mobile FTP ops
     );
     try {
       final connected = await ftp.connect();

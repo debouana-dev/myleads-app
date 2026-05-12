@@ -10,6 +10,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/l10n/app_l10n.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/database_service.dart';
+import '../../services/ftp_photo_service.dart';
 import '../../services/photo_storage_service.dart';
 import '../../services/storage_service.dart';
 
@@ -80,6 +81,14 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
         final savedPath =
             await PhotoStorageService.saveProfilePhoto(image.path);
         if (savedPath != null) {
+          // Upload to FTP immediately (fire-and-forget) for premium/business users
+          // so the photo is available when user logs in on another device
+          final user = StorageService.currentUser;
+          if (user != null &&
+              (user.plan == 'premium' || user.plan == 'business')) {
+            FtpPhotoService.uploadPhoto(savedPath).ignore();
+          }
+
           await ref.read(authProvider.notifier).updatePhoto(savedPath);
         }
       }
@@ -303,7 +312,9 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
                             ),
                             image: auth.userPhotoPath != null && !kIsWeb
                                 ? DecorationImage(
-                                    image: FileImage(File(PhotoStorageService.resolveAbsolutePath(auth.userPhotoPath)!)),
+                                    image: FileImage(File(
+                                        PhotoStorageService.resolveAbsolutePath(
+                                            auth.userPhotoPath)!)),
                                     fit: BoxFit.cover,
                                   )
                                 : null,
@@ -383,9 +394,7 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
                         ),
                         const SizedBox(width: 10),
                         Text(
-                          _isEditing
-                              ? l10n.editMode
-                              : l10n.viewMode,
+                          _isEditing ? l10n.editMode : l10n.viewMode,
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
@@ -778,8 +787,7 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
                         : AppColors.onSurface(context),
                   ),
                   maxLines: maxLines,
-                  overflow:
-                      maxLines != null ? TextOverflow.ellipsis : null,
+                  overflow: maxLines != null ? TextOverflow.ellipsis : null,
                 ),
               ],
             ),
@@ -787,7 +795,8 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
           if (trailingIcon != null)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Icon(trailingIcon, size: 16, color: AppColors.hint(context)),
+              child:
+                  Icon(trailingIcon, size: 16, color: AppColors.hint(context)),
             ),
         ],
       ),

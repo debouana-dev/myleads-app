@@ -52,3 +52,5 @@ build/
 *.lock
 *.log
 .env
+**/docs/dummy_data.sql
+**/docs/PHOTO_SYNC_FIX.md

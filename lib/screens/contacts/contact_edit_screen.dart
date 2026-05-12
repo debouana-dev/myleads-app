@@ -9,7 +9,9 @@ import '../../core/theme/app_colors.dart';
 import '../../core/l10n/app_l10n.dart';
 import '../../models/contact.dart';
 import '../../providers/contacts_provider.dart';
+import '../../services/ftp_photo_service.dart';
 import '../../services/photo_storage_service.dart';
+import '../../services/storage_service.dart';
 
 /// Screen used both for editing an existing contact and for creating a new
 /// contact manually. When [contactId] is null we render empty fields with
@@ -282,8 +284,21 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
                                 final savedPath =
                                     await PhotoStorageService.saveContactPhoto(
                                         img.path);
-                                setState(
-                                    () => _photoPath = savedPath ?? img.path);
+                                if (savedPath != null) {
+                                  // Upload to FTP immediately (fire-and-forget) for premium/business users
+                                  // so the photo is available when contact is accessed from another device
+                                  final user = StorageService.currentUser;
+                                  if (user != null &&
+                                      (user.plan == 'premium' ||
+                                          user.plan == 'business')) {
+                                    FtpPhotoService.uploadPhoto(savedPath)
+                                        .ignore();
+                                  }
+
+                                  setState(() => _photoPath = savedPath);
+                                } else {
+                                  setState(() => _photoPath = img.path);
+                                }
                               } on PhotoFileTooLargeException {
                                 _showError(l10n.photoTooLarge);
                               }
