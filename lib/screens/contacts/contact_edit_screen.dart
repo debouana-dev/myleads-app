@@ -289,8 +289,7 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
                                   // so the photo is available when contact is accessed from another device
                                   final user = StorageService.currentUser;
                                   if (user != null &&
-                                      (user.plan == 'premium' ||
-                                          user.plan == 'business')) {
+                                      (user.plan == 'business')) {
                                     FtpPhotoService.uploadPhoto(savedPath)
                                         .ignore();
                                   }

@@ -88,10 +88,24 @@ class RemoteSyncService {
   /// Pushes only the [userId] row to the remote database in the background.
   /// Used by [startUserSync] and is not plan-gated — user profile data is
   /// always kept in sync for all plans.
+  ///
+  /// Also uploads the user's profile photo to FTP when a local file exists,
+  /// so the profile image stays in sync across devices for all subscription plans.
   static void _syncUserRow(String userId) {
     _fireAndForget((conn) async {
       final row = await DatabaseService.getRawUserRow(userId);
-      if (row != null) await _upsertUser(conn, row);
+      if (row == null) return;
+      await _upsertUser(conn, row);
+      // Photo upload is restricted to premium/business — Free plan syncs the
+      // user row only (no FTP traffic).
+      if (await _hasSyncPlan()) {
+        final photoPath = row['photo_path'] as String?;
+        if (photoPath != null &&
+            photoPath.isNotEmpty &&
+            !_isAbsolutePath(photoPath)) {
+          await FtpPhotoService.uploadPhoto(photoPath);
+        }
+      }
     });
   }
 
@@ -1526,6 +1540,10 @@ class RemoteSyncService {
   /// Migrates old absolute photo paths to relative paths in the local DB,
   /// then uploads every photo that has a relative path to FTP.
   ///
+  /// Also handles active org members: uploads their denormalized profile photo
+  /// (stored on the `organization_members` row) and any of their contact photos
+  /// that are present on this device.
+  ///
   /// Must be called before the PostgreSQL upsert step in [push] so the remote DB
   /// always receives platform-neutral relative paths.
   static Future<void> _migrateAndUploadPhotos(String userId) async {
@@ -1544,7 +1562,7 @@ class RemoteSyncService {
         }
       }
 
-      // Contact photos
+      // Current user's contact photos
       final contacts = await DatabaseService.getRawContactRows(userId);
       for (final row in contacts) {
         final contactId = row['id'] as String;
@@ -1558,6 +1576,55 @@ class RemoteSyncService {
           await FtpPhotoService.uploadPhoto(newPath);
         }
       }
+
+      // Org member profile photos + their contact photos.
+      // Only relevant for premium/business users already in an organization.
+      final orgId = userRow?['organization_id'] as String?;
+      if (orgId != null && orgId.isNotEmpty) {
+        final orgRow = await DatabaseService.getRawOrganizationRow(orgId);
+        final orgExpired = orgRow != null && _isOrgLicenseExpired(orgRow);
+
+        final members = await DatabaseService.getRawOrgMemberRows(orgId);
+        for (final member in members) {
+          // When the org license has expired, include only members whose own
+          // personal subscription still qualifies for data sync.
+          if (orgExpired) {
+            final memberId = member['user_id'] as String?;
+            final memberUserRow = memberId != null
+                ? await DatabaseService.getRawUserRow(memberId)
+                : null;
+            if (!_memberHasEligiblePlan(memberUserRow)) continue;
+          }
+          // Suspended members are included — only org-license expiry gates
+          // photo sync; the member's org status does not.
+
+          // Denormalized member profile photo stored on the membership row.
+          final memberPhotoPath = member['photo_path'] as String?;
+          if (memberPhotoPath != null &&
+              memberPhotoPath.isNotEmpty &&
+              !_isAbsolutePath(memberPhotoPath)) {
+            await FtpPhotoService.uploadPhoto(memberPhotoPath);
+          }
+
+          // Contacts owned by this org member that are cached locally.
+          final memberId = member['user_id'] as String?;
+          if (memberId == null || memberId == userId) continue;
+          final memberContacts =
+              await DatabaseService.getRawContactRows(memberId);
+          for (final contactRow in memberContacts) {
+            final contactId = contactRow['id'] as String;
+            final oldPath = contactRow['photo_path'] as String?;
+            final newPath = await _migratePhotoPath(
+                oldPath, 'contact_pictures', memberId);
+            if (newPath != oldPath) {
+              await DatabaseService.updateContactPhotoPath(contactId, newPath);
+            }
+            if (newPath != null && !_isAbsolutePath(newPath)) {
+              await FtpPhotoService.uploadPhoto(newPath);
+            }
+          }
+        }
+      }
     } catch (e) {
       debugPrint('RemoteSyncService photo migration error: $e');
     }
@@ -1565,6 +1632,9 @@ class RemoteSyncService {
 
   /// Downloads photos from FTP for all records that have a relative photo_path
   /// but no local file.  Called at the end of [pull] after DB records are saved.
+  ///
+  /// Also fetches the profile photo for every active org member (stored on the
+  /// `organization_members` row) so member avatars are available offline.
   static Future<void> _downloadMissingPhotos(
       String userId, List<String> ownerIds) async {
     try {
@@ -1579,6 +1649,30 @@ class RemoteSyncService {
         final contacts = await DatabaseService.getRawContactRows(ownerId);
         for (final row in contacts) {
           await _downloadPhotoIfMissing(row['photo_path'] as String?);
+        }
+      }
+
+      // Org member profile photos.
+      // The org_members rows are pulled before this method is called, so the
+      // local table already reflects the latest server state.
+      final orgId = userRow?['organization_id'] as String?;
+      if (orgId != null && orgId.isNotEmpty) {
+        final orgRow = await DatabaseService.getRawOrganizationRow(orgId);
+        final orgExpired = orgRow != null && _isOrgLicenseExpired(orgRow);
+
+        final members = await DatabaseService.getRawOrgMemberRows(orgId);
+        for (final member in members) {
+          // When the org license has expired, include only members whose own
+          // personal subscription still qualifies for data sync.
+          if (orgExpired) {
+            final memberId = member['user_id'] as String?;
+            final memberUserRow = memberId != null
+                ? await DatabaseService.getRawUserRow(memberId)
+                : null;
+            if (!_memberHasEligiblePlan(memberUserRow)) continue;
+          }
+          // Suspended members are included — org-license expiry is the gate.
+          await _downloadPhotoIfMissing(member['photo_path'] as String?);
         }
       }
     } catch (e) {
@@ -1618,6 +1712,38 @@ class RemoteSyncService {
     final localFile = PhotoStorageService.localFileForRelativePath(path);
     if (localFile == null || await localFile.exists()) return;
     await FtpPhotoService.downloadPhoto(path);
+  }
+
+  /// Returns true when the organization's license has expired.
+  ///
+  /// A license is considered expired when `org_status` is not `'active'` OR
+  /// when `org_plan_expires_at` is set and is in the past.
+  static bool _isOrgLicenseExpired(Map<String, dynamic> orgRow) {
+    final status = (orgRow['org_status'] as String?) ?? 'active';
+    if (status != 'active') return true;
+    final expiresStr = orgRow['org_plan_expires_at'] as String?;
+    if (expiresStr == null || expiresStr.isEmpty) return false;
+    final expires = DateTime.tryParse(expiresStr);
+    if (expires == null) return false;
+    return DateTime.now().isAfter(expires);
+  }
+
+  /// Returns true when [memberRow] represents a user whose personal
+  /// subscription plan qualifies for automatic data synchronization
+  /// (premium or business, and not yet expired).
+  ///
+  /// Returns false when the row is null (member not found locally) or when
+  /// the plan is free / expired — used as the fallback gate when the org
+  /// license has lapsed.
+  static bool _memberHasEligiblePlan(Map<String, dynamic>? memberRow) {
+    if (memberRow == null) return false;
+    final plan = (memberRow['plan'] as String?) ?? 'free';
+    if (plan != 'premium' && plan != 'business') return false;
+    final expiresStr = memberRow['plan_expires_at'] as String?;
+    if (expiresStr == null || expiresStr.isEmpty) return true;
+    final expires = DateTime.tryParse(expiresStr);
+    if (expires == null) return true;
+    return DateTime.now().isBefore(expires);
   }
 
   /// Returns true for old-style absolute paths (start with `/` on Unix-like

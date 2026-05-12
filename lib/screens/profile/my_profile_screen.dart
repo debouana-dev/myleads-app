@@ -84,8 +84,7 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
           // Upload to FTP immediately (fire-and-forget) for premium/business users
           // so the photo is available when user logs in on another device
           final user = StorageService.currentUser;
-          if (user != null &&
-              (user.plan == 'premium' || user.plan == 'business')) {
+          if (user != null && (user.plan == 'business')) {
             FtpPhotoService.uploadPhoto(savedPath).ignore();
           }
 
