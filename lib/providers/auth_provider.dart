@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -12,12 +11,12 @@ import 'package:uuid/uuid.dart';
 
 import '../core/l10n/app_l10n.dart';
 import '../core/utils/validators.dart';
-import '../models/contact.dart';
 import '../models/user_account.dart';
 import '../services/database_service.dart';
 import '../services/email_service.dart';
 import '../services/encryption_service.dart';
 import '../services/notification_service.dart';
+import '../services/ftp_photo_service.dart';
 import '../services/photo_storage_service.dart';
 import '../services/background_task.dart';
 import '../services/remote_sync_service.dart';
@@ -620,7 +619,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     try {
-      final userPhotoPath = user.photoPath;
       final userId = user.id;
 
       if (user.organizationId != null) {
@@ -639,7 +637,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
         } else {
           // Non-admin member: transfer contacts to the admin (cloud handled via
           // live-write callbacks), then erase this user from both databases.
-          // Contact photo files are NOT deleted — they now belong to the admin.
           await DatabaseService.transferOrgContactsToAdmin(
               fromUserId: userId, orgId: user.organizationId!);
           // Cloud delete excludes contacts (already re-owned by admin).
@@ -653,42 +650,39 @@ class AuthNotifier extends StateNotifier<AuthState> {
           await DatabaseService.deleteUserAndAllData(userId);
           await StorageService.clearSession();
           state = const AuthState();
-          if (!kIsWeb) _deleteFileIfExists(userPhotoPath);
+          if (!kIsWeb) {
+            // Delete both local photo folders for this user.
+            await PhotoStorageService.deleteLocalUserFolders(userId);
+            // Delete only the profile pictures from FTP — contact pictures stay
+            // in the cloud since they are now owned by the org admin.
+            unawaited(
+                FtpPhotoService.deleteUserPhotoFolder('profile_pictures', userId));
+          }
           return null;
         }
       }
 
       // Standard path (solo user or admin who just dissolved their org):
-      // collect contact photo paths before rows are erased.
-      final List<Contact> contacts =
-          await DatabaseService.getAllContactsForOwner(userId);
-      // Delete all user data from the cloud first, then locally.
+      // delete all user data from the cloud first, then locally.
       final cloudErr = await RemoteSyncService.deleteUserFromCloud(userId);
       if (cloudErr != null) debugPrint('deleteAccount cloud error: $cloudErr');
       await DatabaseService.deleteUserAndAllData(userId);
       await StorageService.clearSession();
       state = const AuthState();
       if (!kIsWeb) {
-        _deleteFileIfExists(userPhotoPath);
-        for (final c in contacts) {
-          _deleteFileIfExists(c.photoPath);
-        }
+        // Delete both local photo folders for this user.
+        await PhotoStorageService.deleteLocalUserFolders(userId);
+        // Delete both profile and contact picture folders from FTP.
+        unawaited(
+            FtpPhotoService.deleteUserPhotoFolder('profile_pictures', userId));
+        unawaited(
+            FtpPhotoService.deleteUserPhotoFolder('contact_pictures', userId));
       }
 
       return null;
     } catch (e) {
       return _l10n.authDeleteError(e.toString());
     }
-  }
-
-  static void _deleteFileIfExists(String? path) {
-    if (path == null || path.isEmpty) return;
-    try {
-      final resolved = PhotoStorageService.resolveAbsolutePath(path);
-      if (resolved == null) return;
-      final file = File(resolved);
-      if (file.existsSync()) file.deleteSync();
-    } catch (_) {}
   }
 
   // ---------------- Change password ----------------

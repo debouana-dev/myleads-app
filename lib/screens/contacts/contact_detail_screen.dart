@@ -18,6 +18,7 @@ import '../../services/photo_storage_service.dart';
 import '../../services/storage_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../providers/reminders_provider.dart';
+import '../reminders/create_reminder_screen.dart';
 import '../reminders/reminder_detail_screen.dart';
 
 class ContactDetailScreen extends ConsumerStatefulWidget {
@@ -798,6 +799,23 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
                   context.push('/contact/${contact.id}/edit');
                 },
               ),
+            ListTile(
+              leading: const Icon(Icons.alarm_add_rounded, color: AppColors.accent),
+              title: Text(l10n.newReminder),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ProviderScope(
+                      parent: ProviderScope.containerOf(context),
+                      child: CreateReminderScreen(
+                          preselectedContactId: contact.id),
+                    ),
+                  ),
+                );
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.share, color: AppColors.primary),
               title: Text(l10n.shareButton),

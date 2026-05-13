@@ -94,6 +94,22 @@ class PhotoStorageService {
     return resolved != null ? File(resolved) : null;
   }
 
+  /// Deletes the `.images/profile_pictures/<userId>` and
+  /// `.images/contact_pictures/<userId>` directories from local storage.
+  ///
+  /// Errors are silently ignored. No-op on web or before [init] is called.
+  static Future<void> deleteLocalUserFolders(String userId) async {
+    if (kIsWeb) return;
+    final dir = _docsDir;
+    if (dir == null) return;
+    for (final subDir in ['profile_pictures', 'contact_pictures']) {
+      try {
+        final folder = Directory(p.join(dir, '.images', subDir, userId));
+        if (await folder.exists()) await folder.delete(recursive: true);
+      } catch (_) {}
+    }
+  }
+
   // ── Internals ────────────────────────────────────────────────────────────
 
   static String get _ownerFolder {
