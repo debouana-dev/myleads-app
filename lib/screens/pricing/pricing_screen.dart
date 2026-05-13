@@ -76,6 +76,7 @@ class _PricingScreenState extends ConsumerState<PricingScreen>
         currency: 'EUR',
         status: 'succeeded',
         stripePaymentIntentId: piId,
+        accountType: 'individual',
         createdAt: DateTime.now().toIso8601String(),
       );
       await DatabaseService.insertPaymentRecord(record);
@@ -103,10 +104,14 @@ class _PricingScreenState extends ConsumerState<PricingScreen>
 
   int _planLevel(String plan) {
     switch (plan) {
-      case 'free': return 0;
-      case 'premium': return 1;
-      case 'business': return 2;
-      default: return 0;
+      case 'free':
+        return 0;
+      case 'premium':
+        return 1;
+      case 'business':
+        return 2;
+      default:
+        return 0;
     }
   }
 
@@ -115,11 +120,13 @@ class _PricingScreenState extends ConsumerState<PricingScreen>
     final authState = ref.read(authProvider);
     final currentPlan = authState.plan;
     final planExpiresAt = authState.planExpiresAt;
-    
+
     // Pour ces tuiles de prix rapides (2.99€ / 5.99€), on utilise le cycle mensuel par défaut
     // sauf si l'utilisateur a déjà un cycle annuel en cours qu'il souhaite renouveler.
-    final billingCycle = authState.subscriptionBillingCycle ?? 'monthly';
-    final isInRenewalWindow = SubscriptionService.isInRenewalWindow(planExpiresAt, billingCycle);
+    // final billingCycle = authState.subscriptionBillingCycle ?? 'monthly';
+    const billingCycle = 'yearly';
+    final isInRenewalWindow =
+        SubscriptionService.isInRenewalWindow(planExpiresAt, billingCycle);
 
     // Si on clique sur le plan actuel :
     // - Si on est en période de renouvellement, on laisse passer pour repayer.
@@ -138,7 +145,8 @@ class _PricingScreenState extends ConsumerState<PricingScreen>
 
     // Downgrade check
     if (_planLevel(planId) < _planLevel(currentPlan)) {
-      final isInRenewalWindow = SubscriptionService.isInRenewalWindow(planExpiresAt, billingCycle);
+      final isInRenewalWindow =
+          SubscriptionService.isInRenewalWindow(planExpiresAt, billingCycle);
       if (!isInRenewalWindow) {
         _showSnack(l10n.downgradeNotAllowedGeneric, AppColors.warning);
         return;
@@ -176,13 +184,18 @@ class _PricingScreenState extends ConsumerState<PricingScreen>
         currency: 'EUR',
         status: 'succeeded',
         stripePaymentIntentId: result.paymentIntentId ?? '',
+        accountType: 'individual',
         createdAt: DateTime.now().toIso8601String(),
       );
       await DatabaseService.insertPaymentRecord(record);
-      await ref.read(authProvider.notifier).changePlan(planId, billingCycle: billingCycle);
+      await ref
+          .read(authProvider.notifier)
+          .changePlan(planId, billingCycle: billingCycle);
       if (mounted) _showSnack(l10n.paymentSuccess, AppColors.success);
     } else {
-      final msg = result.errorCode == 'cancelled' ? l10n.paymentCancelled : l10n.paymentFailed;
+      final msg = result.errorCode == 'cancelled'
+          ? l10n.paymentCancelled
+          : l10n.paymentFailed;
       _showSnack(msg, AppColors.error);
     }
   }
@@ -436,7 +449,8 @@ class _PricingScreenState extends ConsumerState<PricingScreen>
                                   eurToTargetRate: eurToUsd),
                               period: l10n.premiumPeriod(l10n),
                               highlight: true,
-                              isSelected: _selectedPlan == 'premium' || (plan == 'premium' && _selectedPlan == null),
+                              isSelected: _selectedPlan == 'premium' ||
+                                  (plan == 'premium' && _selectedPlan == null),
                               isLoading: _loadingPlan == 'premium',
                               onTap: () => _selectPlan('premium'),
                             ),
@@ -447,7 +461,8 @@ class _PricingScreenState extends ConsumerState<PricingScreen>
                                   eurToTargetRate: eurToUsd),
                               period: l10n.businessPeriod(l10n),
                               highlight: false,
-                              isSelected: _selectedPlan == 'business' || (plan == 'business' && _selectedPlan == null),
+                              isSelected: _selectedPlan == 'business' ||
+                                  (plan == 'business' && _selectedPlan == null),
                               isLoading: _loadingPlan == 'business',
                               onTap: () => _selectPlan('business'),
                             ),
