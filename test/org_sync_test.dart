@@ -524,6 +524,7 @@ void main() {
         canCreate: false,
         canViewReminders: true,
         canViewHistory: false,
+        canExportContacts: true,
       );
 
       final privs = await DatabaseService.getMemberPrivileges(
@@ -673,6 +674,7 @@ void main() {
         canCreate: true,
         canViewReminders: false,
         canViewHistory: false,
+        canExportContacts: true,
       );
 
       expect(
@@ -698,6 +700,7 @@ void main() {
         canCreate: false,
         canViewReminders: false,
         canViewHistory: false,
+        canExportContacts: true,
       );
 
       expect(
@@ -1084,6 +1087,7 @@ void main() {
         canCreate: true,
         canViewReminders: true,
         canViewHistory: true,
+        canExportContacts: true,
       );
 
       final call =
