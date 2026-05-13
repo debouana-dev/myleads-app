@@ -120,12 +120,15 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
                 itemBuilder: (_, i) {
                   final t = tabs[i];
                   final active = t.$1 == _activeTab;
+                  final isLateTab = t.$1 == 'late';
                   return GestureDetector(
                     onTap: () => setState(() => _activeTab = t.$1),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       decoration: BoxDecoration(
-                        gradient: active ? AppColors.primaryGradient : null,
+                        gradient: active
+                            ? (isLateTab ? AppColors.hotGradient : AppColors.primaryGradient)
+                            : null,
                         color: active ? null : AppColors.surfaceColor(context),
                         borderRadius: BorderRadius.circular(22),
                         border: active ? null : Border.all(color: AppColors.borderColor(context)),

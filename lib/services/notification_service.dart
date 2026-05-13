@@ -67,8 +67,10 @@ class NotificationService {
       const AndroidNotificationChannel(
         _chHighId,
         'Rappels urgents',
-        description: 'Rappels très importants',
-        importance: Importance.high,
+        description: 'Rappels très importants (Alarme)',
+        importance: Importance.max, // Max importance for alarms
+        enableVibration: true,
+        playSound: true,
       ),
     );
     await androidImpl?.createNotificationChannel(
@@ -114,6 +116,9 @@ class NotificationService {
   static int _upcomingPushId(String reminderId) =>
       'upcoming_$reminderId'.hashCode.abs() % 1000000;
 
+  static int _onTimePushId(String reminderId) =>
+      'ontime_$reminderId'.hashCode.abs() % 1000000;
+
   static int _overduePushId(String reminderId) =>
       'overdue_$reminderId'.hashCode.abs() % 1000000;
 
@@ -143,8 +148,10 @@ class NotificationService {
         android = const AndroidNotificationDetails(
           _chHighId,
           'Rappels urgents',
-          importance: Importance.high,
-          priority: Priority.high,
+          importance: Importance.max,
+          priority: Priority.max,
+          fullScreenIntent: true, // Try to show full screen if possible (alarm style)
+          category: AndroidNotificationCategory.alarm,
         );
         break;
       case 'important':
@@ -330,6 +337,50 @@ class NotificationService {
     // Both times are past → no push needed (reminder is already overdue).
   }
 
+  /// Schedules a push notification exactly at [reminder.startDateTime].
+  /// This acts as the "alarm" for the reminder.
+  static Future<void> scheduleReminderOnTime(Reminder reminder) async {
+    final ownerId = StorageService.currentUserId;
+    if (ownerId.isEmpty) return;
+
+    final scheduledAt = reminder.startDateTime;
+    final now = DateTime.now();
+
+    final title = 'Me2Leads : Rappel maintenant !';
+    final body = reminder.note.isNotEmpty ? reminder.note : 'C\'est le moment de votre tâche.';
+
+    await _persistIfNew(AppNotification(
+      id: 'ontime_${reminder.id}',
+      ownerId: ownerId,
+      type: 'reminder_ontime',
+      title: title,
+      body: body,
+      scheduledAt: scheduledAt,
+      createdAt: now,
+      referenceId: reminder.id,
+    ));
+
+    final pushId = _onTimePushId(reminder.id);
+    if (!kIsWeb && _initialized) {
+      try {
+        await _plugin.cancel(pushId);
+      } catch (_) {}
+    }
+
+    if (scheduledAt.isAfter(now)) {
+      await _schedulePush(
+        id: pushId,
+        title: title,
+        body: body,
+        priority: reminder.priority,
+        scheduledAt: scheduledAt,
+      );
+    } else if (now.difference(scheduledAt).inMinutes < 5) {
+      // If we're within 5 minutes after the time (e.g. just missed it), fire now.
+      await _sendPush(id: pushId, title: title, body: body, priority: reminder.priority);
+    }
+  }
+
   // -----------------------------------------------------------------------
   // Public API — overdue reminder push (4+ hours past deadline)
   // -----------------------------------------------------------------------
@@ -448,6 +499,9 @@ class NotificationService {
     // Re-schedule upcoming push (cancels stale alarm internally).
     await scheduleReminderUpcoming(reminder);
 
+    // Re-schedule on-time push (alarm).
+    await scheduleReminderOnTime(reminder);
+
     // Reset the overdue push so an updated end-time takes effect.
     final overdueNotifId = 'overdue_${reminder.id}';
     if (!kIsWeb && _initialized) {
@@ -478,6 +532,7 @@ class NotificationService {
     if (kIsWeb || !_initialized) return;
     try {
       await _plugin.cancel(_upcomingPushId(reminderId));
+      await _plugin.cancel(_onTimePushId(reminderId));
       await _plugin.cancel(_overduePushId(reminderId));
     } catch (_) {}
     await cancelRepeatReminderNotifications(reminderId);
@@ -585,6 +640,7 @@ class NotificationService {
     for (final r in reminders) {
       if (r.isCompleted) continue;
       await scheduleReminderUpcoming(r);
+      await scheduleReminderOnTime(r);
     }
 
     // Overdue reminder pushes (4+ hours past deadline)
@@ -735,13 +791,26 @@ class NotificationService {
   /// Maps a repeat frequency string to its [Duration] equivalent.
   /// Returns null for null or unknown values (treated as "no repeat").
   static Duration? _frequencyToDuration(String? frequency) {
-    switch (frequency) {
-      case '30m': return const Duration(minutes: 30);
-      case '1h':  return const Duration(hours: 1);
-      case '1d':  return const Duration(days: 1);
-      case '1w':  return const Duration(days: 7);
-      case '1mo': return const Duration(days: 30);
-      default:    return null;
+    if (frequency == null) return null;
+    final match = RegExp(r'^(\d+)(m|h|d|w|mo)$').firstMatch(frequency);
+    if (match == null) return null;
+
+    final value = int.tryParse(match.group(1)!) ?? 0;
+    final unit = match.group(2);
+
+    switch (unit) {
+      case 'm':
+        return Duration(minutes: value);
+      case 'h':
+        return Duration(hours: value);
+      case 'd':
+        return Duration(days: value);
+      case 'w':
+        return Duration(days: value * 7);
+      case 'mo':
+        return Duration(days: value * 30);
+      default:
+        return null;
     }
   }
 

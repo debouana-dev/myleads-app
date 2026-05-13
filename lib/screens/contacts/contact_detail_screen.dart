@@ -201,8 +201,8 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
             Padding(
               padding:
                   const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              child: Wrap(
+                spacing: 8,
                 children: [
                   _buildActionBtn(
                     context: context,
@@ -239,6 +239,21 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
                     label: l10n.shareButton,
                     color: AppColors.accent,
                     onTap: () => ContactActions.share(context, contact),
+                  ),
+                  _buildActionBtn(
+                    context: context,
+                    icon: const Icon(Icons.alarm_add_rounded, size: 22),
+                    label: l10n.createReminderButton,
+                    color: AppColors.accent,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProviderScope(
+                          parent: ProviderScope.containerOf(context),
+                          child: CreateReminderScreen(preselectedContactId: contact.id),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -384,14 +399,56 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
                 return _buildSection(
                   context: context,
                   title: l10n.reminderSection,
-                  trailing: GestureDetector(
-                    onTap: () => context.push(
-                        '/contact/${contact.id}/reminders'),
-                    child: const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 16,
-                      color: AppColors.accent,
-                    ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ProviderScope(
+                              parent: ProviderScope.containerOf(context),
+                              child: CreateReminderScreen(
+                                  preselectedContactId: contact.id),
+                            ),
+                          ),
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.add,
+                                  size: 14, color: AppColors.accent),
+                              const SizedBox(width: 4),
+                              Text(
+                                l10n.newReminder.toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.accent,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: () => context
+                            .push('/contact/${contact.id}/reminders'),
+                        child: const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 16,
+                          color: AppColors.accent,
+                        ),
+                      ),
+                    ],
                   ),
                   child: pending.isEmpty
                       ? Text(
