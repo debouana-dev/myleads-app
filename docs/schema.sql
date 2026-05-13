@@ -167,12 +167,14 @@ CREATE TABLE IF NOT EXISTS "organizations" (
 
 
 -- ============================================================
--- TABLE: organization_members  (v7 + v8 privileges + v10 reminder access + v12 history access + v18 member profile denormalization + v20 export access)
+-- TABLE: organization_members  (v7 + v8 privileges + v10 reminder access + v12 history access + v18 member profile denormalization + v20 export access + v21 email encryption)
 -- role: admin | member
 -- status: active | suspended
 -- Denormalized member profile fields are stored here for fast local display.
 -- can_edit / can_create / can_view_reminders / can_view_history / can_export_contacts: per-member flags.
 -- Admins always have all five set to 1 regardless of stored value.
+-- email: AES-256-CBC ciphertext, key = SHA256(SECRET_KEY:organization_id).
+--        Same encryption scheme as contacts.email / contacts.phone (v21+).
 -- ============================================================
 CREATE TABLE IF NOT EXISTS "organization_members" (
   "id"                  VARCHAR(36)  NOT NULL,
@@ -321,6 +323,14 @@ ALTER TABLE "organization_members"
   ADD COLUMN IF NOT EXISTS "can_export_contacts" SMALLINT NOT NULL DEFAULT 0;
 UPDATE "organization_members" SET "can_export_contacts" = 1 WHERE "role" = 'admin';
 
+-- v21: encrypt existing plaintext member emails with the org ID as key material.
+-- Valid email addresses contain '@'; AES-CBC base64 output never does.
+-- This UPDATE is a one-time data migration — no column type change required.
+-- Run via application _onUpgrade; reproduced here for reference only.
+-- UPDATE "organization_members"
+--   SET "email" = AES_ENCRYPT("email", SHA2(CONCAT(@SECRET_KEY, ':', "organization_id"), 256))
+--   WHERE "email" IS NOT NULL AND "email" LIKE '%@%';
+
 -- ============================================================
 -- Schema version history
 -- ============================================================
@@ -346,4 +356,6 @@ UPDATE "organization_members" SET "can_export_contacts" = 1 WHERE "role" = 'admi
 -- v19   : payment_history.transaction_id — human-readable receipt ID (M2L + 7 digits)
 -- v20   : organization_members.can_export_contacts — controls whether a member
 --         can export shared org contacts (default 0; admins always 1)
+-- v21   : organization_members.email now stored as AES-256-CBC ciphertext keyed
+--         on organization_id; migration re-encrypts all pre-existing plaintext rows
 -- ============================================================
