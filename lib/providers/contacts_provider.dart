@@ -6,7 +6,9 @@ import '../models/contact.dart';
 import '../models/interaction.dart';
 import '../models/plan_features.dart';
 import '../services/database_service.dart';
+import '../services/ftp_photo_service.dart';
 import '../services/notification_service.dart';
+import '../services/photo_storage_service.dart';
 import '../services/storage_service.dart';
 
 const _uuid = Uuid();
@@ -381,10 +383,21 @@ class ContactsNotifier extends StateNotifier<ContactsState> {
       }
     }
 
+    final photoPath = target?.photoPath;
+
     await DatabaseService.deleteContact(id);
     state = state.copyWith(
       contacts: state.contacts.where((c) => c.id != id).toList(),
     );
+
+    // Clean up the contact's photo from local storage and FTP.
+    if (photoPath != null && photoPath.isNotEmpty) {
+      try {
+        PhotoStorageService.localFileForRelativePath(photoPath)?.deleteSync();
+      } catch (_) {}
+      unawaited(FtpPhotoService.deletePhoto(photoPath));
+    }
+
     return null;
   }
 

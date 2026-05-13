@@ -308,6 +308,7 @@ class _NotificationCard extends ConsumerWidget {
     switch (n.type) {
       case 'reminder_upcoming':
       case 'reminder_overdue':
+      case 'reminder_repeat':
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -338,6 +339,8 @@ class _NotificationCard extends ConsumerWidget {
         return AppColors.hot;
       case 'reminder_upcoming':
         return AppColors.primary;
+      case 'reminder_repeat':
+        return AppColors.accent;
       case 'contact_incomplete':
         return AppColors.warm;
       default:
@@ -351,6 +354,8 @@ class _NotificationCard extends ConsumerWidget {
         return Icons.alarm_off_rounded;
       case 'reminder_upcoming':
         return Icons.alarm_rounded;
+      case 'reminder_repeat':
+        return Icons.repeat_rounded;
       case 'contact_incomplete':
         return Icons.person_outline_rounded;
       default:
@@ -364,6 +369,8 @@ class _NotificationCard extends ConsumerWidget {
         return l10n.overdueReminderBadge;
       case 'reminder_upcoming':
         return l10n.upcomingReminderBadge;
+      case 'reminder_repeat':
+        return l10n.repeatReminderBadge;
       case 'contact_incomplete':
         return l10n.incompleteProfileBadge;
       default:

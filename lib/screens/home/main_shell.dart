@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../core/l10n/app_l10n.dart';
 import '../../core/theme/app_colors.dart';
-import '../../providers/auth_provider.dart';
 import '../../providers/navigation_provider.dart';
 import '../home/home_screen.dart';
 import '../contacts/contacts_screen.dart';
@@ -103,12 +101,7 @@ class MainShell extends ConsumerWidget {
   Widget _scanButton(BuildContext context, WidgetRef ref) {
     return GestureDetector(
       onTap: () {
-        final plan = ref.read(authProvider).plan;
-        if (plan == 'free') {
-          context.push('/subscription-plan');
-        } else {
-          ref.read(currentTabProvider.notifier).state = 2;
-        }
+        ref.read(currentTabProvider.notifier).state = 2;
       },
       child: Container(
         width: 64,

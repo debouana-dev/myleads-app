@@ -3,6 +3,7 @@
 /// type values:
 ///   'reminder_upcoming'  — 15 min before reminder start
 ///   'reminder_overdue'   — reminder 4+ hours past deadline
+///   'reminder_repeat'    — recurring notification at the reminder's repeat interval
 ///   'contact_incomplete' — hot/warm contact with incomplete profile 3+ days old
 class AppNotification {
   final String id;

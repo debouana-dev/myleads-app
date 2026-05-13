@@ -15,7 +15,10 @@
       "Bash(xargs grep *)",
       "Bash(Get-ChildItem \"C:\\\\Users\\\\munki\\\\AppData\\\\Local\\\\Pub\\\\Cache\\\\hosted\\\\pub.dev\" -Filter \"*stripe*\" -Directory)",
       "Bash(Select-Object Name)",
-      "Bash(dart analyze *)"
+      "Bash(dart analyze *)",
+      "Bash(find \"/c/Users/munki/.pub-cache/hosted/pub.dev\" -name \"ftpconnect\" -type d 2>/dev/null | head -5; find \"/c/Users/munki/AppData/Local/Pub/Cache/hosted/pub.dev\" -maxdepth 1 -name \"ftpconnect*\" -type d 2>/dev/null | head -5)",
+      "Read(//c/Users/munki/.pub-cache/hosted/**)",
+      "Read(//c/Users/munki/AppData/Local/Pub/Cache/hosted/pub.dev/**)"
     ]
   }
 }

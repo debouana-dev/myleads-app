@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:encrypt/encrypt.dart' as enc;
@@ -88,6 +89,39 @@ class EncryptionService {
     }
     try {
       return _encrypter!.decrypt(enc.Encrypted.fromBase64(cipher), iv: _iv!);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /// Encrypts [plain] with a key derived from SECRET_KEY + [keyMaterial].
+  /// Pass orgId for org contacts, or userEmail.toLowerCase().trim() for personal.
+  static String encryptTextWithKeyMaterial(String plain, String keyMaterial) {
+    if (plain.isEmpty) return '';
+    final secret = dotenv.env['SECRET_KEY'] ?? '';
+    final keyBytes = sha256.convert(utf8.encode('$secret:$keyMaterial')).bytes;
+    final ivBytes =
+        sha256.convert(utf8.encode('$keyMaterial:$secret')).bytes.sublist(0, 16);
+    final key = enc.Key(Uint8List.fromList(keyBytes));
+    final iv = enc.IV(Uint8List.fromList(ivBytes));
+    final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.cbc));
+    return encrypter.encrypt(plain, iv: iv).base64;
+  }
+
+  /// Decrypts [cipher] with a key derived from SECRET_KEY + [keyMaterial].
+  /// Returns '' on any failure — wrong key causes a PKCS7 padding exception
+  /// which is caught, making this safe to use as a try-first sentinel.
+  static String decryptTextWithKeyMaterial(String? cipher, String keyMaterial) {
+    if (cipher == null || cipher.isEmpty) return '';
+    try {
+      final secret = dotenv.env['SECRET_KEY'] ?? '';
+      final keyBytes = sha256.convert(utf8.encode('$secret:$keyMaterial')).bytes;
+      final ivBytes =
+          sha256.convert(utf8.encode('$keyMaterial:$secret')).bytes.sublist(0, 16);
+      final key = enc.Key(Uint8List.fromList(keyBytes));
+      final iv = enc.IV(Uint8List.fromList(ivBytes));
+      final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.cbc));
+      return encrypter.decrypt(enc.Encrypted.fromBase64(cipher), iv: iv);
     } catch (_) {
       return '';
     }

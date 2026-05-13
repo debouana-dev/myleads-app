@@ -60,6 +60,7 @@ class StorageService {
 
   static Future<void> setCurrentSession(UserAccount user, String token) async {
     _cachedUser = user.copyWith(sessionToken: token);
+    DatabaseService.setActiveOrgId(user.organizationId);
     await _secure.write(key: _kCurrentUserId, value: user.id);
     await _secure.write(key: _kCurrentUserEmail, value: user.email);
     await _secure.write(key: _kCurrentSessionToken, value: token);
@@ -67,6 +68,7 @@ class StorageService {
 
   static Future<void> clearSession() async {
     _cachedUser = null;
+    DatabaseService.setActiveOrgId(null);
     await _secure.delete(key: _kCurrentUserId);
     await _secure.delete(key: _kCurrentUserEmail);
     await _secure.delete(key: _kCurrentSessionToken);

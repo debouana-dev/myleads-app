@@ -208,12 +208,13 @@ class _OrganizationAdminScreenState
       ),
       builder: (_) => _MemberManagementSheet(
         member: member,
-        onUpdatePrivileges: (canEdit, canCreate, canViewReminders, canViewHistory) =>
+        onUpdatePrivileges: (canEdit, canCreate, canViewReminders, canViewHistory, canExportContacts) =>
             _updatePrivileges(member,
                 canEdit: canEdit,
                 canCreate: canCreate,
                 canViewReminders: canViewReminders,
-                canViewHistory: canViewHistory),
+                canViewHistory: canViewHistory,
+                canExportContacts: canExportContacts),
         onSuspend: member.status == 'active'
             ? () => _doSuspend(member)
             : () => _doReactivate(member),
@@ -226,7 +227,8 @@ class _OrganizationAdminScreenState
       {required bool canEdit,
       required bool canCreate,
       required bool canViewReminders,
-      required bool canViewHistory}) async {
+      required bool canViewHistory,
+      required bool canExportContacts}) async {
     final l10n = ref.read(l10nProvider);
     final err =
         await ref.read(organizationProvider.notifier).updateMemberPrivileges(
@@ -235,6 +237,7 @@ class _OrganizationAdminScreenState
               canCreate: canCreate,
               canViewReminders: canViewReminders,
               canViewHistory: canViewHistory,
+              canExportContacts: canExportContacts,
             );
     if (!mounted) return;
     if (err != null) {
@@ -1060,7 +1063,7 @@ class _MemberManagementSheet extends ConsumerWidget {
   });
 
   final OrgMember member;
-  final void Function(bool canEdit, bool canCreate, bool canViewReminders, bool canViewHistory) onUpdatePrivileges;
+  final void Function(bool canEdit, bool canCreate, bool canViewReminders, bool canViewHistory, bool canExportContacts) onUpdatePrivileges;
   final VoidCallback onSuspend;
   final VoidCallback onRemove;
 
@@ -1147,22 +1150,27 @@ class _MemberManagementSheet extends ConsumerWidget {
             _PrivilegeRow(
               label: l10n.editPrivilege,
               value: live.canEdit,
-              onChanged: (val) => onUpdatePrivileges(val, live.canCreate, live.canViewReminders, live.canViewHistory),
+              onChanged: (val) => onUpdatePrivileges(val, live.canCreate, live.canViewReminders, live.canViewHistory, live.canExportContacts),
             ),
             _PrivilegeRow(
               label: l10n.createPrivilege,
               value: live.canCreate,
-              onChanged: (val) => onUpdatePrivileges(live.canEdit, val, live.canViewReminders, live.canViewHistory),
+              onChanged: (val) => onUpdatePrivileges(live.canEdit, val, live.canViewReminders, live.canViewHistory, live.canExportContacts),
             ),
             _PrivilegeRow(
               label: l10n.viewRemindersPrivilege,
               value: live.canViewReminders,
-              onChanged: (val) => onUpdatePrivileges(live.canEdit, live.canCreate, val, live.canViewHistory),
+              onChanged: (val) => onUpdatePrivileges(live.canEdit, live.canCreate, val, live.canViewHistory, live.canExportContacts),
             ),
             _PrivilegeRow(
               label: l10n.viewHistoryPrivilege,
               value: live.canViewHistory,
-              onChanged: (val) => onUpdatePrivileges(live.canEdit, live.canCreate, live.canViewReminders, val),
+              onChanged: (val) => onUpdatePrivileges(live.canEdit, live.canCreate, live.canViewReminders, val, live.canExportContacts),
+            ),
+            _PrivilegeRow(
+              label: l10n.exportPrivilege,
+              value: live.canExportContacts,
+              onChanged: (val) => onUpdatePrivileges(live.canEdit, live.canCreate, live.canViewReminders, live.canViewHistory, val),
             ),
 
             const SizedBox(height: 12),

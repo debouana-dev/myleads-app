@@ -11,7 +11,8 @@ import '../../services/calendar_service.dart';
 
 class CreateReminderScreen extends ConsumerStatefulWidget {
   final Reminder? existing;
-  const CreateReminderScreen({super.key, this.existing});
+  final String? preselectedContactId;
+  const CreateReminderScreen({super.key, this.existing, this.preselectedContactId});
   @override
   ConsumerState<CreateReminderScreen> createState() => _CreateReminderScreenState();
 }
@@ -40,6 +41,8 @@ class _CreateReminderScreenState extends ConsumerState<CreateReminderScreen> {
       _toDoAction = e.toDoAction;
       _priority = e.priority;
       _noteCtrl.text = e.note;
+    } else if (widget.preselectedContactId != null) {
+      _contactIds = [widget.preselectedContactId!];
     }
   }
 

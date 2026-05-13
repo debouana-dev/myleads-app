@@ -693,6 +693,8 @@ class AppL10n {
       _en ? 'OVERDUE REMINDER' : 'RAPPEL EN RETARD';
   String get upcomingReminderBadge =>
       _en ? 'UPCOMING REMINDER' : 'RAPPEL À VENIR';
+  String get repeatReminderBadge =>
+      _en ? 'RECURRING REMINDER' : 'RAPPEL RÉCURRENT';
   String get incompleteProfileBadge =>
       _en ? 'INCOMPLETE PROFILE' : 'PROFIL INCOMPLET';
   String get notificationLabel => _en ? 'NOTIFICATION' : 'NOTIFICATION';
@@ -793,6 +795,8 @@ class AppL10n {
   String get viewHistoryPrivilege => _en
       ? 'Can view shared contact history'
       : "Peut voir l'historique des contacts partagés";
+  String get exportPrivilege =>
+      _en ? 'Can export shared contacts' : 'Peut exporter les contacts partagés';
   String get memberManagement => _en ? 'Manage member' : 'Gérer le membre';
   String get youLabel => _en ? '(you)' : '(vous)';
   String get suspendMember => _en ? 'Suspend' : 'Suspendre';

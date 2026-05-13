@@ -28,6 +28,10 @@ class NotificationService {
   // Fixed ID for the one-at-a-time payment-in-progress notification.
   static const _kPaymentNotifId = 9000001;
 
+  // Number of future repeat occurrences pre-scheduled per reminder.
+  // Kept at 20 to stay under iOS's 64 system notification ceiling.
+  static const _kMaxRepeatSlots = 20;
+
   static bool _initialized = false;
 
   // -----------------------------------------------------------------------
@@ -124,6 +128,9 @@ class NotificationService {
 
   static int _subLastPushId(String userId) =>
       'sub_last_$userId'.hashCode.abs() % 1000000;
+
+  static int _repeatPushId(String reminderId, int i) =>
+      'repeat_${reminderId}_$i'.hashCode.abs() % 1000000;
 
   // -----------------------------------------------------------------------
   // Internal push helpers
@@ -455,6 +462,9 @@ class NotificationService {
 
     // Re-create (and schedule) the overdue push for the current deadline.
     await createOverdueReminderNotification(reminder);
+
+    // Schedule repeat occurrences (cancels stale slots internally).
+    await scheduleRepeatReminderNotifications(reminder);
   }
 
   // -----------------------------------------------------------------------
@@ -470,6 +480,86 @@ class NotificationService {
       await _plugin.cancel(_upcomingPushId(reminderId));
       await _plugin.cancel(_overduePushId(reminderId));
     } catch (_) {}
+    await cancelRepeatReminderNotifications(reminderId);
+  }
+
+  /// Cancels all pre-scheduled repeat-occurrence OS alarms for [reminderId]
+  /// by iterating over all [_kMaxRepeatSlots] slot IDs, and removes the
+  /// in-app notification record for this reminder's repeat series.
+  static Future<void> cancelRepeatReminderNotifications(
+      String reminderId) async {
+    if (!kIsWeb && _initialized) {
+      for (int i = 0; i < _kMaxRepeatSlots; i++) {
+        try {
+          await _plugin.cancel(_repeatPushId(reminderId, i));
+        } catch (_) {}
+      }
+    }
+    await DatabaseService.deleteNotification('repeat_$reminderId');
+  }
+
+  /// Schedules up to [_kMaxRepeatSlots] future repeat occurrences for [reminder].
+  ///
+  /// Always cancels all existing repeat slots first so calling this method
+  /// again (e.g. on frequency change or WorkManager refresh) is idempotent.
+  ///
+  /// Does nothing when:
+  ///   - [reminder.isCompleted] is true
+  ///   - [reminder.repeatFrequency] is null
+  ///   - [reminder.startDateTime] is still in the future
+  static Future<void> scheduleRepeatReminderNotifications(
+      Reminder reminder) async {
+    // Cancel existing slots first — this method is idempotent.
+    await cancelRepeatReminderNotifications(reminder.id);
+
+    if (reminder.isCompleted) return;
+
+    final step = _frequencyToDuration(reminder.repeatFrequency);
+    if (step == null) return;
+
+    final now = DateTime.now();
+
+    // Repeat fires only after startDateTime has passed.
+    if (reminder.startDateTime.isAfter(now)) return;
+
+    final ownerId = StorageService.currentUserId;
+    if (ownerId.isEmpty) return;
+
+    const title = 'Rappel récurrent';
+    final body = reminder.note.isNotEmpty
+        ? reminder.note
+        : 'Rappel prévu à ${_formatTime(reminder.startDateTime)}';
+
+    // Compute the first occurrence strictly after now.
+    DateTime nextTime = _computeNextRepeatTime(
+      startDateTime: reminder.startDateTime,
+      step: step,
+      now: now,
+    );
+
+    // Upsert the in-app notification record (represents the next occurrence).
+    await DatabaseService.insertNotification(AppNotification(
+      id: 'repeat_${reminder.id}',
+      ownerId: ownerId,
+      type: 'reminder_repeat',
+      title: title,
+      body: body,
+      scheduledAt: nextTime,
+      createdAt: now,
+      referenceId: reminder.id,
+    ));
+
+    // Schedule MAX_SLOTS future occurrences as OS alarms.
+    for (int i = 0; i < _kMaxRepeatSlots; i++) {
+      await _schedulePush(
+        id: _repeatPushId(reminder.id, i),
+        title: title,
+        body: body,
+        priority: reminder.priority,
+        scheduledAt: nextTime,
+      );
+      nextTime = nextTime.add(step);
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -504,6 +594,14 @@ class NotificationService {
       if (now.isAfter(deadline.add(const Duration(hours: 4)))) {
         await createOverdueReminderNotification(r);
       }
+    }
+
+    // Repeat reminder pushes — refresh rolling window for all active repeating reminders.
+    for (final r in reminders) {
+      if (r.isCompleted) continue;
+      if (r.repeatFrequency == null) continue;
+      if (r.startDateTime.isAfter(now)) continue;
+      await scheduleRepeatReminderNotifications(r);
     }
 
     // Incomplete hot/warm contact pushes (3+ days after creation)
@@ -633,4 +731,34 @@ class NotificationService {
 
   static String _formatDate(DateTime dt) =>
       '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+
+  /// Maps a repeat frequency string to its [Duration] equivalent.
+  /// Returns null for null or unknown values (treated as "no repeat").
+  static Duration? _frequencyToDuration(String? frequency) {
+    switch (frequency) {
+      case '30m': return const Duration(minutes: 30);
+      case '1h':  return const Duration(hours: 1);
+      case '1d':  return const Duration(days: 1);
+      case '1w':  return const Duration(days: 7);
+      case '1mo': return const Duration(days: 30);
+      default:    return null;
+    }
+  }
+
+  /// Returns the first repeat occurrence strictly after [now].
+  ///
+  /// Uses integer division: floor(elapsed / step) complete intervals have
+  /// passed since [startDateTime], so the next occurrence is exactly one
+  /// step beyond that — guaranteed to be after [now] without any loop.
+  static DateTime _computeNextRepeatTime({
+    required DateTime startDateTime,
+    required Duration step,
+    required DateTime now,
+  }) {
+    if (startDateTime.isAfter(now)) return startDateTime.add(step);
+    final elapsedMs = now.difference(startDateTime).inMilliseconds;
+    final stepsCompleted = elapsedMs ~/ step.inMilliseconds;
+    return startDateTime
+        .add(Duration(milliseconds: step.inMilliseconds * (stepsCompleted + 1)));
+  }
 }

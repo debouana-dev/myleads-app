@@ -86,6 +86,8 @@ class OrgMember {
       canViewReminders; // may view reminders on shared contacts (admin always true)
   final bool
       canViewHistory; // may view history records authored by other members (admin always true)
+  final bool
+      canExportContacts; // may export shared org contacts (admin always true)
 
   OrgMember({
     required this.id,
@@ -106,6 +108,7 @@ class OrgMember {
     this.canCreate = true,
     this.canViewReminders = false,
     this.canViewHistory = false,
+    this.canExportContacts = false,
   }) : joinedAt = joinedAt ?? DateTime.now();
 
   String get fullName => '$firstName $lastName'.trim();
@@ -129,6 +132,7 @@ class OrgMember {
     bool? canCreate,
     bool? canViewReminders,
     bool? canViewHistory,
+    bool? canExportContacts,
   }) {
     return OrgMember(
       id: id ?? this.id,
@@ -149,6 +153,7 @@ class OrgMember {
       canCreate: canCreate ?? this.canCreate,
       canViewReminders: canViewReminders ?? this.canViewReminders,
       canViewHistory: canViewHistory ?? this.canViewHistory,
+      canExportContacts: canExportContacts ?? this.canExportContacts,
     );
   }
 }

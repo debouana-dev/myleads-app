@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -12,12 +11,12 @@ import 'package:uuid/uuid.dart';
 
 import '../core/l10n/app_l10n.dart';
 import '../core/utils/validators.dart';
-import '../models/contact.dart';
 import '../models/user_account.dart';
 import '../services/database_service.dart';
 import '../services/email_service.dart';
 import '../services/encryption_service.dart';
 import '../services/notification_service.dart';
+import '../services/ftp_photo_service.dart';
 import '../services/photo_storage_service.dart';
 import '../services/background_task.dart';
 import '../services/remote_sync_service.dart';
@@ -620,7 +619,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     try {
-      final userPhotoPath = user.photoPath;
       final userId = user.id;
 
       if (user.organizationId != null) {
@@ -639,7 +637,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
         } else {
           // Non-admin member: transfer contacts to the admin (cloud handled via
           // live-write callbacks), then erase this user from both databases.
-          // Contact photo files are NOT deleted — they now belong to the admin.
           await DatabaseService.transferOrgContactsToAdmin(
               fromUserId: userId, orgId: user.organizationId!);
           // Cloud delete excludes contacts (already re-owned by admin).
@@ -653,42 +650,39 @@ class AuthNotifier extends StateNotifier<AuthState> {
           await DatabaseService.deleteUserAndAllData(userId);
           await StorageService.clearSession();
           state = const AuthState();
-          if (!kIsWeb) _deleteFileIfExists(userPhotoPath);
+          if (!kIsWeb) {
+            // Delete both local photo folders for this user.
+            await PhotoStorageService.deleteLocalUserFolders(userId);
+            // Delete only the profile pictures from FTP — contact pictures stay
+            // in the cloud since they are now owned by the org admin.
+            unawaited(
+                FtpPhotoService.deleteUserPhotoFolder('profile_pictures', userId));
+          }
           return null;
         }
       }
 
       // Standard path (solo user or admin who just dissolved their org):
-      // collect contact photo paths before rows are erased.
-      final List<Contact> contacts =
-          await DatabaseService.getAllContactsForOwner(userId);
-      // Delete all user data from the cloud first, then locally.
+      // delete all user data from the cloud first, then locally.
       final cloudErr = await RemoteSyncService.deleteUserFromCloud(userId);
       if (cloudErr != null) debugPrint('deleteAccount cloud error: $cloudErr');
       await DatabaseService.deleteUserAndAllData(userId);
       await StorageService.clearSession();
       state = const AuthState();
       if (!kIsWeb) {
-        _deleteFileIfExists(userPhotoPath);
-        for (final c in contacts) {
-          _deleteFileIfExists(c.photoPath);
-        }
+        // Delete both local photo folders for this user.
+        await PhotoStorageService.deleteLocalUserFolders(userId);
+        // Delete both profile and contact picture folders from FTP.
+        unawaited(
+            FtpPhotoService.deleteUserPhotoFolder('profile_pictures', userId));
+        unawaited(
+            FtpPhotoService.deleteUserPhotoFolder('contact_pictures', userId));
       }
 
       return null;
     } catch (e) {
       return _l10n.authDeleteError(e.toString());
     }
-  }
-
-  static void _deleteFileIfExists(String? path) {
-    if (path == null || path.isEmpty) return;
-    try {
-      final resolved = PhotoStorageService.resolveAbsolutePath(path);
-      if (resolved == null) return;
-      final file = File(resolved);
-      if (file.existsSync()) file.deleteSync();
-    } catch (_) {}
   }
 
   // ---------------- Change password ----------------
@@ -737,8 +731,57 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return null; // success
   }
 
+  /// Initiates an email-change flow: validates [newEmail], sends a 6-digit
+  /// verification code to it, and — for premium/business users not in an org —
+  /// starts a background pull sync so the local DB is up-to-date before the
+  /// user enters the confirmation code.
+  ///
+  /// The caller should next present a code-entry UI and then call [changeEmail].
+  /// Returns `null` on success, or an error string on failure.
+  Future<String?> initiateEmailChange(String newEmail) async {
+    final user = StorageService.currentUser;
+    if (user == null) return _l10n.authNoUserLoggedIn;
+    if (user.authProvider != 'email') {
+      return _l10n.authEmailNotModifiable(user.authProvider);
+    }
+
+    final emailErr = Validators.validateEmail(newEmail.trim());
+    if (emailErr != null) return emailErr;
+
+    if (newEmail.trim().toLowerCase() == user.email.toLowerCase()) {
+      return _l10n.authEmailAlreadyInUse;
+    }
+
+    // Uniqueness checks (mirrors changeEmail).
+    final newLookup = _emailLookup(newEmail.trim());
+    final existing = await DatabaseService.findUserByEmailLookup(newLookup);
+    if (existing != null && existing.id != user.id) {
+      return _l10n.authEmailAlreadyInUse;
+    }
+    final cloudOwnerId =
+        await RemoteSyncService.findCloudUserIdByEmailLookup(newLookup);
+    if (cloudOwnerId != null && cloudOwnerId != user.id) {
+      return _l10n.authEmailAlreadyInUse;
+    }
+
+    // Send the 6-digit code to the new address.
+    final sendErr = await sendVerificationCode(newEmail.trim());
+    if (sendErr != null) return sendErr;
+
+    // For premium/business non-org users: pull the latest cloud data in the
+    // background so the local DB is current before the user confirms the code.
+    final plan = await StorageService.getEffectivePlan();
+    final inOrg =
+        user.organizationId != null && user.organizationId!.isNotEmpty;
+    if ((plan == 'premium' || plan == 'business') && !inOrg) {
+      unawaited(RemoteSyncService.pull(user.id));
+    }
+
+    return null;
+  }
+
   /// Changes the user's email, validated by a 6-digit code previously
-  /// sent to the new address via [sendVerificationCode]. Requires the
+  /// sent to the new address via [initiateEmailChange]. Requires the
   /// current password as an extra safeguard and rotates the session token
   /// so other devices are forced to log in again.
   ///
@@ -787,10 +830,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return _l10n.authInvalidVerificationCode;
     }
 
-    // Preserve the old email so we can decrypt existing contacts with the old key.
     final oldEmail = user.email;
-    await EncryptionService.initFromEnv(oldEmail);
-    final contacts = await DatabaseService.getAllContactsForOwner(user.id);
+
+    // Re-encrypt contacts from old email key to new email key.
+    // Uses parameterized keys — does not depend on session state.
+    // No-op for org members (their contacts use the org key, not the email key).
+    await DatabaseService.reencryptUserContactsAfterEmailChange(
+      userId: user.id,
+      oldEmail: oldEmail,
+      newEmail: newEmail.trim(),
+    );
+
+    // Switch session key to the new email BEFORE writing the user row so that
+    // phone_enc in the users table is encrypted with the new key.
+    await EncryptionService.initFromEnv(newEmail.trim());
 
     // Rotate session token (invalidates other devices) and persist.
     final newToken = EncryptionService.generateSessionToken();
@@ -801,12 +854,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
     await DatabaseService.updateUser(updated);
     await StorageService.setCurrentSession(updated, newToken);
-    await EncryptionService.initFromEnv(updated.email);
     state = state.copyWith(userEmail: newEmail.trim());
 
-    // Re-encrypt all contacts with the new email-derived key.
-    for (final contact in contacts) {
-      await DatabaseService.updateContact(contact);
+    // Push all re-encrypted contact data to the cloud for premium/business
+    // non-org users so other devices receive the updated ciphertext.
+    final plan = await StorageService.getEffectivePlan();
+    final inOrg =
+        updated.organizationId != null && updated.organizationId!.isNotEmpty;
+    if ((plan == 'premium' || plan == 'business') && !inOrg) {
+      await RemoteSyncService.push(updated.id);
     }
 
     // Clear the used code.

@@ -145,7 +145,13 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
   Future<void> _export(String fileType) async {
     _clearResult();
     final l10n = ref.read(l10nProvider);
-    final contacts = ref.read(contactsProvider).contacts;
+    final canExportOrgContacts = ref.read(orgCanExportContactsProvider);
+    final allContacts = ref.read(contactsProvider).contacts;
+    final contacts = canExportOrgContacts
+        ? allContacts
+        : allContacts
+            .where((c) => c.ownerId == StorageService.currentUser?.id)
+            .toList();
 
     if (contacts.isEmpty) {
       _setResult(l10n.exportNoContacts, isError: true);

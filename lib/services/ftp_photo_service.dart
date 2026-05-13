@@ -90,6 +90,25 @@ class FtpPhotoService {
     });
   }
 
+  /// Deletes the entire `photos/<subDir>/<userId>/` folder from FTP.
+  ///
+  /// [subDir] is either `'profile_pictures'` or `'contact_pictures'`.
+  /// Fire-and-forget: errors are silently ignored. No-op on web.
+  static Future<void> deleteUserPhotoFolder(
+      String subDir, String userId) async {
+    if (kIsWeb) return;
+    await _withConnection((ftp) async {
+      try {
+        if (!await _cd(ftp, _remoteRoot)) return false;
+        if (!await _cd(ftp, subDir)) return true; // folder absent — nothing to do
+        await ftp.deleteDirectory(userId);
+        return true;
+      } catch (_) {
+        return true; // folder may not exist — treat as success
+      }
+    });
+  }
+
   /// Verifies that the FTP server is reachable and the [_remoteRoot] directory
   /// can be accessed (or created).
   ///
