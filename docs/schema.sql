@@ -204,11 +204,12 @@ CREATE INDEX IF NOT EXISTS "idx_org_members_user" ON "organization_members" ("us
 
 
 -- ============================================================
--- TABLE: payment_history  (v13, payment_method added v15)
+-- TABLE: payment_history  (v13, payment_method v15, account_type v22)
 -- One row per successful Stripe payment.
 -- Records billing cycle (monthly/yearly), the Stripe
--- Payment Intent ID for dispute resolution, and the payment
--- method type used (card, link, amazon_pay, etc.).
+-- Payment Intent ID for dispute resolution, the payment
+-- method type used (card, link, amazon_pay, etc.), and whether
+-- the payment was made by an individual or an organization.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS "payment_history" (
   "id"                        VARCHAR(36)   NOT NULL,
@@ -221,6 +222,7 @@ CREATE TABLE IF NOT EXISTS "payment_history" (
   "status"                    VARCHAR(20)   NOT NULL DEFAULT 'succeeded',
   "stripe_payment_intent_id"  VARCHAR(255)  NOT NULL,
   "payment_method"            VARCHAR(50)   NOT NULL DEFAULT 'card',
+  "account_type"              VARCHAR(20)   NOT NULL DEFAULT 'individual',
   "created_at"                VARCHAR(50)   NOT NULL,
 
   PRIMARY KEY ("id")
@@ -292,6 +294,7 @@ CREATE TABLE IF NOT EXISTS "payment_history" (
   "status"                    VARCHAR(20)   NOT NULL DEFAULT 'succeeded',
   "stripe_payment_intent_id"  VARCHAR(255)  NOT NULL,
   "payment_method"            VARCHAR(50)   NOT NULL DEFAULT 'card',
+  "account_type"              VARCHAR(20)   NOT NULL DEFAULT 'individual',
   "created_at"                VARCHAR(50)   NOT NULL,
   PRIMARY KEY ("id")
 );
@@ -322,6 +325,10 @@ ALTER TABLE "payment_history"
 ALTER TABLE "organization_members"
   ADD COLUMN IF NOT EXISTS "can_export_contacts" SMALLINT NOT NULL DEFAULT 0;
 UPDATE "organization_members" SET "can_export_contacts" = 1 WHERE "role" = 'admin';
+
+-- v22: account type — individual vs organization payment
+ALTER TABLE "payment_history"
+  ADD COLUMN IF NOT EXISTS "account_type" VARCHAR(20) NOT NULL DEFAULT 'individual';
 
 -- v21: encrypt existing plaintext member emails with the org ID as key material.
 -- Valid email addresses contain '@'; AES-CBC base64 output never does.
@@ -358,4 +365,6 @@ UPDATE "organization_members" SET "can_export_contacts" = 1 WHERE "role" = 'admi
 --         can export shared org contacts (default 0; admins always 1)
 -- v21   : organization_members.email now stored as AES-256-CBC ciphertext keyed
 --         on organization_id; migration re-encrypts all pre-existing plaintext rows
+-- v22   : payment_history.account_type — 'individual' | 'organization'; identifies
+--         whether the payment was made by a personal subscriber or an org admin
 -- ============================================================

@@ -667,6 +667,11 @@ class AppL10n {
   String get numberOfLicenses => _en ? 'Licenses' : 'Licences';
   String get unitPrice => _en ? 'Unit price' : 'Prix unitaire';
   String get paidBy => _en ? 'Paid by' : 'Payé par';
+  String get receiptAdministrator =>
+      _en ? 'Administrator' : 'Administrateur';
+  String get accountTypeLabel => _en ? 'Account type' : 'Type de compte';
+  String get accountTypeIndividual => _en ? 'Individual' : 'Individuel';
+  String get accountTypeOrganization => _en ? 'Organization' : 'Organisation';
   String get organizationDetails =>
       _en ? 'Organization Details' : "Détails de l'organisation";
   String get fullName => _en ? 'Full name' : 'Nom complet';

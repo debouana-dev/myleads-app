@@ -401,6 +401,12 @@ class RemoteSyncService {
         "ALTER TABLE \"payment_history\" ADD COLUMN IF NOT EXISTS \"transaction_id\" VARCHAR(10) NOT NULL DEFAULT ''",
       );
     } catch (_) {}
+    // v22: account type — individual vs organization payment.
+    try {
+      await conn.execute(
+        "ALTER TABLE \"payment_history\" ADD COLUMN IF NOT EXISTS \"account_type\" VARCHAR(20) NOT NULL DEFAULT 'individual'",
+      );
+    } catch (_) {}
 
     // v16: subscription expiry tracking on users.
     await conn.execute(
@@ -1534,10 +1540,10 @@ class RemoteSyncService {
       Sql.named('''
         INSERT INTO "payment_history"
           (id,transaction_id,user_id,plan,billing_cycle,amount,currency,status,
-           stripe_payment_intent_id,payment_method,created_at)
+           stripe_payment_intent_id,payment_method,account_type,created_at)
         VALUES
           (@id,@transaction_id,@user_id,@plan,@billing_cycle,@amount,@currency,@status,
-           @stripe_payment_intent_id,@payment_method,@created_at)
+           @stripe_payment_intent_id,@payment_method,@account_type,@created_at)
         ON CONFLICT (id) DO UPDATE SET
           status=EXCLUDED.status,
           payment_method=EXCLUDED.payment_method
@@ -1553,6 +1559,7 @@ class RemoteSyncService {
         'status': r['status'] ?? 'succeeded',
         'stripe_payment_intent_id': r['stripe_payment_intent_id'],
         'payment_method': r['payment_method'] ?? 'card',
+        'account_type': r['account_type'] ?? 'individual',
         'created_at': r['created_at'],
       },
     );

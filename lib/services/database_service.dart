@@ -27,7 +27,7 @@ import 'web_db_factory_stub.dart'
 class DatabaseService {
   static Database? _db;
   static const _dbName = 'myleads.db';
-  static const _dbVersion = 21;
+  static const _dbVersion = 22;
 
   // ── Remote sync callbacks ──────────────────────────────────────────────────
   static void Function(String table, Map<String, dynamic> row)? _onRemoteUpsert;
@@ -383,6 +383,13 @@ class DatabaseService {
             where: 'id = ?', whereArgs: [row['id']]);
       }
     }
+    if (oldVersion < 22) {
+      // v21 → v22: account type — distinguish individual vs organization payments.
+      try {
+        await db.execute(
+            "ALTER TABLE payment_history ADD COLUMN account_type TEXT NOT NULL DEFAULT 'individual'");
+      } catch (_) {}
+    }
   }
 
   // =====================================================================
@@ -593,6 +600,7 @@ class DatabaseService {
         status TEXT NOT NULL DEFAULT 'succeeded',
         stripe_payment_intent_id TEXT NOT NULL,
         payment_method TEXT NOT NULL DEFAULT 'card',
+        account_type TEXT NOT NULL DEFAULT 'individual',
         created_at TEXT NOT NULL
       )
     ''');

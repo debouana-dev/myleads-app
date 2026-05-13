@@ -129,6 +129,7 @@ class PaymentRecord {
   final String status; // 'succeeded' | 'failed' | 'refunded'
   final String stripePaymentIntentId;
   final String paymentMethod; // 'card' | 'link' | 'amazon_pay' | 'unknown'
+  final String accountType; // 'individual' | 'organization'
   final String createdAt; // ISO-8601
 
   const PaymentRecord({
@@ -142,6 +143,7 @@ class PaymentRecord {
     required this.status,
     required this.stripePaymentIntentId,
     this.paymentMethod = 'card',
+    this.accountType = 'individual',
     required this.createdAt,
   });
 
@@ -163,6 +165,7 @@ class PaymentRecord {
         'status': status,
         'stripe_payment_intent_id': stripePaymentIntentId,
         'payment_method': paymentMethod,
+        'account_type': accountType,
         'created_at': createdAt,
       };
 
@@ -177,6 +180,7 @@ class PaymentRecord {
         status: row['status'] as String? ?? 'succeeded',
         stripePaymentIntentId: row['stripe_payment_intent_id'] as String,
         paymentMethod: row['payment_method'] as String? ?? 'card',
+        accountType: row['account_type'] as String? ?? 'individual',
         createdAt: row['created_at'] as String,
       );
 }

@@ -456,6 +456,7 @@ class _OrganizationAdminScreenState
       currency: 'EUR',
       status: 'succeeded',
       stripePaymentIntentId: result.paymentIntentId ?? '',
+      accountType: 'organization',
       createdAt: DateTime.now().toIso8601String(),
     );
     await DatabaseService.insertPaymentRecord(record);

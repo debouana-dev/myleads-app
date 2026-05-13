@@ -54,6 +54,7 @@ class _PaymentHistoryScreenState extends ConsumerState<PaymentHistoryScreen> {
         date: DateTime.tryParse(r.createdAt) ?? DateTime.now(),
         status: status,
         paymentMethod: r.paymentMethod,
+        accountType: r.accountType,
         record: r,
       );
     }).toList();
@@ -377,6 +378,43 @@ class _TransactionCard extends StatelessWidget {
                             ),
                           ),
                         ),
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: transaction.accountType == 'organization'
+                                ? AppColors.accent.withOpacity(0.12)
+                                : AppColors.info.withOpacity(0.10),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                transaction.accountType == 'organization'
+                                    ? Icons.groups_rounded
+                                    : Icons.person_rounded,
+                                size: 9,
+                                color: transaction.accountType == 'organization'
+                                    ? AppColors.accent
+                                    : AppColors.info,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                transaction.accountType == 'organization'
+                                    ? l10n.accountTypeOrganization
+                                    : l10n.accountTypeIndividual,
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: transaction.accountType == 'organization'
+                                      ? AppColors.accent
+                                      : AppColors.info,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                     Text(
@@ -509,6 +547,7 @@ class _Transaction {
   final DateTime date;
   final _TxStatus status;
   final String paymentMethod;
+  final String accountType;
   final PaymentRecord record;
 
   const _Transaction({
@@ -521,5 +560,6 @@ class _Transaction {
     required this.status,
     required this.record,
     this.paymentMethod = 'card',
+    this.accountType = 'individual',
   });
 }
