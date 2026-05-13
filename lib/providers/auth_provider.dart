@@ -138,15 +138,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
     var user = await DatabaseService.findUserByEmailLookup(lookup);
     var importedFromCloud = false;
 
+    final connectivity = await Connectivity().checkConnectivity();
+    final hasInternet = !connectivity.contains(ConnectivityResult.none);
+
     if (user == null) {
-      // No local account — try the cloud database.
+      if (!hasInternet) {
+        // Case 4: no local record and no internet.
+        state = state.copyWith(
+          isLoading: false,
+          error: _l10n.authNoInternetNoLocalRecord,
+          requiresEmailVerification: false,
+        );
+        return false;
+      }
+
+      // Case 3: fetch the users row without saving it yet.
       debugPrint(
-          'AuthNotifier.login: local user missing, attempting cloud import for lookup $lookup');
-      final cloudResult =
-          await RemoteSyncService.importUserByEmailLookup(lookup);
-      if (cloudResult == null) {
+          'AuthNotifier.login: local user missing, fetching from cloud for lookup $lookup');
+      final cloudRow = await RemoteSyncService.fetchUserFromCloud(lookup);
+
+      if (cloudRow == null) {
+        // Internet available but server unreachable.
         debugPrint(
-            'AuthNotifier.login: cloud lookup failed for lookup $lookup');
+            'AuthNotifier.login: cloud server unreachable for lookup $lookup');
         state = state.copyWith(
           isLoading: false,
           error: _l10n.authCloudConnectionError,
@@ -154,18 +168,40 @@ class AuthNotifier extends StateNotifier<AuthState> {
         );
         return false;
       }
-      if (cloudResult) {
-        importedFromCloud = true;
-        debugPrint(
-            'AuthNotifier.login: cloud account found and imported for lookup $lookup');
-        user = await DatabaseService.findUserByEmailLookup(lookup);
-      }
-      if (user == null) {
+
+      if (cloudRow.isEmpty) {
         debugPrint(
             'AuthNotifier.login: no account found in cloud for lookup $lookup');
         state = state.copyWith(
           isLoading: false,
           error: _l10n.authNoAccountForEmail,
+          requiresEmailVerification: false,
+        );
+        return false;
+      }
+
+      // Verify password against the fetched hash BEFORE writing the row locally.
+      final fetchedHash = cloudRow['password_hash'] as String? ?? '';
+      if (!EncryptionService.verifyPassword(password, fetchedHash)) {
+        state = state.copyWith(
+          isLoading: false,
+          error: _l10n.authInvalidCredentials,
+          requiresEmailVerification: false,
+        );
+        return false;
+      }
+
+      // Credentials confirmed — persist the users row and continue.
+      debugPrint(
+          'AuthNotifier.login: credentials verified, importing cloud row for lookup $lookup');
+      await DatabaseService.upsertRawRow('users', cloudRow);
+      importedFromCloud = true;
+      user = await DatabaseService.findUserByEmailLookup(lookup);
+
+      if (user == null) {
+        state = state.copyWith(
+          isLoading: false,
+          error: _l10n.authCloudConnectionError,
           requiresEmailVerification: false,
         );
         return false;
@@ -237,10 +273,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await scheduleBusinessSync();
     }
 
-    // When the user record was pulled from the cloud, bring their data too.
-    if (importedFromCloud) {
+    // Fire-and-forget full pull whenever the device is online.
+    // Covers Case 1 (local user) and Case 3 (cloud-imported user).
+    // pull() is plan-gated: free users get only the users row.
+    if (hasInternet) {
       debugPrint(
-          'AuthNotifier.login: user imported from cloud, starting RemoteSyncService.pull for ${updated.id}');
+          'AuthNotifier.login: online, starting background pull for ${updated.id}');
       unawaited(RemoteSyncService.pull(updated.id));
     }
 
@@ -934,18 +972,35 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final lookup = _emailLookup(email);
     var user = await DatabaseService.findUserByEmailLookup(lookup);
     if (user == null) {
-      // No local account — try the cloud database.
-      final cloudResult =
-          await RemoteSyncService.importUserByEmailLookup(lookup);
-      if (cloudResult == null) {
+      // No local account — check cloud for account existence without importing
+      // the row yet. The row is imported only after the recovery code is
+      // confirmed in verifyRecoveryCode().
+      final cloudRow = await RemoteSyncService.fetchUserFromCloud(lookup);
+      if (cloudRow == null) {
         return _l10n.authCloudConnectionError;
       }
-      if (cloudResult) {
-        user = await DatabaseService.findUserByEmailLookup(lookup);
-      }
-      if (user == null) {
+      if (cloudRow.isEmpty) {
         return _l10n.authNoAccountForEmailRecovery;
       }
+
+      // Account confirmed in cloud. Check auth provider from the raw row.
+      final authProviderField =
+          cloudRow['auth_provider'] as String? ?? 'email';
+      if (authProviderField != 'email') {
+        final providerName =
+            authProviderField == 'google' ? 'Google' : 'Apple';
+        return _l10n.authOAuthNoRecovery(providerName);
+      }
+
+      // Generate and send code; row import is deferred to verifyRecoveryCode().
+      final code =
+          (100000 + Random.secure().nextInt(900000)).toString();
+      _recoveryCodes[lookup] = _RecoveryCode(
+        code,
+        DateTime.now().add(const Duration(minutes: 10)),
+      );
+      unawaited(EmailService.sendRecoveryEmail(email, code));
+      return null;
     }
 
     if (user.authProvider != 'email') {
@@ -986,6 +1041,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (stored.code != code.trim()) {
       return _l10n.authInvalidRecoveryCode;
     }
+
+    // If the user has no local record (account was found in cloud during
+    // sendRecoveryCode), import the row now that ownership is confirmed.
+    final existingUser = await DatabaseService.findUserByEmailLookup(lookup);
+    if (existingUser == null) {
+      final cloudRow = await RemoteSyncService.fetchUserFromCloud(lookup);
+      if (cloudRow == null || cloudRow.isEmpty) {
+        return _l10n.authCloudConnectionError;
+      }
+      await DatabaseService.upsertRawRow('users', cloudRow);
+    }
+
     return null; // success
   }
 

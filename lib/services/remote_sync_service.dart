@@ -582,6 +582,39 @@ class RemoteSyncService {
     }
   }
 
+  /// Fetches the remote [users] row matching [emailLookup] without persisting
+  /// it to the local database. The caller verifies credentials (or a recovery
+  /// code) first, then decides whether to save the row.
+  ///
+  /// Returns the normalised row map when found.
+  /// Returns an empty map `{}` when the cloud confirms no matching record.
+  /// Returns `null` when the server is unreachable or an error occurs.
+  static Future<Map<String, dynamic>?> fetchUserFromCloud(
+      String emailLookup) async {
+    if (kIsWeb) return null;
+    final connectivity = await Connectivity().checkConnectivity();
+    if (connectivity.contains(ConnectivityResult.none)) return null;
+    final conn = await _connect();
+    if (conn == null) return null;
+    try {
+      if (!_schemaReady) {
+        await _ensureSchema(conn);
+        _schemaReady = true;
+      }
+      final result = await conn.execute(
+        Sql.named('SELECT * FROM "users" WHERE "email_lookup" = @lookup'),
+        parameters: {'lookup': emailLookup},
+      );
+      if (result.isEmpty) return {};
+      return _normaliseBools(result.first.toColumnMap(), _userBoolCols);
+    } catch (e) {
+      debugPrint('RemoteSyncService.fetchUserFromCloud error: $e');
+      return null;
+    } finally {
+      await conn.close();
+    }
+  }
+
   // ── Live-write wiring ───────────────────────────────────────────────────────
 
   /// Registers callbacks into [DatabaseService] so every local write is

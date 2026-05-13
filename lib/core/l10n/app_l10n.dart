@@ -97,6 +97,9 @@ class AppL10n {
   String get authCloudConnectionError => _en
       ? 'Unable to reach the server. Please check your connection and try again.'
       : 'Impossible de contacter le serveur. Vérifiez votre connexion et réessayez.';
+  String get authNoInternetNoLocalRecord => _en
+      ? 'No account found on this device. Please connect to the internet to log in.'
+      : 'Aucun compte trouvé sur cet appareil. Connectez-vous à Internet pour vous connecter.';
   String authWrongProvider(String provider) => _en
       ? 'This account uses $provider. Sign in via that service.'
       : 'Ce compte utilise $provider. Connectez-vous via ce service.';
