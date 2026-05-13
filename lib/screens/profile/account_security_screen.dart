@@ -38,6 +38,7 @@ class _AccountSecurityScreenState
   bool _isSendingCode = false;
   bool _isConfirmingEmail = false;
   String? _emailChangeError;
+  bool _isDeletingAccount = false;
 
   // Password regex: 8-15 chars, at least 1 letter, 1 digit, 1 symbol, no spaces
   static final _pwdRegex =
@@ -235,10 +236,12 @@ class _AccountSecurityScreenState
 
     if (confirmed != true || !mounted) return;
 
+    setState(() => _isDeletingAccount = true);
     final error = await ref.read(authProvider.notifier).deleteAccount();
     if (!mounted) return;
 
     if (error != null) {
+      setState(() => _isDeletingAccount = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(error),
@@ -854,22 +857,39 @@ class _AccountSecurityScreenState
                             width: double.infinity,
                             height: 50,
                             child: OutlinedButton(
-                              onPressed: () => _onDeleteAccount(l10n),
+                              onPressed: _isDeletingAccount
+                                  ? null
+                                  : () => _onDeleteAccount(l10n),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.error,
-                                side: const BorderSide(
-                                    color: AppColors.error, width: 1.5),
+                                side: BorderSide(
+                                  color: _isDeletingAccount
+                                      ? AppColors.error.withOpacity(0.4)
+                                      : AppColors.error,
+                                  width: 1.5,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                              child: Text(
-                                l10n.deleteMyAccount,
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                              child: _isDeletingAccount
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                                AppColors.error),
+                                      ),
+                                    )
+                                  : Text(
+                                      l10n.deleteMyAccount,
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
                             ),
                           ),
                         ],
