@@ -401,6 +401,12 @@ class RemoteSyncService {
         "ALTER TABLE \"payment_history\" ADD COLUMN IF NOT EXISTS \"transaction_id\" VARCHAR(10) NOT NULL DEFAULT ''",
       );
     } catch (_) {}
+    // v22: account type — individual vs organization payment.
+    try {
+      await conn.execute(
+        "ALTER TABLE \"payment_history\" ADD COLUMN IF NOT EXISTS \"account_type\" VARCHAR(20) NOT NULL DEFAULT 'individual'",
+      );
+    } catch (_) {}
 
     // v16: subscription expiry tracking on users.
     await conn.execute(
@@ -576,6 +582,39 @@ class RemoteSyncService {
       return true;
     } catch (e) {
       debugPrint('RemoteSyncService importUserByEmailLookup error: $e');
+      return null;
+    } finally {
+      await conn.close();
+    }
+  }
+
+  /// Fetches the remote [users] row matching [emailLookup] without persisting
+  /// it to the local database. The caller verifies credentials (or a recovery
+  /// code) first, then decides whether to save the row.
+  ///
+  /// Returns the normalised row map when found.
+  /// Returns an empty map `{}` when the cloud confirms no matching record.
+  /// Returns `null` when the server is unreachable or an error occurs.
+  static Future<Map<String, dynamic>?> fetchUserFromCloud(
+      String emailLookup) async {
+    if (kIsWeb) return null;
+    final connectivity = await Connectivity().checkConnectivity();
+    if (connectivity.contains(ConnectivityResult.none)) return null;
+    final conn = await _connect();
+    if (conn == null) return null;
+    try {
+      if (!_schemaReady) {
+        await _ensureSchema(conn);
+        _schemaReady = true;
+      }
+      final result = await conn.execute(
+        Sql.named('SELECT * FROM "users" WHERE "email_lookup" = @lookup'),
+        parameters: {'lookup': emailLookup},
+      );
+      if (result.isEmpty) return {};
+      return _normaliseBools(result.first.toColumnMap(), _userBoolCols);
+    } catch (e) {
+      debugPrint('RemoteSyncService.fetchUserFromCloud error: $e');
       return null;
     } finally {
       await conn.close();
@@ -1501,10 +1540,10 @@ class RemoteSyncService {
       Sql.named('''
         INSERT INTO "payment_history"
           (id,transaction_id,user_id,plan,billing_cycle,amount,currency,status,
-           stripe_payment_intent_id,payment_method,created_at)
+           stripe_payment_intent_id,payment_method,account_type,created_at)
         VALUES
           (@id,@transaction_id,@user_id,@plan,@billing_cycle,@amount,@currency,@status,
-           @stripe_payment_intent_id,@payment_method,@created_at)
+           @stripe_payment_intent_id,@payment_method,@account_type,@created_at)
         ON CONFLICT (id) DO UPDATE SET
           status=EXCLUDED.status,
           payment_method=EXCLUDED.payment_method
@@ -1520,6 +1559,7 @@ class RemoteSyncService {
         'status': r['status'] ?? 'succeeded',
         'stripe_payment_intent_id': r['stripe_payment_intent_id'],
         'payment_method': r['payment_method'] ?? 'card',
+        'account_type': r['account_type'] ?? 'individual',
         'created_at': r['created_at'],
       },
     );

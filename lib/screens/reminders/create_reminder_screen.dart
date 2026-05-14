@@ -25,6 +25,8 @@ class _CreateReminderScreenState extends ConsumerState<CreateReminderScreen> {
   DateTime _startDateTime = DateTime.now().add(const Duration(hours: 1));
   DateTime? _endDateTime;
   String? _repeatFrequency;
+  int _customRepeatValue = 1;
+  String _customRepeatUnit = 'd';
   String _toDoAction = 'call';
   String _priority = 'normal';
   bool _saving = false;
@@ -41,6 +43,17 @@ class _CreateReminderScreenState extends ConsumerState<CreateReminderScreen> {
       _toDoAction = e.toDoAction;
       _priority = e.priority;
       _noteCtrl.text = e.note;
+
+      if (_repeatFrequency != null &&
+          !['30m', '1h', '1d', '1w', '1mo'].contains(_repeatFrequency)) {
+        final match =
+            RegExp(r'^(\d+)(m|h|d|w|mo)$').firstMatch(_repeatFrequency!);
+        if (match != null) {
+          _customRepeatValue = int.tryParse(match.group(1)!) ?? 1;
+          _customRepeatUnit = match.group(2)!;
+          _repeatFrequency = 'custom';
+        }
+      }
     } else if (widget.preselectedContactId != null) {
       _contactIds = [widget.preselectedContactId!];
     }
@@ -196,13 +209,17 @@ class _CreateReminderScreenState extends ConsumerState<CreateReminderScreen> {
     }
     setState(() => _saving = true);
     try {
+      final freq = _repeatFrequency == 'custom'
+          ? '${_customRepeatValue}${_customRepeatUnit}'
+          : _repeatFrequency;
+
       Reminder saved;
       if (widget.existing != null) {
         saved = widget.existing!.copyWith(
           contactIds: _contactIds,
           startDateTime: _startDateTime,
           endDateTime: _endDateTime,
-          repeatFrequency: _repeatFrequency,
+          repeatFrequency: freq,
           note: _noteCtrl.text.trim(),
           toDoAction: _toDoAction,
           priority: _priority,
@@ -213,7 +230,7 @@ class _CreateReminderScreenState extends ConsumerState<CreateReminderScreen> {
               contactIds: _contactIds,
               startDateTime: _startDateTime,
               endDateTime: _endDateTime,
-              repeatFrequency: _repeatFrequency,
+              repeatFrequency: freq,
               note: _noteCtrl.text.trim(),
               toDoAction: _toDoAction,
               priority: _priority,
@@ -344,9 +361,53 @@ class _CreateReminderScreenState extends ConsumerState<CreateReminderScreen> {
                           DropdownMenuItem(value: '1d', child: Text(l10n.repeatDaily)),
                           DropdownMenuItem(value: '1w', child: Text(l10n.repeatWeekly)),
                           DropdownMenuItem(value: '1mo', child: Text(l10n.repeatMonthly)),
+                          DropdownMenuItem(value: 'custom', child: Text(l10n.repeatCustom)),
                         ],
                         onChanged: (v) => setState(() => _repeatFrequency = v),
                       ),
+                      if (_repeatFrequency == 'custom') ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: TextFormField(
+                                initialValue: _customRepeatValue.toString(),
+                                style: TextStyle(color: AppColors.onSurface(context)),
+                                decoration: InputDecoration(
+                                  labelText: l10n.customRepeatValue,
+                                  border: const OutlineInputBorder(),
+                                ),
+                                keyboardType: TextInputType.number,
+                                onChanged: (v) => setState(() =>
+                                    _customRepeatValue = int.tryParse(v) ?? 1),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              flex: 3,
+                              child: DropdownButtonFormField<String>(
+                                value: _customRepeatUnit,
+                                dropdownColor: AppColors.surfaceColor(context),
+                                style: TextStyle(color: AppColors.onSurface(context)),
+                                decoration: InputDecoration(
+                                  labelText: l10n.customRepeatUnit,
+                                  border: const OutlineInputBorder(),
+                                ),
+                                items: [
+                                  DropdownMenuItem(value: 'm', child: Text(l10n.unitMinutes)),
+                                  DropdownMenuItem(value: 'h', child: Text(l10n.unitHours)),
+                                  DropdownMenuItem(value: 'd', child: Text(l10n.unitDays)),
+                                  DropdownMenuItem(value: 'w', child: Text(l10n.unitWeeks)),
+                                  DropdownMenuItem(value: 'mo', child: Text(l10n.unitMonths)),
+                                ],
+                                onChanged: (v) =>
+                                    setState(() => _customRepeatUnit = v!),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 20),
                       _section(context, l10n.noteSection),
                       TextFormField(

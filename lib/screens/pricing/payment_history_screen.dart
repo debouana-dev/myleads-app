@@ -10,7 +10,7 @@ import '../../providers/settings_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/storage_service.dart';
 
-enum _DateFilter { allTime, thisMonth, last3Months, last6Months, thisYear }
+enum _DateFilter { allTime, thisMonth, last3Months, last6Months, thisYear, others }
 
 class PaymentHistoryScreen extends ConsumerStatefulWidget {
   const PaymentHistoryScreen({super.key});
@@ -27,7 +27,8 @@ class _PaymentHistoryScreenState extends ConsumerState<PaymentHistoryScreen> {
   @override
   void initState() {
     super.initState();
-    _recordsFuture = DatabaseService.getPaymentHistory(StorageService.currentUserId);
+    _recordsFuture =
+        DatabaseService.getPaymentHistory(StorageService.currentUserId);
   }
 
   List<_Transaction> _toTransactions(List<PaymentRecord> records) {
@@ -54,6 +55,7 @@ class _PaymentHistoryScreenState extends ConsumerState<PaymentHistoryScreen> {
         date: DateTime.tryParse(r.createdAt) ?? DateTime.now(),
         status: status,
         paymentMethod: r.paymentMethod,
+        accountType: r.accountType,
         record: r,
       );
     }).toList();
@@ -73,6 +75,8 @@ class _PaymentHistoryScreenState extends ConsumerState<PaymentHistoryScreen> {
           return tx.date.isAfter(now.subtract(const Duration(days: 180)));
         case _DateFilter.thisYear:
           return tx.date.year == now.year;
+        case _DateFilter.others:
+          return tx.date.isBefore(now.subtract(const Duration(days: 365)));
       }
     }).toList();
   }
@@ -234,6 +238,8 @@ class _PaymentHistoryScreenState extends ConsumerState<PaymentHistoryScreen> {
         return l10n.last6Months;
       case _DateFilter.thisYear:
         return l10n.thisYear;
+      case _DateFilter.others:
+        return l10n.olderThanYear;
     }
   }
 }
@@ -319,129 +325,155 @@ class _TransactionCard extends StatelessWidget {
         : l10n.billingCycleMonthly;
 
     return GestureDetector(
-      onTap: () => context.push('/transaction-details', extra: transaction.record),
+      onTap: () =>
+          context.push('/transaction-details', extra: transaction.record),
       child: Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceColor(context),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderColor(context)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(14),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceColor(context),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.borderColor(context)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(
+                Icons.receipt_rounded,
+                size: 22,
+                color: AppColors.primary,
+              ),
             ),
-            child: const Icon(
-              Icons.receipt_rounded,
-              size: 22,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          transaction.plan,
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.onSurface(context),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                          child: Text(
-                            cycleLabel,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            transaction.plan,
                             style: TextStyle(
-                              fontSize: 9,
+                              fontSize: 14,
                               fontWeight: FontWeight.w700,
+                              color: AppColors.onSurface(context),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: Text(
+                              cycleLabel,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: transaction.accountType == 'organization'
+                                  ? AppColors.accent.withOpacity(0.12)
+                                  : AppColors.info.withOpacity(0.10),
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  transaction.accountType == 'organization'
+                                      ? Icons.groups_rounded
+                                      : Icons.person_rounded,
+                                  size: 9,
+                                  color:
+                                      transaction.accountType == 'organization'
+                                          ? AppColors.accent
+                                          : AppColors.info,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  transaction.accountType == 'organization'
+                                      ? l10n.accountTypeOrganization
+                                      : l10n.accountTypeIndividual,
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: transaction.accountType ==
+                                            'organization'
+                                        ? AppColors.accent
+                                        : AppColors.info,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            displayAmount,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
                               color: AppColors.primary,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      displayAmount,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.primary,
+                        ],
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.credit_card_rounded,
-                          size: 12,
-                          color: AppColors.hint(context),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(6),
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _methodLabel(transaction.paymentMethod, l10n),
+                        child: Text(
+                          statusLabel,
                           style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.hint(context),
-                            fontWeight: FontWeight.w600,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: statusColor,
                           ),
                         ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Text(
-                        statusLabel,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: statusColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _formatDateTime(transaction.date),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.secondary(context),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatDateTime(transaction.date),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.secondary(context),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -470,8 +502,18 @@ class _TransactionCard extends StatelessWidget {
 
   String _formatDateTime(DateTime d) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final h = d.hour.toString().padLeft(2, '0');
     final m = d.minute.toString().padLeft(2, '0');
@@ -509,6 +551,7 @@ class _Transaction {
   final DateTime date;
   final _TxStatus status;
   final String paymentMethod;
+  final String accountType;
   final PaymentRecord record;
 
   const _Transaction({
@@ -521,5 +564,6 @@ class _Transaction {
     required this.status,
     required this.record,
     this.paymentMethod = 'card',
+    this.accountType = 'individual',
   });
 }

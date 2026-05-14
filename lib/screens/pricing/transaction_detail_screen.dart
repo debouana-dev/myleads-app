@@ -29,7 +29,7 @@ class TransactionDetailScreen extends ConsumerWidget {
     final orgState = ref.watch(organizationProvider);
 
     final user = StorageService.currentUser;
-    final org = record.plan == 'business' ? orgState.organization : null;
+    final org = record.accountType == 'organization' ? orgState.organization : null;
 
     final paidAt = DateTime.tryParse(record.createdAt) ?? DateTime.now();
     final validUntil = _computeValidUntil(paidAt, org);
@@ -331,6 +331,12 @@ class TransactionDetailScreen extends ConsumerWidget {
             children: [
               infoRow(l10n.plan, planLabel, bold: true),
               divider(),
+              infoRow(
+                  l10n.accountTypeLabel,
+                  record.accountType == 'organization'
+                      ? l10n.accountTypeOrganization
+                      : l10n.accountTypeIndividual),
+              divider(),
               infoRow(l10n.billingCycleLabel, cycleLabel),
               divider(),
               infoRow(l10n.date, _formatDateTimePdf(paidAt)),
@@ -346,7 +352,7 @@ class TransactionDetailScreen extends ConsumerWidget {
         pw.SizedBox(height: 12),
 
         // Payer info
-        sectionHeader(l10n.paidBy),
+        sectionHeader(org != null ? l10n.receiptAdministrator : l10n.paidBy),
         pw.Container(
           padding: const pw.EdgeInsets.all(12),
           decoration: pw.BoxDecoration(
@@ -676,6 +682,11 @@ class _ReceiptCard extends StatelessWidget {
                 // ── Transaction info rows ──
                 _infoRow(context, l10n.plan, planLabel, bold: true),
                 _rowDivider(context),
+                _infoRow(context, l10n.accountTypeLabel,
+                    record.accountType == 'organization'
+                        ? l10n.accountTypeOrganization
+                        : l10n.accountTypeIndividual),
+                _rowDivider(context),
                 _infoRow(context, l10n.billingCycleLabel, cycleLabel),
                 _rowDivider(context),
                 _infoRow(context, l10n.date, _formatDateTime(paidAt)),
@@ -693,7 +704,8 @@ class _ReceiptCard extends StatelessWidget {
                 const SizedBox(height: 16),
 
                 // ── Paid by section ──
-                _sectionHeader(context, l10n.paidBy),
+                _sectionHeader(context,
+                    org != null ? l10n.receiptAdministrator : l10n.paidBy),
                 const SizedBox(height: 10),
                 _infoRow(context, l10n.fullName, userName.isNotEmpty ? userName : '—', bold: true),
                 _rowDivider(context),

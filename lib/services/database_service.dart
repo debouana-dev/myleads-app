@@ -27,7 +27,7 @@ import 'web_db_factory_stub.dart'
 class DatabaseService {
   static Database? _db;
   static const _dbName = 'myleads.db';
-  static const _dbVersion = 20;
+  static const _dbVersion = 22;
 
   // ── Remote sync callbacks ──────────────────────────────────────────────────
   static void Function(String table, Map<String, dynamic> row)? _onRemoteUpsert;
@@ -368,6 +368,28 @@ class DatabaseService {
             "UPDATE organization_members SET can_export_contacts = 1 WHERE role = 'admin'");
       } catch (_) {}
     }
+    if (oldVersion < 21) {
+      // v20 → v21: re-encrypt existing plaintext member emails with org key.
+      // Valid email addresses contain '@'; AES-CBC base64 ciphertext never does.
+      final rows = await db.query('organization_members',
+          columns: ['id', 'organization_id', 'email']);
+      for (final row in rows) {
+        final email = row['email'] as String?;
+        if (email == null || email.isEmpty || !email.contains('@')) continue;
+        final orgId = row['organization_id'] as String;
+        final encrypted =
+            EncryptionService.encryptTextWithKeyMaterial(email, orgId);
+        await db.update('organization_members', {'email': encrypted},
+            where: 'id = ?', whereArgs: [row['id']]);
+      }
+    }
+    if (oldVersion < 22) {
+      // v21 → v22: account type — distinguish individual vs organization payments.
+      try {
+        await db.execute(
+            "ALTER TABLE payment_history ADD COLUMN account_type TEXT NOT NULL DEFAULT 'individual'");
+      } catch (_) {}
+    }
   }
 
   // =====================================================================
@@ -578,6 +600,7 @@ class DatabaseService {
         status TEXT NOT NULL DEFAULT 'succeeded',
         stripe_payment_intent_id TEXT NOT NULL,
         payment_method TEXT NOT NULL DEFAULT 'card',
+        account_type TEXT NOT NULL DEFAULT 'individual',
         created_at TEXT NOT NULL
       )
     ''');
@@ -640,17 +663,25 @@ class DatabaseService {
     final row = _userToRow(user);
     await db.update('users', row, where: 'id = ?', whereArgs: [user.id]);
 
-    final updatedMemberFields = {
-      'first_name': user.firstName,
-      'last_name': user.lastName,
-      'email': user.email,
-      'nickname': user.nickname,
-      'company': user.companyName,
-      'biography': user.biography,
-      'photo_path': user.photoPath,
-    };
-    await db.update('organization_members', updatedMemberFields,
+    final membershipRows = await db.query('organization_members',
+        columns: ['id', 'organization_id'],
         where: 'user_id = ?', whereArgs: [user.id]);
+    for (final mr in membershipRows) {
+      final orgId = mr['organization_id'] as String;
+      final fields = {
+        'first_name': user.firstName,
+        'last_name': user.lastName,
+        'email': user.email.isNotEmpty
+            ? EncryptionService.encryptTextWithKeyMaterial(user.email, orgId)
+            : null,
+        'nickname': user.nickname,
+        'company': user.companyName,
+        'biography': user.biography,
+        'photo_path': user.photoPath,
+      };
+      await db.update('organization_members', fields,
+          where: 'id = ?', whereArgs: [mr['id']]);
+    }
 
     _onRemoteUpsert?.call('users', row);
 
@@ -952,6 +983,12 @@ class DatabaseService {
       if (r.isNotEmpty) return r;
     }
     return EncryptionService.decryptText(cipher);
+  }
+
+  static String? _decOrgEmail(String? cipher, String orgId) {
+    if (cipher == null || cipher.isEmpty) return null;
+    final v = EncryptionService.decryptTextWithKeyMaterial(cipher, orgId);
+    return v.isNotEmpty ? v : null;
   }
 
   static Map<String, dynamic> _contactToRow(Contact c,
@@ -1500,7 +1537,7 @@ class DatabaseService {
         joinedAt: DateTime.parse(row['joined_at'] as String),
         firstName: row['first_name'] as String? ?? user?.firstName ?? '',
         lastName: row['last_name'] as String? ?? user?.lastName ?? '',
-        email: row['email'] as String? ?? user?.email,
+        email: _decOrgEmail(row['email'] as String?, orgId) ?? user?.email,
         nickname: row['nickname'] as String? ?? user?.nickname,
         company: row['company'] as String? ?? user?.companyName,
         biography: row['biography'] as String? ?? user?.biography,
@@ -1536,7 +1573,9 @@ class DatabaseService {
       'joined_at': DateTime.now().toIso8601String(),
       'first_name': user?.firstName ?? '',
       'last_name': user?.lastName ?? '',
-      'email': user?.email,
+      'email': (user?.email != null && user!.email.isNotEmpty)
+          ? EncryptionService.encryptTextWithKeyMaterial(user.email, orgId)
+          : null,
       'nickname': user?.nickname,
       'company': user?.companyName,
       'biography': user?.biography,

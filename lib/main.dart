@@ -83,6 +83,7 @@ Future<void> _applyStartupPaymentRecovery() async {
       status: 'succeeded',
       stripePaymentIntentId: piId,
       paymentMethod: recovery.result.paymentMethod,
+      accountType: 'individual',
       createdAt: DateTime.now().toIso8601String(),
     ));
   }

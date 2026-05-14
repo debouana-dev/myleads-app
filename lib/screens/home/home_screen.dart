@@ -47,6 +47,8 @@ class HomeScreen extends ConsumerWidget {
                 ref.read(contactsProvider.notifier).setSearchQuery(q),
             onSearchSubmitted: () =>
                 ref.read(currentTabProvider.notifier).state = 1,
+            onSuggestionSelected: (contact) =>
+                context.push('/contact/${contact.id}'),
           ),
 
           // -- Content --
@@ -152,13 +154,14 @@ class _Header extends ConsumerWidget {
   final VoidCallback onNotificationTap;
   final ValueChanged<String> onSearchChanged;
   final VoidCallback onSearchSubmitted;
+  final ValueChanged<Contact> onSuggestionSelected;
 
-  const _Header({
-    required this.notificationCount,
-    required this.onNotificationTap,
-    required this.onSearchChanged,
-    required this.onSearchSubmitted,
-  });
+  const _Header(
+      {required this.notificationCount,
+      required this.onNotificationTap,
+      required this.onSearchChanged,
+      required this.onSearchSubmitted,
+      required this.onSuggestionSelected});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -167,6 +170,8 @@ class _Header extends ConsumerWidget {
     final userName = ref.watch(
         authProvider.select((s) => s.userName.isEmpty ? '' : s.userName));
     final firstName = userName.isEmpty ? '' : userName.split(' ').first;
+
+    final contacts = ref.watch(contactsProvider).contacts;
 
     return Container(
       padding: EdgeInsets.fromLTRB(20, topPadding + 16, 20, 20),
@@ -234,29 +239,91 @@ class _Header extends ConsumerWidget {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: TextField(
-                    onChanged: onSearchChanged,
-                    onSubmitted: (_) => onSearchSubmitted(),
-                    textInputAction: TextInputAction.search,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.black,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    cursorColor: AppColors.primary,
-                    decoration: InputDecoration(
-                      hintText: l10n.searchContact,
-                      hintStyle: const TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textLight,
-                        fontWeight: FontWeight.w400,
-                      ),
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
+                  child: Autocomplete<Contact>(
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      if (textEditingValue.text.isEmpty) {
+                        return const Iterable<Contact>.empty();
+                      }
+                      final query = textEditingValue.text.toLowerCase();
+                      return contacts
+                          .where(
+                              (c) => c.fullName.toLowerCase().contains(query))
+                          .take(5);
+                    },
+                    onSelected:
+                        onSuggestionSelected, // Utiliser le callback passé
+                    displayStringForOption: (Contact contact) =>
+                        contact.fullName,
+                    fieldViewBuilder: (BuildContext context,
+                        TextEditingController textEditingController,
+                        FocusNode focusNode,
+                        VoidCallback onFieldSubmitted) {
+                      return TextField(
+                        controller: textEditingController,
+                        focusNode: focusNode,
+                        onChanged: onSearchChanged,
+                        onSubmitted: (_) => onSearchSubmitted(),
+                        textInputAction: TextInputAction.search,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        cursorColor: AppColors.primary,
+                        decoration: InputDecoration(
+                          hintText: l10n.searchContact,
+                          hintStyle: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.textLight,
+                            fontWeight: FontWeight.w400,
+                          ),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          isDense: true,
+                          contentPadding:
+                              const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      );
+                    },
+                    optionsViewBuilder: (BuildContext context,
+                        AutocompleteOnSelected<Contact> onSelected,
+                        Iterable<Contact> options) {
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4.0,
+                          child: Container(
+                            width: MediaQuery.of(context).size.width - 40,
+                            constraints: const BoxConstraints(maxHeight: 200),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceColor(context),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                  color: AppColors.borderColor(context)),
+                            ),
+                            child: ListView.builder(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              itemCount: options.length,
+                              itemBuilder: (BuildContext context, int index) {
+                                final contact = options.elementAt(index);
+                                return ListTile(
+                                  title: Text(
+                                    contact.fullName,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: AppColors.onSurface(context),
+                                    ),
+                                  ),
+                                  onTap: () => onSelected(contact),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],

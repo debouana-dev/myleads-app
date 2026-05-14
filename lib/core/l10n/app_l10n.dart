@@ -97,6 +97,9 @@ class AppL10n {
   String get authCloudConnectionError => _en
       ? 'Unable to reach the server. Please check your connection and try again.'
       : 'Impossible de contacter le serveur. Vérifiez votre connexion et réessayez.';
+  String get authNoInternetNoLocalRecord => _en
+      ? 'No account found on this device. Please connect to the internet to log in.'
+      : 'Aucun compte trouvé sur cet appareil. Connectez-vous à Internet pour vous connecter.';
   String authWrongProvider(String provider) => _en
       ? 'This account uses $provider. Sign in via that service.'
       : 'Ce compte utilise $provider. Connectez-vous via ce service.';
@@ -273,6 +276,7 @@ class AppL10n {
   String get editButton => _en ? 'Edit' : 'Modifier';
   String get deleteButton => _en ? 'Delete' : 'Supprimer';
   String get shareButton => _en ? 'Share' : 'Partager';
+  String get createReminderButton => _en ? 'Reminder' : 'Rappel';
   String get contactNotFound =>
       _en ? 'Contact not found' : 'Contact non trouvé';
   String get back => _en ? 'Back' : 'Retour';
@@ -387,6 +391,14 @@ class AppL10n {
   String get repeatDaily => _en ? 'Every day' : 'Chaque jour';
   String get repeatWeekly => _en ? 'Every week' : 'Chaque semaine';
   String get repeatMonthly => _en ? 'Every month' : 'Chaque mois';
+  String get repeatCustom => _en ? 'Custom...' : 'Personnaliser...';
+  String get customRepeatValue => _en ? 'Value' : 'Valeur';
+  String get customRepeatUnit => _en ? 'Unit' : 'Unité';
+  String get unitMinutes => _en ? 'Minutes' : 'Minutes';
+  String get unitHours => _en ? 'Hours' : 'Heures';
+  String get unitDays => _en ? 'Days' : 'Jours';
+  String get unitWeeks => _en ? 'Weeks' : 'Semaines';
+  String get unitMonths => _en ? 'Months' : 'Mois';
   String get actionCall => _en ? 'Call' : 'Appeler';
   String get actionSms => 'SMS';
   String get actionWhatsapp => 'WhatsApp';
@@ -608,6 +620,7 @@ class AppL10n {
   String get last3Months => _en ? 'Last 3 months' : '3 derniers mois';
   String get last6Months => _en ? 'Last 6 months' : '6 derniers mois';
   String get thisYear => _en ? 'This year' : 'Cette année';
+  String get olderThanYear => _en ? 'Others' : 'Autres';
   String get noPayments =>
       _en ? 'No payments yet' : 'Aucun paiement pour le moment';
   String get noPaymentsDesc => _en
@@ -655,6 +668,10 @@ class AppL10n {
   String get numberOfLicenses => _en ? 'Licenses' : 'Licences';
   String get unitPrice => _en ? 'Unit price' : 'Prix unitaire';
   String get paidBy => _en ? 'Paid by' : 'Payé par';
+  String get receiptAdministrator => _en ? 'Administrator' : 'Administrateur';
+  String get accountTypeLabel => _en ? 'Account type' : 'Type de compte';
+  String get accountTypeIndividual => _en ? 'Individual' : 'Individuel';
+  String get accountTypeOrganization => _en ? 'Organization' : 'Organisation';
   String get organizationDetails =>
       _en ? 'Organization Details' : "Détails de l'organisation";
   String get fullName => _en ? 'Full name' : 'Nom complet';
@@ -795,8 +812,9 @@ class AppL10n {
   String get viewHistoryPrivilege => _en
       ? 'Can view shared contact history'
       : "Peut voir l'historique des contacts partagés";
-  String get exportPrivilege =>
-      _en ? 'Can export shared contacts' : 'Peut exporter les contacts partagés';
+  String get exportPrivilege => _en
+      ? 'Can export shared contacts'
+      : 'Peut exporter les contacts partagés';
   String get memberManagement => _en ? 'Manage member' : 'Gérer le membre';
   String get youLabel => _en ? '(you)' : '(vous)';
   String get suspendMember => _en ? 'Suspend' : 'Suspendre';
@@ -1140,12 +1158,17 @@ class AppL10n {
           ? '\$${(2.99 * eurToTargetRate).toStringAsFixed(2)}'
           : '2.99€';
   String premiumPeriod(AppL10n l10n) => l10n.isEnglish ? '/month' : '/ mois';
+  String premiumYearPeriod(AppL10n l10n) =>
+      l10n.isEnglish ? '/month for 1 year' : '/ mois pour 1 an';
   String businessPrice(AppCurrency c, {double eurToTargetRate = 1.08}) =>
       c == AppCurrency.usd
           ? '\$${(5.99 * eurToTargetRate).toStringAsFixed(2)}'
           : '5.99€';
   String businessPeriod(AppL10n l10n) =>
       l10n.isEnglish ? '/user/month' : '/ utilisateur / mois';
+  String businessYearPeriod(AppL10n l10n) => l10n.isEnglish
+      ? '/user/month for 1 year'
+      : '/ utilisateur / mois pour 1 an';
 
   String subPremiumPrice(AppCurrency c, {double eurToTargetRate = 1.08}) =>
       c == AppCurrency.usd

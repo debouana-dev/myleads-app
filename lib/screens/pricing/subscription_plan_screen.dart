@@ -116,6 +116,7 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
         currency: 'EUR',
         status: 'succeeded',
         stripePaymentIntentId: piId,
+        accountType: 'individual',
         createdAt: DateTime.now().toIso8601String(),
       );
       await DatabaseService.insertPaymentRecord(record);
@@ -231,6 +232,7 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
         currency: 'EUR',
         status: 'succeeded',
         stripePaymentIntentId: result.paymentIntentId ?? '',
+        accountType: 'individual',
         createdAt: DateTime.now().toIso8601String(),
       );
       await DatabaseService.insertPaymentRecord(record);

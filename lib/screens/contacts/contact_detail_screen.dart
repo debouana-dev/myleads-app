@@ -124,7 +124,8 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
                         ),
                         const Spacer(),
                         GestureDetector(
-                          onTap: () => _showActionsSheet(context, contact, canEdit: canEdit),
+                          onTap: () => _showActionsSheet(context, contact,
+                              canEdit: canEdit),
                           child: Container(
                             width: 40,
                             height: 40,
@@ -154,7 +155,9 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
                       ),
                       image: contact.photoPath != null && !kIsWeb
                           ? DecorationImage(
-                              image: FileImage(File(PhotoStorageService.resolveAbsolutePath(contact.photoPath)!)),
+                              image: FileImage(File(
+                                  PhotoStorageService.resolveAbsolutePath(
+                                      contact.photoPath)!)),
                               fit: BoxFit.cover,
                             )
                           : null,
@@ -199,10 +202,9 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
 
             // Action Buttons (functional)
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Wrap(
+                spacing: 8,
                 children: [
                   _buildActionBtn(
                     context: context,
@@ -240,6 +242,21 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
                     color: AppColors.accent,
                     onTap: () => ContactActions.share(context, contact),
                   ),
+                  // _buildActionBtn(
+                  //   context: context,
+                  //   icon: const Icon(Icons.alarm_add_rounded, size: 22),
+                  //   label: l10n.createReminderButton,
+                  //   color: AppColors.accent,
+                  //   onTap: () => Navigator.push(
+                  //     context,
+                  //     MaterialPageRoute(
+                  //       builder: (_) => ProviderScope(
+                  //         parent: ProviderScope.containerOf(context),
+                  //         child: CreateReminderScreen(preselectedContactId: contact.id),
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
                 ],
               ),
             ),
@@ -295,13 +312,25 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
               child: Column(
                 children: [
                   if (contact.phone != null && contact.phone!.isNotEmpty)
-                    _infoRow(context: context, label: l10n.phoneLabel, value: contact.phone!),
+                    _infoRow(
+                        context: context,
+                        label: l10n.phoneLabel,
+                        value: contact.phone!),
                   if (contact.email != null && contact.email!.isNotEmpty)
-                    _infoRow(context: context, label: l10n.emailLabel, value: contact.email!),
+                    _infoRow(
+                        context: context,
+                        label: l10n.emailLabel,
+                        value: contact.email!),
                   if (contact.company != null && contact.company!.isNotEmpty)
-                    _infoRow(context: context, label: l10n.companyLabel, value: contact.company!),
+                    _infoRow(
+                        context: context,
+                        label: l10n.companyLabel,
+                        value: contact.company!),
                   if (contact.source != null && contact.source!.isNotEmpty)
-                    _infoRow(context: context, label: l10n.sourceLabel, value: contact.source!),
+                    _infoRow(
+                        context: context,
+                        label: l10n.sourceLabel,
+                        value: contact.source!),
                 ],
               ),
             ),
@@ -313,22 +342,38 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
                 title: l10n.projects,
                 child: Column(
                   children: [
-                    if (contact.project1 != null && contact.project1!.isNotEmpty) ...[
-                      _infoRow(context: context, label: l10n.project1Label, value: contact.project1!),
-                      if (contact.project1Budget != null && contact.project1Budget!.isNotEmpty)
-                        _infoRow(context: context, label: l10n.budgetLabel, value: contact.project1Budget!),
+                    if (contact.project1 != null &&
+                        contact.project1!.isNotEmpty) ...[
+                      _infoRow(
+                          context: context,
+                          label: l10n.project1Label,
+                          value: contact.project1!),
+                      if (contact.project1Budget != null &&
+                          contact.project1Budget!.isNotEmpty)
+                        _infoRow(
+                            context: context,
+                            label: l10n.budgetLabel,
+                            value: contact.project1Budget!),
                     ],
-                    if (contact.project2 != null && contact.project2!.isNotEmpty) ...[
-                      if (contact.project1 != null && contact.project1!.isNotEmpty)
+                    if (contact.project2 != null &&
+                        contact.project2!.isNotEmpty) ...[
+                      if (contact.project1 != null &&
+                          contact.project1!.isNotEmpty)
                         const Divider(height: 16),
-                      _infoRow(context: context, label: l10n.project2Label, value: contact.project2!),
-                      if (contact.project2Budget != null && contact.project2Budget!.isNotEmpty)
-                        _infoRow(context: context, label: l10n.budgetLabel, value: contact.project2Budget!),
+                      _infoRow(
+                          context: context,
+                          label: l10n.project2Label,
+                          value: contact.project2!),
+                      if (contact.project2Budget != null &&
+                          contact.project2Budget!.isNotEmpty)
+                        _infoRow(
+                            context: context,
+                            label: l10n.budgetLabel,
+                            value: contact.project2Budget!),
                     ],
                   ],
                 ),
               ),
-
 
             // QR Code Section
             _buildSection(
@@ -384,14 +429,56 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
                 return _buildSection(
                   context: context,
                   title: l10n.reminderSection,
-                  trailing: GestureDetector(
-                    onTap: () => context.push(
-                        '/contact/${contact.id}/reminders'),
-                    child: const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 16,
-                      color: AppColors.accent,
-                    ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ProviderScope(
+                              parent: ProviderScope.containerOf(context),
+                              child: CreateReminderScreen(
+                                  preselectedContactId: contact.id),
+                            ),
+                          ),
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.add,
+                                  size: 14, color: AppColors.accent),
+                              const SizedBox(width: 4),
+                              Text(
+                                l10n.newReminder.toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.accent,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: () =>
+                            context.push('/contact/${contact.id}/reminders'),
+                        child: const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 16,
+                          color: AppColors.accent,
+                        ),
+                      ),
+                    ],
                   ),
                   child: pending.isEmpty
                       ? Text(
@@ -456,8 +543,8 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
                                             style: TextStyle(
                                               fontSize: 13,
                                               fontWeight: FontWeight.w600,
-                                              color: AppColors.onSurface(
-                                                  context),
+                                              color:
+                                                  AppColors.onSurface(context),
                                             ),
                                           ),
                                           const SizedBox(height: 2),
@@ -494,8 +581,10 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
                   .toList();
 
               final entries = <_HistoryEntry>[
-                ..._interactions.map((i) => _HistoryEntry.fromInteraction(i, l10n)),
-                ...doneForContact.map((r) => _HistoryEntry.fromReminder(r, l10n)),
+                ..._interactions
+                    .map((i) => _HistoryEntry.fromInteraction(i, l10n)),
+                ...doneForContact
+                    .map((r) => _HistoryEntry.fromReminder(r, l10n)),
               ]..sort((a, b) => b.date.compareTo(a.date));
 
               if (entries.isEmpty) return const SizedBox.shrink();
@@ -508,8 +597,8 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
                 title: l10n.historyLabel,
                 trailing: hasMore
                     ? GestureDetector(
-                        onTap: () => context.push(
-                            '/contact/${contact.id}/history'),
+                        onTap: () =>
+                            context.push('/contact/${contact.id}/history'),
                         child: Text(
                           l10n.viewAll,
                           style: const TextStyle(
@@ -675,7 +764,8 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label,
-              style: TextStyle(fontSize: 13, color: AppColors.secondary(context))),
+              style:
+                  TextStyle(fontSize: 13, color: AppColors.secondary(context))),
           Flexible(
             child: Text(
               value,
@@ -758,8 +848,8 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
                 const SizedBox(height: 2),
                 Text(
                   DateFormat('dd MMM yyyy HH:mm').format(entry.date),
-                  style: TextStyle(
-                      fontSize: 11, color: AppColors.hint(context)),
+                  style:
+                      TextStyle(fontSize: 11, color: AppColors.hint(context)),
                 ),
               ],
             ),
@@ -769,7 +859,8 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
     );
   }
 
-  void _showActionsSheet(BuildContext context, Contact contact, {required bool canEdit}) {
+  void _showActionsSheet(BuildContext context, Contact contact,
+      {required bool canEdit}) {
     final l10n = ref.read(l10nProvider);
     showModalBottomSheet(
       context: context,
@@ -800,7 +891,8 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
                 },
               ),
             ListTile(
-              leading: const Icon(Icons.alarm_add_rounded, color: AppColors.accent),
+              leading:
+                  const Icon(Icons.alarm_add_rounded, color: AppColors.accent),
               title: Text(l10n.newReminder),
               onTap: () {
                 Navigator.pop(ctx);
@@ -869,7 +961,8 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
             Expanded(
               child: Text(
                 l10n.deleteContactTitle,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
             ),
           ],
@@ -883,8 +976,7 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
             onPressed: () => Navigator.pop(ctx, false),
             style: TextButton.styleFrom(
               foregroundColor: AppColors.secondary(context),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             ),
             child: Text(l10n.cancel),
           ),
@@ -894,8 +986,7 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
               backgroundColor: AppColors.hot,
               foregroundColor: Colors.white,
               elevation: 0,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
@@ -907,7 +998,8 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
     );
 
     if (confirmed == true && mounted) {
-      final err = await ref.read(contactsProvider.notifier).deleteContact(contact.id);
+      final err =
+          await ref.read(contactsProvider.notifier).deleteContact(contact.id);
       if (!mounted) return;
       if (err != null) {
         messenger.showSnackBar(SnackBar(content: Text(err))); // pre-captured
@@ -959,5 +1051,3 @@ class _HistoryEntry {
     );
   }
 }
-
-
