@@ -889,6 +889,15 @@ class AppL10n {
   String get orgSuspendedJoinError => _en
       ? 'This organization is currently suspended.'
       : 'Cette organisation est actuellement suspendue.';
+  String get orgAlreadyMember => _en
+      ? 'You are already a member of this organization.'
+      : 'Vous êtes déjà membre de cette organisation.';
+  String get orgJoinNoInternet => _en
+      ? 'Your device is not connected to the internet. Please try again when online.'
+      : "Votre appareil n'est pas connecté à internet. Veuillez réessayer lorsque vous êtes en ligne.";
+  String get orgJoinServerError => _en
+      ? 'Unable to reach the cloud server. Please try again.'
+      : 'Impossible de contacter le serveur cloud. Veuillez réessayer.';
   String get orgPayAndCreate =>
       _en ? 'Pay and create organization' : "Payer et créer l'organisation";
   String get orgBillingCycle => _en ? 'BILLING CYCLE' : 'CYCLE DE FACTURATION';

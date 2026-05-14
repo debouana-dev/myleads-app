@@ -1489,6 +1489,132 @@ class RemoteSyncService {
     }
   }
 
+  /// Result of a cloud invite-code lookup.
+  /// [org] is the raw row map when the org was found.
+  /// [error] is 'no_internet' | 'server_error' | null (null = found or not found).
+  static const _kOrgLookupNoInternet = 'no_internet';
+  static const _kOrgLookupServerError = 'server_error';
+
+  /// Looks up an organization in the remote database by its invite code.
+  ///
+  /// Returns `(org: map, error: null)` when found, `(org: null, error: null)` when
+  /// not found, or `(org: null, error: 'no_internet' | 'server_error')` on failure.
+  static Future<({Map<String, dynamic>? org, String? error})>
+      findOrganizationByInviteCodeInCloud(String code) async {
+    if (kIsWeb) return (org: null, error: null);
+    final connectivity = await Connectivity().checkConnectivity();
+    if (connectivity.contains(ConnectivityResult.none)) {
+      return (org: null, error: _kOrgLookupNoInternet);
+    }
+    final conn = await _connect();
+    if (conn == null) return (org: null, error: _kOrgLookupServerError);
+    try {
+      if (!_schemaReady) {
+        await _ensureSchema(conn);
+        _schemaReady = true;
+      }
+      final res = await conn.execute(
+        Sql.named(
+            'SELECT * FROM "organizations" WHERE "invite_code" = @code LIMIT 1'),
+        parameters: {'code': code.trim().toUpperCase()},
+      );
+      if (res.isEmpty) return (org: null, error: null);
+      return (org: Map<String, dynamic>.from(res.first.toColumnMap()), error: null);
+    } catch (e) {
+      debugPrint('[RemoteSync] findOrganizationByInviteCodeInCloud: $e');
+      return (org: null, error: _kOrgLookupServerError);
+    } finally {
+      await conn.close();
+    }
+  }
+
+  /// Writes the new org member row and the updated user row to the remote
+  /// database. Must be awaited before [pullOrganizationDataById] so the cloud
+  /// already reflects the new member when the pull runs.
+  ///
+  /// Returns true on success, false if offline or on any error.
+  static Future<bool> addMemberToOrgInCloud({
+    required Map<String, dynamic> memberRow,
+    required Map<String, dynamic> userRow,
+  }) async {
+    if (kIsWeb) return false;
+    final connectivity = await Connectivity().checkConnectivity();
+    if (connectivity.contains(ConnectivityResult.none)) return false;
+    final conn = await _connect();
+    if (conn == null) return false;
+    try {
+      if (!_schemaReady) {
+        await _ensureSchema(conn);
+        _schemaReady = true;
+      }
+      await _upsertUser(conn, userRow);
+      await _upsertOrgMember(conn, memberRow);
+      return true;
+    } catch (e) {
+      debugPrint('[RemoteSync] addMemberToOrgInCloud: $e');
+      return false;
+    } finally {
+      await conn.close();
+    }
+  }
+
+  /// Pulls the organization row, all its member rows, and all member contacts
+  /// from the remote database into the local SQLite store.
+  ///
+  /// Called after a new member joins an org so the device is immediately
+  /// populated with the org's shared data. All errors are swallowed.
+  static Future<void> pullOrganizationDataById(String orgId) async {
+    if (kIsWeb) return;
+    final conn = await _connect();
+    if (conn == null) return;
+    try {
+      if (!_schemaReady) {
+        await _ensureSchema(conn);
+        _schemaReady = true;
+      }
+
+      // Pull org row.
+      final orgRes = await conn.execute(
+        Sql.named('SELECT * FROM "organizations" WHERE "id" = @id'),
+        parameters: {'id': orgId},
+      );
+      for (final row in orgRes) {
+        await DatabaseService.upsertRawRow('organizations', row.toColumnMap());
+      }
+
+      // Pull all member rows; collect user IDs for the contacts query.
+      final memRes = await conn.execute(
+        Sql.named(
+            'SELECT * FROM "organization_members" WHERE "organization_id" = @id'),
+        parameters: {'id': orgId},
+      );
+      final memberUserIds = <String>[];
+      for (final row in memRes) {
+        await DatabaseService.upsertRawRow('organization_members',
+            _normaliseBools(row.toColumnMap(), _memberBoolCols));
+        final uid = row.toColumnMap()['user_id'];
+        if (uid is String && uid.isNotEmpty) memberUserIds.add(uid);
+      }
+
+      // Pull contacts owned by any org member.
+      if (memberUserIds.isNotEmpty) {
+        final inP = _buildInParams(memberUserIds);
+        final contactRes = await conn.execute(
+          Sql.named(
+              'SELECT * FROM "contacts" WHERE "owner_id" IN (${inP.placeholders})'),
+          parameters: inP.params,
+        );
+        for (final row in contactRes) {
+          await DatabaseService.upsertRawRow('contacts', row.toColumnMap());
+        }
+      }
+    } catch (e) {
+      debugPrint('[RemoteSync] pullOrganizationDataById: $e');
+    } finally {
+      await conn.close();
+    }
+  }
+
   static Future<void> _upsertOrgMember(
       Connection conn, Map<String, dynamic> r) async {
     await conn.execute(

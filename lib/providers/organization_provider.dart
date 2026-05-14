@@ -3,11 +3,13 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../core/l10n/app_l10n.dart';
 import '../models/organization.dart';
 import '../services/background_task.dart';
 import '../services/database_service.dart';
 import '../services/remote_sync_service.dart';
 import '../services/storage_service.dart';
+import 'settings_provider.dart';
 
 const _uuid = Uuid();
 
@@ -88,7 +90,10 @@ class OrgState {
 }
 
 class OrgNotifier extends StateNotifier<OrgState> {
-  OrgNotifier() : super(const OrgState());
+  final Ref _ref;
+  OrgNotifier(this._ref) : super(const OrgState());
+
+  AppL10n get _l10n => _ref.read(l10nProvider);
 
   /// Load org data + current user's privileges. Call on app start / profile open.
   Future<void> loadForCurrentUser() async {
@@ -261,7 +266,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
         id: orgId,
         name: name.trim(),
         ownerId: user.id,
-        inviteCode: _generateInviteCode(),
+        inviteCode: await _generateUniqueInviteCode(),
         licenseCount: licenseCount,
         orgPlanExpiresAt: orgPlanExpiresAt,
       );
@@ -348,8 +353,28 @@ class OrgNotifier extends StateNotifier<OrgState> {
 
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final org =
-          await DatabaseService.findOrganizationByInviteCode(code.trim());
+      // 1. Try local lookup first.
+      var org = await DatabaseService.findOrganizationByInviteCode(code.trim());
+
+      // 2. If not found locally, look up in the cloud.
+      if (org == null) {
+        final cloudResult =
+            await RemoteSyncService.findOrganizationByInviteCodeInCloud(
+                code.trim());
+        if (cloudResult.error == 'no_internet') {
+          state = state.copyWith(isLoading: false);
+          return _l10n.orgJoinNoInternet;
+        }
+        if (cloudResult.error == 'server_error') {
+          state = state.copyWith(isLoading: false);
+          return _l10n.orgJoinServerError;
+        }
+        if (cloudResult.org != null) {
+          await DatabaseService.upsertRawRow('organizations', cloudResult.org!);
+          org = await DatabaseService.findOrganizationByInviteCode(code.trim());
+        }
+      }
+
       if (org == null) {
         state = state.copyWith(
             isLoading: false,
@@ -360,14 +385,13 @@ class OrgNotifier extends StateNotifier<OrgState> {
       // Block joining a suspended org.
       if (org.isSuspended) {
         state = state.copyWith(isLoading: false);
-        return 'Cette organisation est actuellement suspendue';
+        return _l10n.orgSuspendedJoinError;
       }
 
       if (await DatabaseService.isUserInOrganization(org.id, user.id)) {
         state = state.copyWith(
-            isLoading: false,
-            error: 'Vous êtes déjà membre de cette organisation');
-        return 'Vous êtes déjà membre de cette organisation';
+            isLoading: false, error: _l10n.orgAlreadyMember);
+        return _l10n.orgAlreadyMember;
       }
 
       // Check license capacity (active + suspended members count toward total).
@@ -378,8 +402,9 @@ class OrgNotifier extends StateNotifier<OrgState> {
         return "L'organisation n'a plus de places disponibles. L'administrateur doit acheter des licences supplémentaires.";
       }
 
+      final memberId = _uuid.v4();
       await DatabaseService.insertOrgMember(
-        id: _uuid.v4(),
+        id: memberId,
         orgId: org.id,
         userId: user.id,
         role: 'member',
@@ -400,6 +425,20 @@ class OrgNotifier extends StateNotifier<OrgState> {
         userEmail: user.email,
       );
 
+      // Explicitly push the new member + updated user to the cloud before
+      // pulling so the cloud already reflects the new membership.
+      final memberRow = await DatabaseService.getRawOrgMemberRow(memberId);
+      final rawUserRow = await DatabaseService.getRawUserRow(user.id);
+      if (memberRow != null && rawUserRow != null) {
+        await RemoteSyncService.addMemberToOrgInCloud(
+          memberRow: memberRow,
+          userRow: rawUserRow,
+        );
+      }
+
+      // Pull the org's shared data (org row, all members, member contacts).
+      await RemoteSyncService.pullOrganizationDataById(org.id);
+
       final members = await DatabaseService.getMembersForOrganization(org.id);
       final privs = await DatabaseService.getMemberPrivileges(
           userId: user.id, orgId: org.id);
@@ -409,6 +448,9 @@ class OrgNotifier extends StateNotifier<OrgState> {
         members: members,
         currentUserCanEdit: privs.canEdit,
         currentUserCanCreate: privs.canCreate,
+        currentUserCanViewReminders: privs.canViewReminders,
+        currentUserCanViewHistory: privs.canViewHistory,
+        currentUserCanExportContacts: privs.canExportContacts,
       );
       return null;
     } catch (e) {
@@ -650,7 +692,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
     try {
-      final newCode = _generateInviteCode();
+      final newCode = await _generateUniqueInviteCode();
       await DatabaseService.updateOrgInviteCode(org.id, newCode);
       final updated = org.copyWith(inviteCode: newCode);
       state = state.copyWith(organization: updated);
@@ -679,16 +721,29 @@ class OrgNotifier extends StateNotifier<OrgState> {
     }
   }
 
-  static String _generateInviteCode() {
+  /// Generates a unique 8-char invite code that does not collide with any
+  /// existing organization in either the local or the remote database.
+  static Future<String> _generateUniqueInviteCode() async {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     final rand = Random.secure();
+    for (var attempt = 0; attempt < 10; attempt++) {
+      final code =
+          List.generate(8, (_) => chars[rand.nextInt(chars.length)]).join();
+      if (await DatabaseService.findOrganizationByInviteCode(code) != null) {
+        continue;
+      }
+      final cloudResult =
+          await RemoteSyncService.findOrganizationByInviteCodeInCloud(code);
+      if (cloudResult.org != null) continue;
+      return code;
+    }
     return List.generate(8, (_) => chars[rand.nextInt(chars.length)]).join();
   }
 }
 
 final organizationProvider =
     StateNotifierProvider<OrgNotifier, OrgState>((ref) {
-  return OrgNotifier();
+  return OrgNotifier(ref);
 });
 
 /// Derived privilege providers — cheap to watch in the UI.

@@ -2263,6 +2263,14 @@ class DatabaseService {
         .toList();
   }
 
+  static Future<Map<String, dynamic>?> getRawOrgMemberRow(
+      String memberId) async {
+    final db = await database;
+    final rows = await db.query('organization_members',
+        where: 'id = ?', whereArgs: [memberId], limit: 1);
+    return rows.isEmpty ? null : Map<String, dynamic>.from(rows.first);
+  }
+
   static Future<void> upsertRawRow(
       String table, Map<String, dynamic> row) async {
     final db = await database;
