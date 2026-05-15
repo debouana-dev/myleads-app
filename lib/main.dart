@@ -112,7 +112,7 @@ void main() async {
   if (stripeKey.isNotEmpty) {
     try {
       Stripe.publishableKey = stripeKey;
-      //Stripe.instance.setMerchantIdentifier('merchant.com.debouana.myleads');
+      Stripe.merchantIdentifier = 'merchant.com.debouana.me2leads.app';
       await Stripe.instance.applySettings().timeout(const Duration(seconds: 5));
       // Check for a payment that completed while the app was killed during a
       // Link / Amazon Pay redirect. The result is cached in StripeService and

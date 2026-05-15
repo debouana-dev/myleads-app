@@ -31,6 +31,7 @@ class UserAccount {
   final String plan; // 'free' | 'premium' | 'business'
   final DateTime? planExpiresAt; // null for free plan
   final String? subscriptionBillingCycle; // 'monthly' | 'yearly' | null
+  final String? appleUserIdentifier;
 
   UserAccount({
     required this.id,
@@ -55,6 +56,7 @@ class UserAccount {
     this.plan = 'free',
     this.planExpiresAt,
     this.subscriptionBillingCycle,
+    this.appleUserIdentifier,
   })  : createdAt = createdAt ?? DateTime.now(),
         passwordChangedAt = passwordChangedAt ?? DateTime.now();
 
@@ -83,6 +85,7 @@ class UserAccount {
     String? plan,
     Object? planExpiresAt = _sentinel,
     Object? subscriptionBillingCycle = _sentinel,
+    String? appleUserIdentifier,
   }) {
     return UserAccount(
       id: id ?? this.id,
@@ -113,6 +116,7 @@ class UserAccount {
       subscriptionBillingCycle: identical(subscriptionBillingCycle, _sentinel)
           ? this.subscriptionBillingCycle
           : subscriptionBillingCycle as String?,
+      appleUserIdentifier: appleUserIdentifier ?? this.appleUserIdentifier,
     );
   }
 }

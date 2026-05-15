@@ -27,7 +27,7 @@ import 'web_db_factory_stub.dart'
 class DatabaseService {
   static Database? _db;
   static const _dbName = 'myleads.db';
-  static const _dbVersion = 22;
+  static const _dbVersion = 23;
 
   // ── Remote sync callbacks ──────────────────────────────────────────────────
   static void Function(String table, Map<String, dynamic> row)? _onRemoteUpsert;
@@ -390,6 +390,13 @@ class DatabaseService {
             "ALTER TABLE payment_history ADD COLUMN account_type TEXT NOT NULL DEFAULT 'individual'");
       } catch (_) {}
     }
+    if (oldVersion < 23) {
+      // v22 → v23: Apple Sign-In support — store Apple userIdentifier for reconnections
+      try {
+        await db.execute(
+            'ALTER TABLE users ADD COLUMN apple_user_identifier TEXT');
+      } catch (_) {}
+    }
   }
 
   // =====================================================================
@@ -425,7 +432,8 @@ class DatabaseService {
         plan TEXT NOT NULL DEFAULT 'free',
         last_sync_at TEXT,
         plan_expires_at TEXT,                 -- ✅ v16
-        subscription_billing_cycle TEXT       -- ✅ v16
+        subscription_billing_cycle TEXT,      -- ✅ v16
+        apple_user_identifier TEXT            -- ✅ v23
       )
     ''');
 
@@ -651,6 +659,18 @@ class DatabaseService {
     return _userFromRow(rows.first);
   }
 
+  static Future<UserAccount?> findUserByAppleIdentifier(String appleId) async {
+    final db = await DatabaseService.database;
+    final rows = await db.query(
+      'users',
+      where: 'apple_user_identifier = ?',
+      whereArgs: [appleId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return DatabaseService._userFromRow(rows.first);
+  }
+
   static Future<void> insertUser(UserAccount user) async {
     final db = await database;
     final row = _userToRow(user);
@@ -756,6 +776,7 @@ class DatabaseService {
         'plan': u.plan,
         'plan_expires_at': u.planExpiresAt?.toIso8601String(),
         'subscription_billing_cycle': u.subscriptionBillingCycle,
+        'apple_user_identifier': u.appleUserIdentifier,
       };
 
   static UserAccount _userFromRow(Map<String, dynamic> row) {
@@ -790,6 +811,7 @@ class DatabaseService {
           ? DateTime.tryParse(row['plan_expires_at'] as String)
           : null,
       subscriptionBillingCycle: row['subscription_billing_cycle'] as String?,
+      appleUserIdentifier: row['apple_user_identifier'] as String?,
     );
   }
 

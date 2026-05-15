@@ -66,13 +66,13 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyC8g0vYwXexCGmFnlLPvJ1MmrH_lfU7IKU',
-    appId: '1:772969451694:ios:15cdbb7a3e1efd752ddd3f',
+    appId: '1:772969451694:ios:8011dbcb07899abf2ddd3f',
     messagingSenderId: '772969451694',
     projectId: 'me2leads',
     storageBucket: 'me2leads.firebasestorage.app',
     androidClientId: '772969451694-9e71lctlt1rqdhavob115f16s35vroes.apps.googleusercontent.com',
-    iosClientId: '772969451694-uhaj2hrsuvd98egqfnq090gaikvenl26.apps.googleusercontent.com',
-    iosBundleId: 'com.debouana.me2leads',
+    iosClientId: '772969451694-thhinvi6buauusle546su8irssfdb6t3.apps.googleusercontent.com',
+    iosBundleId: 'com.debouana.me2leads.app',
   );
 
 }
