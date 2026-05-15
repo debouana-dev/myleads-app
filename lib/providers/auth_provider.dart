@@ -457,7 +457,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           AppleIDAuthorizationScopes.fullName,
         ],
       );
-      final email = credential.email;
+      final email = credential.userIdentifier;
       if (email == null) {
         state = state.copyWith(
           isLoading: false,
