@@ -24,6 +24,12 @@
     </array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Microphone access</string>
+    <key>com.apple.developer.in-app-payments</key>
+    <array>
+        <string>merchant.com.debouana.me2leads.app</string>
+    </array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

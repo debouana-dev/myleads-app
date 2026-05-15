@@ -274,10 +274,9 @@ class StripeService {
             currencyCode: 'EUR',
             testEnv: kDebugMode,
           ),
-          /*applePay: PaymentSheetApplePay(
+          applePay: const PaymentSheetApplePay(
             merchantCountryCode: 'FR',
-            //merchantIdentifier: 'merchant.com.debouana.myleads',
-          ),*/
+          ),
           // Required for redirect-based methods (Link, Amazon Pay, bank
           // redirects). Android declares this scheme in the intent-filter
           // so the deep link routes back to MainActivity.

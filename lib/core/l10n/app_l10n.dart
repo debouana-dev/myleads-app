@@ -125,6 +125,9 @@ class AppL10n {
       : 'Connexion Google échouée: $error';
   String get authAppleNoEmail =>
       _en ? 'Apple did not provide an email' : "Apple n'a pas fourni d'email";
+  String get authAppleNoEmailNoLocalRecord => _en
+      ? 'Apple authentication failed. No local account found for this Apple ID.'
+      : 'Authentification Apple échouée. Aucun compte local trouvé pour cet identifiant Apple.';
   String authAppleFailed(String error) =>
       _en ? 'Apple sign-in failed: $error' : 'Connexion Apple échouée: $error';
   String authOAuthEmailConflict(String provider) => _en

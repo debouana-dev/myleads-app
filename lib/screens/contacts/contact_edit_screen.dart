@@ -383,7 +383,7 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
                       context,
                       l10n.phoneLabel,
                       _phoneCtrl,
-                      hint: 'Ex : +237 6 99 88 77 66',
+                      hint: 'Ex : +352 / +1 6 99 88 77 66',
                       type: TextInputType.phone,
                     ),
                     _buildField(

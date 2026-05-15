@@ -447,6 +447,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   // ---------------- Apple sign-in ----------------
 
+  /// Finds a user by Apple userIdentifier in the local database.
+  /// Used for re-authentication when Apple doesn't provide the email.
+
+
   Future<bool> signInWithApple() async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
@@ -457,7 +461,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
           AppleIDAuthorizationScopes.fullName,
         ],
       );
-      final email = credential.userIdentifier;
+
+      // On subsequent logins, Apple may not provide email — only userIdentifier
+      String? email = credential.email;
+      final appleUserIdentifier = credential.userIdentifier;
+
+      if (email == null && appleUserIdentifier != null) {
+        // Second+ login: Apple returned userIdentifier but no email.
+        // Attempt to find the logged-in account by the Apple identifier.
+        debugPrint(
+            'AuthNotifier.signInWithApple: no email received, searching by userIdentifier=$appleUserIdentifier');
+        final existingUser = await DatabaseService.findUserByAppleIdentifier(appleUserIdentifier);
+        if (existingUser == null) {
+          state = state.copyWith(
+            isLoading: false,
+            error: _l10n.authAppleNoEmailNoLocalRecord,
+          );
+          return false;
+        }
+        email = existingUser.email;
+        debugPrint(
+            'AuthNotifier.signInWithApple: found existing user (email=$email)');
+      }
+
       if (email == null) {
         state = state.copyWith(
           isLoading: false,
@@ -465,6 +491,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         );
         return false;
       }
+
       debugPrint(
           'AuthNotifier.signInWithApple: Apple account retrieved (email: $email)');
       return _upsertOAuthUser(
@@ -472,6 +499,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         firstName: credential.givenName ?? 'User',
         lastName: credential.familyName ?? '',
         provider: 'apple',
+        appleUserIdentifier: appleUserIdentifier,
       );
     } catch (e) {
       state = state.copyWith(
@@ -487,6 +515,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String firstName,
     required String lastName,
     required String provider,
+    String? appleUserIdentifier,
   }) async {
     // Initialize encryption with user-specific key for OAuth users
     await EncryptionService.initFromEnv(email);
@@ -525,6 +554,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           authProvider: provider,
           sessionToken: token,
           lastLoginAt: DateTime.now(),
+          appleUserIdentifier: appleUserIdentifier,
         );
         await DatabaseService.insertUser(user);
         debugPrint(
@@ -544,7 +574,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
           sessionToken: token,
           lastLoginAt: DateTime.now(),
           firstName: firstName,
-          lastName: lastName);
+          lastName: lastName,
+          appleUserIdentifier: appleUserIdentifier ?? user.appleUserIdentifier);
       await DatabaseService.updateUser(user);
     }
 

@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS "users" (
   "last_sync_at"                VARCHAR(50)   DEFAULT NULL,
   "plan_expires_at"             VARCHAR(50)   DEFAULT NULL,
   "subscription_billing_cycle"  VARCHAR(10)   DEFAULT NULL,
+  "apple_user_identifier"       VARCHAR(255)  DEFAULT NULL,
 
   PRIMARY KEY ("id"),
   UNIQUE ("email_lookup")
@@ -367,4 +368,15 @@ ALTER TABLE "payment_history"
 --         on organization_id; migration re-encrypts all pre-existing plaintext rows
 -- v22   : payment_history.account_type — 'individual' | 'organization'; identifies
 --         whether the payment was made by a personal subscriber or an org admin
+-- v23   : users.apple_user_identifier — Apple Sign-In unique identifier for
+--         multi-device authentication when Apple returns userIdentifier only
 -- ============================================================
+
+
+-- ============================================================
+-- UPGRADE SCRIPT (v22 → v23)
+-- Add support for Apple Sign-In userIdentifier tracking
+-- ============================================================
+
+ALTER TABLE "users"
+ADD COLUMN IF NOT EXISTS "apple_user_identifier" VARCHAR(255) DEFAULT NULL;

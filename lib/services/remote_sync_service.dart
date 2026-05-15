@@ -204,6 +204,7 @@ class RemoteSyncService {
         "last_sync_at"                VARCHAR(50),
         "plan_expires_at"             VARCHAR(50),
         "subscription_billing_cycle"  VARCHAR(10),
+        "apple_user_identifier"       VARCHAR(255),
         PRIMARY KEY ("id"),
         UNIQUE ("email_lookup")
       )
@@ -428,6 +429,11 @@ class RemoteSyncService {
     );
     await conn.execute(
       'ALTER TABLE "organizations" ADD COLUMN IF NOT EXISTS "org_suspended_at" VARCHAR(50) DEFAULT NULL',
+    );
+
+    // v23: Apple Sign-In unique identifier support.
+    await conn.execute(
+      'ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "apple_user_identifier" VARCHAR(255) DEFAULT NULL',
     );
   }
 
