@@ -143,7 +143,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Widget _buildHeader(AppL10n l10n) {
     return Container(
       width: double.infinity,
-      height: 220,
+      height: 250,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
