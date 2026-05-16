@@ -2,34 +2,33 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>FLTEnableImpeller</key>
-    <false/>
-    <key>NSCalendarsUsageDescription</key>
-    <string>This app uses the calendar to manage your appointments.</string>
-    <key>NSPhotoLibraryUsageDescription</key>
-    <string>This app accesses your photos to personalize your profile.</string>
-    <key>NSCameraUsageDescription</key>
-    <string>This app uses the camera to take photos.</string>
-    <key>CFBundleURLTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleTypeRole</key>
-            <string>Editor</string>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <!-- Copiez REVERSED_CLIENT_ID depuis GoogleService-Info.plist -->
-                <string>com.googleusercontent.apps.772969451694-thhinvi6buauusle546su8irssfdb6t3</string>
-            </array>
-        </dict>
-    </array>
+	<key>FLTEnableImpeller</key>
+	<false/>
+	<key>NSCalendarsUsageDescription</key>
+	<string>This app uses the calendar to manage your appointments.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app accesses your photos to personalize your profile.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>This app uses the camera to take photos.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.772969451694-thhinvi6buauusle546su8irssfdb6t3</string>
+			</array>
+		</dict>
+	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>Microphone access</string>
-    <key>com.apple.developer.in-app-payments</key>
-    <array>
-        <string>merchant.com.debouana.me2leads.app</string>
-    </array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Microphone access</string>
+	<key>com.apple.developer.in-app-payments</key>
+	<array>
+		<string>merchant.com.debouana.me2leads.app</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -85,6 +84,8 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>LSApplicationCategoryType</key>
+	<string></string>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
