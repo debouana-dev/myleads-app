@@ -474,11 +474,13 @@ class _PricingScreenState extends ConsumerState<PricingScreen>
                             const Icon(Icons.lock_rounded,
                                 size: 14, color: AppColors.success),
                             const SizedBox(width: 6),
-                            Text(
-                              l10n.secureTransactions,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: AppColors.secondary(context),
+                            Expanded(
+                              child: Text(
+                                l10n.secureTransactions,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.secondary(context),
+                                ),
                               ),
                             ),
                           ],

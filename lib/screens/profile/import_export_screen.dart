@@ -433,8 +433,8 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
             subtitle: l10n.csvImportDesc,
             onTap: canCreate
                 ? () => _pickAndImport(['csv', 'tsv'])
-                : () => _setResult(l10n.importCreatePrivilegeLocked,
-                    isError: true),
+                : () =>
+                    _setResult(l10n.importCreatePrivilegeLocked, isError: true),
           ),
           const SizedBox(height: 8),
           _guideToggle(
@@ -461,8 +461,8 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
             subtitle: l10n.vcardImportDesc,
             onTap: canCreate
                 ? () => _pickAndImport(['vcf', 'vcard'])
-                : () => _setResult(l10n.importCreatePrivilegeLocked,
-                    isError: true),
+                : () =>
+                    _setResult(l10n.importCreatePrivilegeLocked, isError: true),
           ),
           const SizedBox(height: 8),
           _guideToggle(
@@ -491,8 +491,8 @@ class _ImportExportScreenState extends ConsumerState<ImportExportScreen>
             subtitle: l10n.txtImportDesc,
             onTap: canCreate
                 ? () => _pickAndImport(['txt'])
-                : () => _setResult(l10n.importCreatePrivilegeLocked,
-                    isError: true),
+                : () =>
+                    _setResult(l10n.importCreatePrivilegeLocked, isError: true),
           ),
           const SizedBox(height: 8),
           _guideToggle(
@@ -1110,13 +1110,16 @@ Status: Warm Lead''';
                   ),
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  '·  ${l10n.txtGuideSubtitle}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppColors.secondary(context),
+                Expanded(
+                  child: Text(
+                    '·  ${l10n.txtGuideSubtitle}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.secondary(context),
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
+                )
               ],
             ),
           ),
@@ -1417,11 +1420,19 @@ class _CsvFormatGuide extends StatelessWidget {
 
   Widget _columnsTable(BuildContext context) {
     final isEn = l10n.isEnglish;
+
+    const double col0 = 90;
+    const double col1 = 98;
+    const double col2 = 96;
+    const double col3 = 132;
+    const double col4 = 90;
+    const double colGap = 8;
+
     final headerStyle = TextStyle(
       fontSize: 9,
       fontWeight: FontWeight.w700,
       color: AppColors.hint(context),
-      letterSpacing: 0.5,
+      letterSpacing: 0.6,
     );
     final cellStyle = TextStyle(
       fontFamily: 'monospace',
@@ -1429,85 +1440,123 @@ class _CsvFormatGuide extends StatelessWidget {
       color: AppColors.onSurface(context),
     );
 
-    Widget hcell(String t) => Expanded(
-        child: Text(t, style: headerStyle, overflow: TextOverflow.ellipsis));
-    Widget dcell(String t) => Expanded(
-        child: Text(t, style: cellStyle, overflow: TextOverflow.ellipsis));
+    Widget hcell(String t, double w) => SizedBox(
+          width: w,
+          child: Text(t, style: headerStyle, overflow: TextOverflow.ellipsis),
+        );
+    Widget dcell(String t, double w) => SizedBox(
+          width: w,
+          child: Text(t, style: cellStyle, overflow: TextOverflow.ellipsis),
+        );
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.bg(context),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.borderColor(context)),
-      ),
-      child: Column(
-        children: [
-          // Header row
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.borderColor(context).withOpacity(0.5),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(9),
-                topRight: Radius.circular(9),
-              ),
-            ),
-            child: Row(children: [
-              hcell(isEn ? 'FIELD' : 'CHAMP'),
-              hcell('GENERIC'),
-              hcell('SALESFORCE'),
-              hcell('ODOO'),
-              hcell('SAP'),
-            ]),
-          ),
-          // Data rows
-          ...List.generate(_columns.length, (i) {
-            final c = _columns[i];
-            final isLast = i == _columns.length - 1;
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    List<Widget> rowCells({
+      required Widget first,
+      required String c1,
+      required String c2,
+      required String c3,
+      required String c4,
+    }) =>
+        [
+          first,
+          const SizedBox(width: colGap),
+          dcell(c1, col1),
+          const SizedBox(width: colGap),
+          dcell(c2, col2),
+          const SizedBox(width: colGap),
+          dcell(c3, col3),
+          const SizedBox(width: colGap),
+          dcell(c4, col4),
+        ];
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.bg(context),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.borderColor(context)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
-                border: isLast
-                    ? null
-                    : Border(
-                        bottom: BorderSide(
-                          color: AppColors.borderColor(context),
-                          width: 0.5,
-                        ),
-                      ),
+                color: AppColors.borderColor(context).withOpacity(0.5),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(9),
+                  topRight: Radius.circular(9),
+                ),
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Row(children: [
-                      Text(
-                        c.$1,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.secondary(context),
+              child: Row(children: [
+                hcell(isEn ? 'FIELD' : 'CHAMP', col0),
+                const SizedBox(width: colGap),
+                hcell('GENERIC', col1),
+                const SizedBox(width: colGap),
+                hcell('SALESFORCE', col2),
+                const SizedBox(width: colGap),
+                hcell('ODOO', col3),
+                const SizedBox(width: colGap),
+                hcell('SAP', col4),
+              ]),
+            ),
+            // Data rows
+            ...List.generate(_columns.length, (i) {
+              final c = _columns[i];
+              final isLast = i == _columns.length - 1;
+              return Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  border: isLast
+                      ? null
+                      : Border(
+                          bottom: BorderSide(
+                            color: AppColors.borderColor(context),
+                            width: 0.5,
+                          ),
                         ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (c.$6) ...[
-                        const SizedBox(width: 3),
-                        const Text('*',
+                ),
+                child: Row(
+                  children: rowCells(
+                    first: SizedBox(
+                      width: col0,
+                      child: Row(children: [
+                        Flexible(
+                          child: Text(
+                            c.$1,
                             style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.hot)),
-                      ],
-                    ]),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.secondary(context),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (c.$6) ...[
+                          const SizedBox(width: 3),
+                          const Text(
+                            '*',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.hot,
+                            ),
+                          ),
+                        ],
+                      ]),
+                    ),
+                    c1: c.$2,
+                    c2: c.$3,
+                    c3: c.$4,
+                    c4: c.$5,
                   ),
-                  dcell(c.$2),
-                  dcell(c.$3),
-                  dcell(c.$4),
-                  dcell(c.$5),
-                ],
-              ),
-            );
-          }),
-        ],
+                ),
+              );
+            }),
+          ],
+        ),
       ),
     );
   }
