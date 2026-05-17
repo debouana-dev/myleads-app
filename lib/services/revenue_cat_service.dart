@@ -63,7 +63,6 @@ class RevenueCatService {
           }
         }
       }
-
       if (package == null) {
         debugPrint('RevenueCatService: Package $packageId not found in current offering');
         return const RevenueCatCheckoutResult(success: false, errorCode: 'not_found');
