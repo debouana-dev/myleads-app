@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
@@ -25,6 +27,10 @@ class FtpPhotoService {
 
   /// Uploads the local file for [relativePath] to the SFTP server.
   /// Returns true on success, false on any failure. No-op on web.
+  ///
+  /// Writes to a `.tmp` staging file on the server first, then renames it to
+  /// the final path only after the full write completes, so a mid-transfer
+  /// failure never leaves a partial file at the canonical remote path.
   static Future<bool> uploadPhoto(String relativePath) async {
     if (kIsWeb) return false;
     final localFile =
@@ -33,17 +39,38 @@ class FtpPhotoService {
 
     return _withSftp((sftp) async {
       final remote = '$_remoteRoot/$relativePath';
+      final remoteTmp = '$remote.tmp';
       await _mkdirp(sftp, p.dirname(remote));
+
       final remoteFile = await sftp.open(
-        remote,
+        remoteTmp,
         mode: SftpFileOpenMode.create |
             SftpFileOpenMode.write |
             SftpFileOpenMode.truncate,
       );
+      bool written = false;
       try {
         await remoteFile.write(localFile.openRead().cast<Uint8List>());
+        written = true;
       } finally {
         await remoteFile.close();
+        if (written) {
+          // Rename the staging file to the final path. Servers without the
+          // posix-rename extension reject a rename-over-existing; handle that
+          // by deleting the destination first and retrying.
+          try {
+            await sftp.rename(remoteTmp, remote);
+          } catch (_) {
+            try {
+              await sftp.remove(remote);
+            } catch (_) {}
+            await sftp.rename(remoteTmp, remote);
+          }
+        } else {
+          try {
+            await sftp.remove(remoteTmp);
+          } catch (_) {}
+        }
       }
       return true;
     });
@@ -52,6 +79,10 @@ class FtpPhotoService {
   /// Downloads the photo at [relativePath] from the SFTP server to local storage.
   /// Returns true on success, false on any failure (missing file, network …).
   /// No-op on web.
+  ///
+  /// Streams into a `.tmp` file first, then renames it atomically to the final
+  /// path. Any failure deletes the temp file so the next call retries cleanly
+  /// rather than treating a partial download as a valid cached file.
   static Future<bool> downloadPhoto(String relativePath) async {
     if (kIsWeb) return false;
     final localFile =
@@ -61,21 +92,38 @@ class FtpPhotoService {
 
     return _withSftp((sftp) async {
       final remote = '$_remoteRoot/$relativePath';
+      final tmpFile = File('${localFile.path}.tmp');
+
+      // Remove any stale temp left by a previous interrupted download.
+      try {
+        await tmpFile.delete();
+      } catch (_) {}
+
       final remoteFile = await sftp.open(remote, mode: SftpFileOpenMode.read);
+      bool written = false;
       try {
         await localFile.parent.create(recursive: true);
-        final sink = localFile.openWrite();
+        final sink = tmpFile.openWrite();
         try {
           await for (final chunk in remoteFile.read()) {
             sink.add(chunk);
           }
+          written = true;
         } finally {
-          await sink.close();
+          await sink.close(); // flush and close before rename
         }
       } finally {
         await remoteFile.close();
+        if (written) {
+          // Atomic local rename: the final file is either complete or absent.
+          await tmpFile.rename(localFile.path);
+        } else {
+          try {
+            await tmpFile.delete();
+          } catch (_) {}
+        }
       }
-      return true;
+      return written;
     });
   }
 

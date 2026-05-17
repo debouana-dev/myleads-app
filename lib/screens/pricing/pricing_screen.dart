@@ -373,24 +373,26 @@ class _PricingScreenState extends ConsumerState<PricingScreen>
                             ],
                           ),
                         ),
-                        GestureDetector(
-                          onTap: () => context.push('/subscription-plan'),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: isPaid
-                                  ? Colors.white.withValues(alpha: 0.15)
-                                  : AppColors.accent,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              isPaid ? l10n.managePlan : l10n.upgradeNow,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color:
-                                    isPaid ? Colors.white : AppColors.primary,
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => context.push('/subscription-plan'),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isPaid
+                                    ? Colors.white.withValues(alpha: 0.15)
+                                    : AppColors.accent,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                isPaid ? l10n.managePlan : l10n.upgradeNow,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color:
+                                      isPaid ? Colors.white : AppColors.primary,
+                                ),
                               ),
                             ),
                           ),
