@@ -5,11 +5,15 @@
 	<key>FLTEnableImpeller</key>
 	<false/>
 	<key>NSCalendarsUsageDescription</key>
-	<string>This app uses the calendar to manage your appointments.</string>
+	<string>Me2Leads adds follow-up reminders and meetings to your calendar so you never miss an appointment with a lead.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app accesses your photos to personalize your profile.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>This app uses the camera to take photos.</string>
+	<string>Me2Leads uses your photo library to let you upload a profile picture and attach images to your contacts and leads.</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>Me2Leads saves photos to your library when you download images shared by your contacts or leads.</string>
+    <key>NSUserNotificationsUsageDescription</key>
+    <string>Me2Leads sends notifications to remind you of follow-ups, meetings, and updates from your leads and contacts.</string>
+    <key>NSCameraUsageDescription</key>
+	<string>Me2Leads uses your camera to let you take a profile photo or scan a QR code to quickly add a new contact.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -24,7 +28,7 @@
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Microphone access</string>
+	<string>Me2Leads uses the microphone to record voice notes that you can attach to your leads and contacts</string>
 	<key>com.apple.developer.in-app-payments</key>
 	<array>
 		<string>merchant.com.debouana.me2leads.app</string>

@@ -62,6 +62,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '772969451694',
     projectId: 'me2leads',
     storageBucket: 'me2leads.firebasestorage.app',
+    iosClientId: '772969451694-npt8ctok5nbm0g6sl6t7ttmn6q7cbgqb.apps.googleusercontent.com',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(

@@ -92,10 +92,10 @@ class RemoteSyncService {
   /// Also uploads the user's profile photo to FTP when a local file exists,
   /// so the profile image stays in sync across devices for all subscription plans.
   static void _syncUserRow(String userId) {
-    _fireAndForget((conn) async {
+    fireAndForget((conn) async {
       final row = await DatabaseService.getRawUserRow(userId);
       if (row == null) return;
-      await _upsertUser(conn, row);
+      await upsertUser(conn, row);
       // Photo upload is restricted to premium/business — Free plan syncs the
       // user row only (no FTP traffic).
       if (await _hasSyncPlan()) {
@@ -485,7 +485,7 @@ class RemoteSyncService {
         await _ensureSchema(conn);
         _schemaReady = true;
       }
-      await _upsertUser(conn, userRow);
+      await upsertUser(conn, userRow);
       return null;
     } catch (e) {
       debugPrint('RemoteSyncService registerUserInCloud error: $e');
@@ -648,9 +648,9 @@ class RemoteSyncService {
   /// premium or business plan.
   static Future<void> _pushRowBackground(
           String table, Map<String, dynamic> row) =>
-      _fireAndForget((conn) async {
+      fireAndForget((conn) async {
         if (table == 'users') {
-          await _upsertUser(conn, row);
+          await upsertUser(conn, row);
           return;
         }
         if (!(await _hasSyncPlan())) return;
@@ -662,9 +662,9 @@ class RemoteSyncService {
           case 'interactions':
             await _upsertInteraction(conn, row);
           case 'organizations':
-            await _upsertOrganization(conn, row);
+            await upsertOrganization(conn, row);
           case 'organization_members':
-            await _upsertOrgMember(conn, row);
+            await upsertOrgMember(conn, row);
           case 'payment_history':
             await _upsertPaymentRecord(conn, row);
         }
@@ -675,7 +675,7 @@ class RemoteSyncService {
   /// and organisations (all member rows).
   /// Data-table deletes require a premium or business plan.
   static Future<void> _deleteRowBackground(String table, String id) =>
-      _fireAndForget((conn) async {
+      fireAndForget((conn) async {
         if (!(await _hasSyncPlan())) return;
         if (table == 'contacts') {
           await conn.execute(
@@ -701,7 +701,7 @@ class RemoteSyncService {
 
   /// Opens a connection, runs [action], then closes.
   /// Errors are swallowed so local writes are never blocked by network issues.
-  static Future<void> _fireAndForget(
+  static Future<void> fireAndForget(
       Future<void> Function(Connection) action) async {
     if (kIsWeb) return;
     final connectivity = await Connectivity().checkConnectivity();
@@ -764,7 +764,7 @@ class RemoteSyncService {
 
       // User row — always synced for all plans.
       final userRow = await DatabaseService.getRawUserRow(userId);
-      if (userRow != null) await _upsertUser(conn, userRow);
+      if (userRow != null) await upsertUser(conn, userRow);
 
       var contactCount = 0;
       var reminderCount = 0;
@@ -797,11 +797,11 @@ class RemoteSyncService {
         final orgId = userRow?['organization_id'] as String?;
         if (orgId != null && orgId.isNotEmpty) {
           final orgRow = await DatabaseService.getRawOrganizationRow(orgId);
-          if (orgRow != null) await _upsertOrganization(conn, orgRow);
+          if (orgRow != null) await upsertOrganization(conn, orgRow);
 
           final members = await DatabaseService.getRawOrgMemberRows(orgId);
           for (final row in members) {
-            await _upsertOrgMember(conn, row);
+            await upsertOrgMember(conn, row);
           }
         }
 
@@ -1154,10 +1154,15 @@ class RemoteSyncService {
               'SELECT * FROM "organization_members" WHERE "organization_id" = @id'),
           parameters: {'id': orgId},
         );
+        final memberUserIds = <String>[];
         for (final row in memRes) {
           await DatabaseService.upsertRawRow('organization_members',
               _normaliseBools(row.toColumnMap(), _memberBoolCols));
+          final uid = row.toColumnMap()['user_id'];
+          if (uid is String && uid.isNotEmpty) memberUserIds.add(uid);
         }
+        // Reconcile: remove local members that no longer exist in the cloud.
+        await DatabaseService.reconcileOrgMembers(orgId, memberUserIds);
       }
 
       // ── Payment history ───────────────────────────────────────────────────
@@ -1205,7 +1210,7 @@ class RemoteSyncService {
 
   // ── Upsert helpers ──────────────────────────────────────────────────────────
 
-  static Future<void> _upsertUser(
+  static Future<void> upsertUser(
       Connection conn, Map<String, dynamic> r) async {
     // ✅ Supprimer un éventuel doublon avec même email mais id différent
     // (ex: compte recréé, changement d'auth provider, etc.)
@@ -1432,7 +1437,7 @@ class RemoteSyncService {
     );
   }
 
-  static Future<void> _upsertOrganization(
+  static Future<void> upsertOrganization(
       Connection conn, Map<String, dynamic> r) async {
     await conn.execute(
       Sql.named('''
@@ -1553,8 +1558,8 @@ class RemoteSyncService {
         await _ensureSchema(conn);
         _schemaReady = true;
       }
-      await _upsertUser(conn, userRow);
-      await _upsertOrgMember(conn, memberRow);
+      await upsertUser(conn, userRow);
+      await upsertOrgMember(conn, memberRow);
       return true;
     } catch (e) {
       debugPrint('[RemoteSync] addMemberToOrgInCloud: $e');
@@ -1602,6 +1607,9 @@ class RemoteSyncService {
         if (uid is String && uid.isNotEmpty) memberUserIds.add(uid);
       }
 
+      // Reconcile: remove local members that no longer exist in the cloud.
+      await DatabaseService.reconcileOrgMembers(orgId, memberUserIds);
+
       // Pull contacts owned by any org member.
       if (memberUserIds.isNotEmpty) {
         final inP = _buildInParams(memberUserIds);
@@ -1621,7 +1629,7 @@ class RemoteSyncService {
     }
   }
 
-  static Future<void> _upsertOrgMember(
+  static Future<void> upsertOrgMember(
       Connection conn, Map<String, dynamic> r) async {
     await conn.execute(
       Sql.named('''
@@ -1663,6 +1671,21 @@ class RemoteSyncService {
         'can_view_history': r['can_view_history'] ?? 0,
         'can_export_contacts': r['can_export_contacts'] ?? 0,
       },
+    );
+  }
+
+  static Future<void> deleteOrgMember(Connection conn, String id) async {
+    await conn.execute(
+      Sql.named('DELETE FROM "organization_members" WHERE id = @id'),
+      parameters: {'id': id},
+    );
+  }
+
+  static Future<void> deleteOrganizationRecord(
+      Connection conn, String orgId) async {
+    await conn.execute(
+      Sql.named('DELETE FROM "organizations" WHERE id = @id'),
+      parameters: {'id': orgId},
     );
   }
 

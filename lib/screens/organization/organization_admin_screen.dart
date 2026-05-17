@@ -520,100 +520,105 @@ class _OrganizationAdminScreenState
     return Scaffold(
       backgroundColor: AppColors.bg(context),
       appBar: _appBar(l10n, org, isAdmin: isAdmin),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-        children: [
-          // ── Suspension / expiry banner ────────────────────────────────────
-          if (isSuspended) ...[
-            _SuspensionBanner(
-              org: org,
-              isAdmin: isAdmin,
-              onRenew: _doRenewLicenses,
-              l10n: l10n,
-            ),
-            const SizedBox(height: 16),
-          ],
-
-          // ── Org stats card ────────────────────────────────────────────────
-          _OrgStatsCard(
-            orgName: org.name,
-            createdAt: org.createdAt,
-            activeMembers: activeCount,
-            totalContacts: totalContacts,
-            l10n: l10n,
-          ),
-          const SizedBox(height: 16),
-
-          // ── License info card (admin only) ────────────────────────────────
-          if (isAdmin) ...[
-            _LicenseInfoCard(
-              licenseCount: org.licenseCount,
-              usedSeats: members.length,
-              expiresAt: expiresAt,
-              isSuspended: isSuspended,
-              onRenew: _doRenewLicenses,
-              l10n: l10n,
-            ),
-            const SizedBox(height: 16),
-          ],
-
-          // ── Invite code card (admin only) ─────────────────────────────────
-          if (isAdmin && !isSuspended) ...[
-            _SectionLabel(l10n.inviteCodeLabel),
-            const SizedBox(height: 10),
-            _InviteCodeCard(
-              code: org.inviteCode,
-              onCopy: () => _copyCode(org.inviteCode),
-              onRegenerate: _doRegenerateCode,
-              l10n: l10n,
-            ),
-            const SizedBox(height: 24),
-          ],
-
-          // ── Members list ──────────────────────────────────────────────────
-          _SectionLabel(
-              '${l10n.orgMembersTitle} (${members.length}/${org.licenseCount})'),
-          const SizedBox(height: 10),
-          if (members.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Text(l10n.noOrgMembers,
-                    style: TextStyle(color: AppColors.secondary(context))),
-              ),
-            )
-          else
-            ...members.map(
-              (m) => _MemberCard(
-                member: m,
-                isCurrentUser: m.userId == currentUserId,
+      body: RefreshIndicator(
+        onRefresh: () => ref.read(organizationProvider.notifier).refreshFromCloud(),
+        color: AppColors.primary,
+        backgroundColor: AppColors.surfaceColor(context),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          children: [
+            // ── Suspension / expiry banner ────────────────────────────────────
+            if (isSuspended) ...[
+              _SuspensionBanner(
+                org: org,
                 isAdmin: isAdmin,
+                onRenew: _doRenewLicenses,
                 l10n: l10n,
-                onTap: isAdmin && m.userId != currentUserId && m.role != 'admin'
-                    ? () => _openMemberSheet(m)
-                    : null,
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // ── Org stats card ────────────────────────────────────────────────
+            _OrgStatsCard(
+              orgName: org.name,
+              createdAt: org.createdAt,
+              activeMembers: activeCount,
+              totalContacts: totalContacts,
+              l10n: l10n,
+            ),
+            const SizedBox(height: 16),
+
+            // ── License info card (admin only) ────────────────────────────────
+            if (isAdmin) ...[
+              _LicenseInfoCard(
+                licenseCount: org.licenseCount,
+                usedSeats: members.length,
+                expiresAt: expiresAt,
+                isSuspended: isSuspended,
+                onRenew: _doRenewLicenses,
+                l10n: l10n,
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // ── Invite code card (admin only) ─────────────────────────────────
+            if (isAdmin && !isSuspended) ...[
+              _SectionLabel(l10n.inviteCodeLabel),
+              const SizedBox(height: 10),
+              _InviteCodeCard(
+                code: org.inviteCode,
+                onCopy: () => _copyCode(org.inviteCode),
+                onRegenerate: _doRegenerateCode,
+                l10n: l10n,
+              ),
+              const SizedBox(height: 24),
+            ],
+
+            // ── Members list ──────────────────────────────────────────────────
+            _SectionLabel(
+                '${l10n.orgMembersTitle} (${members.length}/${org.licenseCount})'),
+            const SizedBox(height: 10),
+            if (members.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Text(l10n.noOrgMembers,
+                      style: TextStyle(color: AppColors.secondary(context))),
+                ),
+              )
+            else
+              ...members.map(
+                (m) => _MemberCard(
+                  member: m,
+                  isCurrentUser: m.userId == currentUserId,
+                  isAdmin: isAdmin,
+                  l10n: l10n,
+                  onTap: isAdmin && m.userId != currentUserId && m.role != 'admin'
+                      ? () => _openMemberSheet(m)
+                      : null,
+                ),
+              ),
+
+            const SizedBox(height: 24),
+
+            // ── Leave / danger zone ───────────────────────────────────────────
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.hot,
+                  side: const BorderSide(color: AppColors.hot),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: _doLeaveOrg,
+                icon: const Icon(Icons.logout_rounded, size: 18),
+                label: Text(l10n.leaveOrg),
               ),
             ),
-
-          const SizedBox(height: 24),
-
-          // ── Leave / danger zone ───────────────────────────────────────────
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.hot,
-                side: const BorderSide(color: AppColors.hot),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: _doLeaveOrg,
-              icon: const Icon(Icons.logout_rounded, size: 18),
-              label: Text(l10n.leaveOrg),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -631,49 +636,56 @@ class _OrganizationAdminScreenState
         icon: const Icon(Icons.arrow_back_rounded),
         onPressed: () => context.pop(),
       ),
-      actions: isAdmin && org != null
-          ? [
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
-                onSelected: (v) {
-                  if (v == 'rename') _doRename(org);
-                  if (v == 'regen') _doRegenerateCode();
-                  if (v == 'delete') _doDeleteOrg();
-                },
-                itemBuilder: (_) => [
-                  PopupMenuItem(
-                    value: 'rename',
-                    child: Row(children: [
-                      const Icon(Icons.edit_rounded, size: 18),
-                      const SizedBox(width: 10),
-                      Text(l10n.orgSettingsTitle),
-                    ]),
-                  ),
-                  PopupMenuItem(
-                    value: 'regen',
-                    child: Row(children: [
-                      const Icon(Icons.refresh_rounded,
-                          size: 18, color: AppColors.warm),
-                      const SizedBox(width: 10),
-                      Text(l10n.regenerateCode,
-                          style: const TextStyle(color: AppColors.warm)),
-                    ]),
-                  ),
-                  const PopupMenuDivider(),
-                  PopupMenuItem(
-                    value: 'delete',
-                    child: Row(children: [
-                      const Icon(Icons.delete_outline_rounded,
-                          size: 18, color: AppColors.hot),
-                      const SizedBox(width: 10),
-                      Text(l10n.deleteOrg,
-                          style: const TextStyle(color: AppColors.hot)),
-                    ]),
-                  ),
-                ],
+      actions: org == null
+          ? null
+          : [
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                onPressed: () =>
+                    ref.read(organizationProvider.notifier).refreshFromCloud(),
               ),
-            ]
-          : null,
+              if (isAdmin)
+                PopupMenuButton<String>(
+                  icon:
+                      const Icon(Icons.more_vert_rounded, color: Colors.white),
+                  onSelected: (v) {
+                    if (v == 'rename') _doRename(org);
+                    if (v == 'regen') _doRegenerateCode();
+                    if (v == 'delete') _doDeleteOrg();
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'rename',
+                      child: Row(children: [
+                        const Icon(Icons.edit_rounded, size: 18),
+                        const SizedBox(width: 10),
+                        Text(l10n.orgSettingsTitle),
+                      ]),
+                    ),
+                    PopupMenuItem(
+                      value: 'regen',
+                      child: Row(children: [
+                        const Icon(Icons.refresh_rounded,
+                            size: 18, color: AppColors.warm),
+                        const SizedBox(width: 10),
+                        Text(l10n.regenerateCode,
+                            style: const TextStyle(color: AppColors.warm)),
+                      ]),
+                    ),
+                    const PopupMenuDivider(),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(children: [
+                        const Icon(Icons.delete_outline_rounded,
+                            size: 18, color: AppColors.hot),
+                        const SizedBox(width: 10),
+                        Text(l10n.deleteOrg,
+                            style: const TextStyle(color: AppColors.hot)),
+                      ]),
+                    ),
+                  ],
+                ),
+            ],
     );
   }
 }

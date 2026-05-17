@@ -9,6 +9,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:uuid/uuid.dart';
 
+import '../firebase_options.dart';
 import '../core/l10n/app_l10n.dart';
 import '../core/utils/validators.dart';
 import '../models/user_account.dart';
@@ -422,7 +423,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       debugPrint('AuthNotifier.signInWithGoogle: starting Google sign-in flow');
       final google = GoogleSignIn(
-          scopes: ['email'], serverClientId: dotenv.env['SERVERCLIENTID']);
+        scopes: ['email'],
+        clientId: kIsWeb
+            ? null
+            : (defaultTargetPlatform == TargetPlatform.iOS
+                ? DefaultFirebaseOptions.ios.iosClientId
+                : null),
+        serverClientId: dotenv.env['SERVERCLIENTID'],
+      );
       final account = await google.signIn();
       if (account == null) {
         state = state.copyWith(isLoading: false);
@@ -1030,7 +1038,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         code,
         DateTime.now().add(const Duration(minutes: 10)),
       );
-      unawaited(EmailService.sendRecoveryEmail(email, code));
+      final sent = await EmailService.sendRecoveryEmail(email, code);
+      if (!sent) {
+        debugPrint('AuthNotifier.sendRecoveryCode: failed to send email to $email');
+      }
       return null;
     }
 
@@ -1048,8 +1059,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       DateTime.now().add(const Duration(minutes: 10)),
     );
 
-    // Try to send email (non-blocking — code is still valid if email fails).
-    unawaited(EmailService.sendRecoveryEmail(email, code));
+    // Try to send email.
+    final sent = await EmailService.sendRecoveryEmail(email, code);
+    if (!sent) {
+      debugPrint('AuthNotifier.sendRecoveryCode: failed to send email to $email');
+    }
 
     return null; // success
   }
@@ -1168,8 +1182,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       DateTime.now().add(const Duration(minutes: 10)),
     );
 
-    // Try to send email (non-blocking — code is still valid if email fails).
-    unawaited(EmailService.sendVerificationEmail(email, code));
+    // Try to send email.
+    final sent = await EmailService.sendVerificationEmail(email, code);
+    if (!sent) {
+      debugPrint('AuthNotifier.sendVerificationCode: failed to send email to $email');
+    }
 
     return null; // success
   }
