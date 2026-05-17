@@ -137,60 +137,35 @@ class AppConfig {
         65,
       ]);
 
-  // ── FTP photo storage ───────────────────────────────────────────────────
+  // ── SFTP photo storage ──────────────────────────────────────────────────
 
   static String get ftpHost => _deobfuscate(const [
-        43,
-        13,
-        60,  // was 44 → decoded '`', corrected to encode 'p'
-        75,  // was 91 → decoded '>', corrected to encode '.'
-        2,
-        8,
-        6,
-        65,  // was 81 → decoded 'c', corrected to encode 's'
-        68,
-        87,
-        68,  // was 84 → decoded 'b', corrected to encode 'r'
+        122,
+        64,
         98,
-        85,
+        84,
+        82,
         83,
-        92,
-        13,
-        27,
-        56,
-        17,
-        16,
-        35,
-        30,
-        98,
-        10,
-        23,
-        12,
         93,
-        92,
-        85,
-        70,
+        1,
+        4,
+        28,
+        7,
+        101,
+        80,
       ]);
 
-  static int get ftpPort => 21;
+  static int get ftpPort => 22;
 
   static String get ftpUsername => _deobfuscate(const [
-        39,
-        26,
-        39,
-        8,  // was 4 → decoded 'a', corrected to encode 'm'
-        15,
+        32,
         28,
-        0,
-        31,
-        93,
-        87,
+        126,
+        9,
         4,
-        63,
-        0,
-        2,
-        22,
-        22,
+        5,
+        23,
+        65,
       ]);
 
   static String get ftpPassword => _deobfuscate(const [

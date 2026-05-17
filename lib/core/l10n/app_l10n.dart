@@ -638,7 +638,7 @@ class AppL10n {
   String get statusPending => _en ? 'Pending' : 'En attente';
   String get billingCycleMonthly => _en ? 'Monthly' : 'Mensuel';
   String get billingCycleYearly => _en ? 'Yearly' : 'Annuel';
-  String get yearlySavings => _en ? 'Save 16%' : 'Économisez 16%';
+  String get yearlySavings => _en ? 'Save 20%' : 'Économisez 20%';
   String get paymentSuccess => _en ? 'Payment successful' : 'Paiement réussi';
   String get paymentCancelled => _en ? 'Payment cancelled' : 'Paiement annulé';
   String get paymentFailed => _en ? 'Payment failed' : 'Paiement échoué';

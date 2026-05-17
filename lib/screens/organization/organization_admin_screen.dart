@@ -208,7 +208,8 @@ class _OrganizationAdminScreenState
       ),
       builder: (_) => _MemberManagementSheet(
         member: member,
-        onUpdatePrivileges: (canEdit, canCreate, canViewReminders, canViewHistory, canExportContacts) =>
+        onUpdatePrivileges: (canEdit, canCreate, canViewReminders,
+                canViewHistory, canExportContacts) =>
             _updatePrivileges(member,
                 canEdit: canEdit,
                 canCreate: canCreate,
@@ -1064,7 +1065,8 @@ class _MemberManagementSheet extends ConsumerWidget {
   });
 
   final OrgMember member;
-  final void Function(bool canEdit, bool canCreate, bool canViewReminders, bool canViewHistory, bool canExportContacts) onUpdatePrivileges;
+  final void Function(bool canEdit, bool canCreate, bool canViewReminders,
+      bool canViewHistory, bool canExportContacts) onUpdatePrivileges;
   final VoidCallback onSuspend;
   final VoidCallback onRemove;
 
@@ -1106,16 +1108,27 @@ class _MemberManagementSheet extends ConsumerWidget {
                   decoration: BoxDecoration(
                     gradient: AppColors.accentGradient,
                     borderRadius: BorderRadius.circular(14),
+                    image: member.photoPath != null && !kIsWeb
+                        ? DecorationImage(
+                            image: FileImage(File(
+                                PhotoStorageService.resolveAbsolutePath(
+                                    member.photoPath)!)),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
                   ),
-                  child: Center(
-                    child: Text(
-                      _initials(member.fullName),
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 18),
-                    ),
-                  ),
+                  child: member.photoPath == null || kIsWeb
+                      ? Center(
+                          child: Text(
+                            _initials(member.fullName),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                          ),
+                        )
+                      : null,
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -1151,27 +1164,52 @@ class _MemberManagementSheet extends ConsumerWidget {
             _PrivilegeRow(
               label: l10n.editPrivilege,
               value: live.canEdit,
-              onChanged: (val) => onUpdatePrivileges(val, live.canCreate, live.canViewReminders, live.canViewHistory, live.canExportContacts),
+              onChanged: (val) => onUpdatePrivileges(
+                  val,
+                  live.canCreate,
+                  live.canViewReminders,
+                  live.canViewHistory,
+                  live.canExportContacts),
             ),
             _PrivilegeRow(
               label: l10n.createPrivilege,
               value: live.canCreate,
-              onChanged: (val) => onUpdatePrivileges(live.canEdit, val, live.canViewReminders, live.canViewHistory, live.canExportContacts),
+              onChanged: (val) => onUpdatePrivileges(
+                  live.canEdit,
+                  val,
+                  live.canViewReminders,
+                  live.canViewHistory,
+                  live.canExportContacts),
             ),
             _PrivilegeRow(
               label: l10n.viewRemindersPrivilege,
               value: live.canViewReminders,
-              onChanged: (val) => onUpdatePrivileges(live.canEdit, live.canCreate, val, live.canViewHistory, live.canExportContacts),
+              onChanged: (val) => onUpdatePrivileges(
+                  live.canEdit,
+                  live.canCreate,
+                  val,
+                  live.canViewHistory,
+                  live.canExportContacts),
             ),
             _PrivilegeRow(
               label: l10n.viewHistoryPrivilege,
               value: live.canViewHistory,
-              onChanged: (val) => onUpdatePrivileges(live.canEdit, live.canCreate, live.canViewReminders, val, live.canExportContacts),
+              onChanged: (val) => onUpdatePrivileges(
+                  live.canEdit,
+                  live.canCreate,
+                  live.canViewReminders,
+                  val,
+                  live.canExportContacts),
             ),
             _PrivilegeRow(
               label: l10n.exportPrivilege,
               value: live.canExportContacts,
-              onChanged: (val) => onUpdatePrivileges(live.canEdit, live.canCreate, live.canViewReminders, live.canViewHistory, val),
+              onChanged: (val) => onUpdatePrivileges(
+                  live.canEdit,
+                  live.canCreate,
+                  live.canViewReminders,
+                  live.canViewHistory,
+                  val),
             ),
 
             const SizedBox(height: 12),
