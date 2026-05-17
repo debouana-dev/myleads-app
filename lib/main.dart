@@ -19,6 +19,7 @@ import 'services/background_task.dart';
 import 'services/database_service.dart';
 import 'services/notification_service.dart';
 import 'services/remote_sync_service.dart';
+import 'services/revenue_cat_service.dart';
 import 'services/storage_service.dart';
 import 'services/stripe_service.dart';
 import 'services/subscription_service.dart';
@@ -122,6 +123,9 @@ void main() async {
       debugPrint('Stripe.applySettings failed: $e\n$st');
     }
   }
+
+  // Initialize RevenueCat for iOS.
+  await RevenueCatService.init();
 
   // Attach the app-lifecycle observer used to infer completed
   // call/SMS/WhatsApp/email actions when the user comes back after

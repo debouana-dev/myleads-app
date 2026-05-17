@@ -10,6 +10,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/contacts_provider.dart';
 import '../../providers/organization_provider.dart';
 import '../../providers/reminders_provider.dart';
+import '../../services/remote_sync_service.dart';
 import '../../services/ftp_photo_service.dart';
 import '../../services/photo_storage_service.dart';
 import '../../services/storage_service.dart';
@@ -83,6 +84,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         .toUpperCase();
   }
 
+  Future<void> _handleRefresh() async {
+    final userId = StorageService.currentUserId;
+    if (userId.isEmpty) return;
+
+    // Download everything for this user from the cloud.
+    // This includes the users row (plan/subscription) and organization data.
+    await RemoteSyncService.pull(userId);
+
+    // Refresh providers from the updated local database.
+    ref.read(authProvider.notifier).refreshFromStorage();
+    await ref.read(organizationProvider.notifier).loadForCurrentUser();
+    await ref.read(contactsProvider.notifier).reload();
+    await ref.read(remindersProvider.notifier).reload();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = ref.watch(l10nProvider);
@@ -103,10 +119,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.bg(context),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.only(bottom: 88 + MediaQuery.of(context).padding.bottom + 5),
-        child: Column(
-          children: [
+      body: RefreshIndicator(
+        onRefresh: _handleRefresh,
+        color: AppColors.accent,
+        backgroundColor: AppColors.surfaceColor(context),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            children: [
             // Header
             Container(
               padding: EdgeInsets.only(
@@ -367,6 +387,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 

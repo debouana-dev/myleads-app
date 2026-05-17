@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +11,7 @@ import '../../models/user_account.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/organization_provider.dart';
 import '../../services/database_service.dart';
+import '../../services/revenue_cat_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/stripe_service.dart';
 
@@ -57,7 +59,7 @@ class _CreateOrganizationScreenState
     if (!_formKey.currentState!.validate()) return;
 
     final paidLicenseCount = _paidLicenseCount;
-    if (paidLicenseCount > 0 && !_stripeReady) {
+    if (paidLicenseCount > 0 && Platform.isAndroid && !_stripeReady) {
       _showSnack('Stripe not configured', AppColors.warning);
       return;
     }
@@ -66,19 +68,36 @@ class _CreateOrganizationScreenState
 
     if (paidLicenseCount > 0) {
       final authState = ref.read(authProvider);
-      final result = await StripeService.startCheckout(
-        plan: 'business',
-        billingCycle: _billingCycle,
-        userEmail: authState.userEmail,
-        licenseCount: paidLicenseCount,
-      );
+      bool success = false;
+      String? transactionId;
+      String? errorCode;
+
+      if (Platform.isIOS) {
+        // Use RevenueCat on iOS. Note: For multi-license, custom packages should be set up in RC.
+        // Here we assume 'business_monthly' or 'business_yearly' corresponds to the base org plan.
+        final rcResult = await RevenueCatService.purchasePlan('business', _billingCycle);
+        success = rcResult.success;
+        transactionId = rcResult.customerId;
+        errorCode = rcResult.errorCode;
+      } else {
+        // Use Stripe on Android.
+        final result = await StripeService.startCheckout(
+          plan: 'business',
+          billingCycle: _billingCycle,
+          userEmail: authState.userEmail,
+          licenseCount: paidLicenseCount,
+        );
+        success = result.success;
+        transactionId = result.paymentIntentId;
+        errorCode = result.errorCode;
+      }
 
       if (!mounted) return;
 
-      if (!result.success) {
+      if (!success) {
         setState(() => _loading = false);
         final l10n = ref.read(l10nProvider);
-        final msg = result.errorCode == 'cancelled'
+        final msg = errorCode == 'cancelled'
             ? l10n.paymentCancelled
             : l10n.paymentFailed;
         _showSnack(msg, AppColors.error);
@@ -87,8 +106,8 @@ class _CreateOrganizationScreenState
 
       // Payment succeeded — record it and create the org.
       final record = PaymentRecord(
-        id: result.paymentIntentId?.isNotEmpty == true
-            ? result.paymentIntentId!
+        id: transactionId?.isNotEmpty == true
+            ? transactionId!
             : _uuid.v4(),
         transactionId: PaymentRecord.generateId(),
         userId: StorageService.currentUserId,
@@ -97,7 +116,7 @@ class _CreateOrganizationScreenState
         amount: _totalPrice,
         currency: 'EUR',
         status: 'succeeded',
-        stripePaymentIntentId: result.paymentIntentId ?? '',
+        stripePaymentIntentId: (Platform.isAndroid ? transactionId : null) ?? '',
         accountType: 'organization',
         createdAt: DateTime.now().toIso8601String(),
       );

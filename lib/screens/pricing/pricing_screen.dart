@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +15,7 @@ import '../../providers/organization_provider.dart';
 import '../../providers/reminders_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../services/database_service.dart';
+import '../../services/revenue_cat_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/stripe_service.dart';
 import '../../services/subscription_service.dart';
@@ -153,26 +155,41 @@ class _PricingScreenState extends ConsumerState<PricingScreen>
       }
     }
 
-    if (!_stripeReady) {
+    if (Platform.isAndroid && !_stripeReady) {
       _showSnack('Stripe not configured', AppColors.warning);
       return;
     }
-
     setState(() {
       _selectedPlan = planId;
       _loadingPlan = planId;
     });
 
-    final result = await StripeService.startCheckout(
-      plan: planId,
-      billingCycle: billingCycle,
-      userEmail: authState.userEmail,
-    );
+    bool success = false;
+    String? transactionId;
+    String? errorCode;
+
+    if (Platform.isIOS) {
+      // Use RevenueCat on iOS for App Store compliance.
+      final rcResult = await RevenueCatService.purchasePlan(planId, billingCycle);
+      success = rcResult.success;
+      transactionId = rcResult.customerId;
+      errorCode = rcResult.errorCode;
+    } else {
+      // Use Stripe on Android.
+      final result = await StripeService.startCheckout(
+        plan: planId,
+        billingCycle: billingCycle,
+        userEmail: authState.userEmail,
+      );
+      success = result.success;
+      transactionId = result.paymentIntentId;
+      errorCode = result.errorCode;
+    }
 
     if (!mounted) return;
     setState(() => _loadingPlan = null);
 
-    if (result.success) {
+    if (success) {
       final amount = _priceAmount(planId, billingCycle);
       final record = PaymentRecord(
         id: _uuid.v4(),
@@ -183,7 +200,7 @@ class _PricingScreenState extends ConsumerState<PricingScreen>
         amount: amount,
         currency: 'EUR',
         status: 'succeeded',
-        stripePaymentIntentId: result.paymentIntentId ?? '',
+        stripePaymentIntentId: (Platform.isAndroid ? transactionId : null) ?? '',
         accountType: 'individual',
         createdAt: DateTime.now().toIso8601String(),
       );
@@ -193,7 +210,7 @@ class _PricingScreenState extends ConsumerState<PricingScreen>
           .changePlan(planId, billingCycle: billingCycle);
       if (mounted) _showSnack(l10n.paymentSuccess, AppColors.success);
     } else {
-      final msg = result.errorCode == 'cancelled'
+      final msg = errorCode == 'cancelled'
           ? l10n.paymentCancelled
           : l10n.paymentFailed;
       _showSnack(msg, AppColors.error);

@@ -9,7 +9,6 @@ import '../services/background_task.dart';
 import '../services/database_service.dart';
 import '../services/remote_sync_service.dart';
 import '../services/storage_service.dart';
-import 'settings_provider.dart';
 
 const _uuid = Uuid();
 
@@ -220,8 +219,9 @@ class OrgNotifier extends StateNotifier<OrgState> {
       (m) => m.userId == userId,
       orElse: () => throw Exception('Membre introuvable'),
     );
-    if (target.role == 'admin')
+    if (target.role == 'admin') {
       return "Les droits de l'administrateur ne peuvent pas être modifiés";
+    }
 
     try {
       await DatabaseService.updateMemberPrivileges(
@@ -234,6 +234,10 @@ class OrgNotifier extends StateNotifier<OrgState> {
         canExportContacts: canExportContacts,
       );
       await refreshMembers();
+
+      // Sync updated privileges to the cloud
+      _syncMemberToCloud(org.id, userId);
+
       return null;
     } catch (e) {
       return e.toString();
@@ -298,6 +302,10 @@ class OrgNotifier extends StateNotifier<OrgState> {
         currentUserCanEdit: true,
         currentUserCanCreate: true,
       );
+
+      // Sync the new organization and admin membership to the cloud
+      _syncJoinToCloud(user.id);
+
       return null;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
@@ -337,6 +345,10 @@ class OrgNotifier extends StateNotifier<OrgState> {
         clearOrgSuspendedAt: expiresAt != null,
       );
       state = state.copyWith(organization: updatedOrg);
+
+      // Sync updated license/expiry to the cloud
+      _syncOrgToCloud(org.id);
+
       return null;
     } catch (e) {
       return e.toString();
@@ -439,25 +451,71 @@ class OrgNotifier extends StateNotifier<OrgState> {
       // Pull the org's shared data (org row, all members, member contacts).
       await RemoteSyncService.pullOrganizationDataById(org.id);
 
-      final members = await DatabaseService.getMembersForOrganization(org.id);
-      final privs = await DatabaseService.getMemberPrivileges(
-          userId: user.id, orgId: org.id);
-      state = state.copyWith(
-        isLoading: false,
-        organization: org,
-        members: members,
-        currentUserCanEdit: privs.canEdit,
-        currentUserCanCreate: privs.canCreate,
-        currentUserCanViewReminders: privs.canViewReminders,
-        currentUserCanViewHistory: privs.canViewHistory,
-        currentUserCanExportContacts: privs.canExportContacts,
-      );
-      return null;
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
-      return e.toString();
-    }
-  }
+       final members = await DatabaseService.getMembersForOrganization(org.id);
+       final privs = await DatabaseService.getMemberPrivileges(
+           userId: user.id, orgId: org.id);
+       state = state.copyWith(
+         isLoading: false,
+         organization: org,
+         members: members,
+         currentUserCanEdit: privs.canEdit,
+         currentUserCanCreate: privs.canCreate,
+         currentUserCanViewReminders: privs.canViewReminders,
+         currentUserCanViewHistory: privs.canViewHistory,
+         currentUserCanExportContacts: privs.canExportContacts,
+       );
+
+       // Sync the join event to the cloud in the background
+       _syncJoinToCloud(user.id);
+
+       return null;
+     } catch (e) {
+       state = state.copyWith(isLoading: false, error: e.toString());
+       return e.toString();
+     }
+   }
+
+   /// Syncs the join event to the cloud in the background (fire-and-forget).
+   static void _syncJoinToCloud(String userId) {
+     RemoteSyncService.fireAndForget((conn) async {
+       final row = await DatabaseService.getRawUserRow(userId);
+       if (row == null) return;
+       await RemoteSyncService.upsertUser(conn, row);
+       // Also sync org membership if applicable
+       final orgId = row['organization_id'] as String?;
+       if (orgId != null && orgId.isNotEmpty) {
+         final orgRow = await DatabaseService.getRawOrganizationRow(orgId);
+         if (orgRow != null) {
+           await RemoteSyncService.upsertOrganization(conn, orgRow);
+         }
+         final members = await DatabaseService.getRawOrgMemberRows(orgId);
+         for (final m in members) {
+           await RemoteSyncService.upsertOrgMember(conn, m);
+         }
+       }
+     });
+   }
+
+   /// Syncs only the organization row to the cloud.
+   static void _syncOrgToCloud(String orgId) {
+     RemoteSyncService.fireAndForget((conn) async {
+       final orgRow = await DatabaseService.getRawOrganizationRow(orgId);
+       if (orgRow != null) {
+         await RemoteSyncService.upsertOrganization(conn, orgRow);
+       }
+     });
+   }
+
+   /// Syncs only a specific member row to the cloud.
+   static void _syncMemberToCloud(String orgId, String userId) {
+     RemoteSyncService.fireAndForget((conn) async {
+       final memberRow =
+           await DatabaseService.getRawOrgMemberRowByOrgAndUser(orgId, userId);
+       if (memberRow != null) {
+         await RemoteSyncService.upsertOrgMember(conn, memberRow);
+       }
+     });
+   }
 
   /// Admin removes a member (cannot remove self).
   Future<String?> removeMember(String targetUserId) async {
@@ -474,6 +532,10 @@ class OrgNotifier extends StateNotifier<OrgState> {
         (m) => m.userId == targetUserId,
         orElse: () => throw Exception('Membre introuvable'),
       );
+
+      // Get member info before deletion to sync it if needed
+      final memberRow = await DatabaseService.getRawOrgMemberRowByOrgAndUser(org.id, targetUserId);
+
       await DatabaseService.transferNonDuplicateContactsToAdmin(
           fromUserId: targetUserId, orgId: org.id);
       // Re-encrypt the removed member's remaining contacts to their personal key
@@ -485,14 +547,40 @@ class OrgNotifier extends StateNotifier<OrgState> {
           userEmail: target.email!,
         );
       }
-      await DatabaseService.removeOrgMember(org.id, targetUserId);
+       await DatabaseService.removeOrgMember(org.id, targetUserId);
 
-      await refreshMembers();
-      return null;
-    } catch (e) {
-      return e.toString();
-    }
-  }
+       await refreshMembers();
+
+       // Sync the member removal to the cloud in the background
+       if (memberRow != null) {
+         _syncRemovalToCloud(org.id, memberRow['id'] as String, targetUserId);
+       }
+
+       return null;
+     } catch (e) {
+       return e.toString();
+     }
+   }
+
+   /// Syncs the member removal to the cloud in the background (fire-and-forget).
+   static void _syncRemovalToCloud(String orgId, String memberId, String targetUserId) {
+     RemoteSyncService.fireAndForget((conn) async {
+       // Delete member from cloud
+       await RemoteSyncService.deleteOrgMember(conn, memberId);
+       
+       // Clear target user's org info in cloud
+       final targetUserRow = await DatabaseService.getRawUserRow(targetUserId);
+       if (targetUserRow != null) {
+         await RemoteSyncService.upsertUser(conn, targetUserRow);
+       }
+
+       // Also sync org data to reflect potential license change/count
+       final orgRow = await DatabaseService.getRawOrganizationRow(orgId);
+       if (orgRow != null) {
+         await RemoteSyncService.upsertOrganization(conn, orgRow);
+       }
+     });
+   }
 
   /// Current user leaves the organization.
   Future<String?> leaveOrganization() async {
@@ -509,6 +597,9 @@ class OrgNotifier extends StateNotifier<OrgState> {
         return "Transférez l'administration avant de quitter, ou supprimez l'organisation.";
       }
 
+      // Get member info before deletion
+      final memberRow = await DatabaseService.getRawOrgMemberRowByOrgAndUser(org.id, user.id);
+
       if (isLastAdmin && state.members.length <= 1) {
         // Re-encrypt admin's contacts to personal key before the org is deleted.
         await DatabaseService.reencryptUserContactsToPersonalKey(
@@ -524,36 +615,64 @@ class OrgNotifier extends StateNotifier<OrgState> {
           planExpiresAt: null,
           subscriptionBillingCycle: null,
         );
-        await DatabaseService.updateUser(downgraded);
-        await StorageService.setCurrentSession(
-            downgraded, user.sessionToken ?? '');
-        await cancelBusinessSync();
-      } else {
-        await DatabaseService.transferNonDuplicateContactsToAdmin(
-            fromUserId: user.id, orgId: org.id);
-        // Re-encrypt remaining (non-transferred) contacts to personal key.
-        await DatabaseService.reencryptUserContactsToPersonalKey(
-          userId: user.id,
-          orgId: org.id,
-          userEmail: user.email,
-        );
-        await DatabaseService.removeOrgMember(org.id, user.id);
-        final updated = user.copyWith(
-          organizationId: null,
-          orgRole: null,
-        );
-        await DatabaseService.updateUser(updated);
-        await StorageService.setCurrentSession(
-            updated, user.sessionToken ?? '');
-        await cancelBusinessSync();
-      }
+         await DatabaseService.updateUser(downgraded);
+         await StorageService.setCurrentSession(
+             downgraded, user.sessionToken ?? '');
+         await cancelBusinessSync();
 
-      state = const OrgState();
-      return null;
-    } catch (e) {
-      return e.toString();
-    }
-  }
+         // Sync the organization deletion to the cloud in the background
+         _syncDeleteOrganizationToCloud(org.id, downgraded.id);
+       } else {
+         await DatabaseService.transferNonDuplicateContactsToAdmin(
+             fromUserId: user.id, orgId: org.id);
+         // Re-encrypt remaining (non-transferred) contacts to personal key.
+         await DatabaseService.reencryptUserContactsToPersonalKey(
+           userId: user.id,
+           orgId: org.id,
+           userEmail: user.email,
+         );
+         await DatabaseService.removeOrgMember(org.id, user.id);
+         final updated = user.copyWith(
+           organizationId: null,
+           orgRole: null,
+         );
+         await DatabaseService.updateUser(updated);
+         await StorageService.setCurrentSession(
+             updated, user.sessionToken ?? '');
+         await cancelBusinessSync();
+
+         // Sync the user's departure to the cloud in the background
+         if (memberRow != null) {
+            _syncLeaveToCloud(updated.id, org.id, memberRow['id'] as String);
+         }
+       }
+
+       state = const OrgState();
+       return null;
+     } catch (e) {
+       return e.toString();
+     }
+   }
+
+   /// Syncs the user leaving the organization to the cloud in the background (fire-and-forget).
+   static void _syncLeaveToCloud(String userId, String orgId, String memberId) {
+     RemoteSyncService.fireAndForget((conn) async {
+       // Push updated user row with cleared organization fields
+       final userRow = await DatabaseService.getRawUserRow(userId);
+       if (userRow != null) {
+         await RemoteSyncService.upsertUser(conn, userRow);
+       }
+       
+       // Delete the member record from cloud
+       await RemoteSyncService.deleteOrgMember(conn, memberId);
+
+       // Push org data
+       final orgRow = await DatabaseService.getRawOrganizationRow(orgId);
+       if (orgRow != null) {
+         await RemoteSyncService.upsertOrganization(conn, orgRow);
+       }
+     });
+   }
 
   /// Admin deletes the entire organization.
   Future<String?> deleteOrganization() async {
@@ -597,22 +716,40 @@ class OrgNotifier extends StateNotifier<OrgState> {
 
       await DatabaseService.deleteOrganization(org.id);
 
-      // Downgrade admin and clear their org fields.
-      final updated = user.copyWith(
-        organizationId: null,
-        orgRole: null,
-      );
-      await DatabaseService.updateUser(updated);
-      await StorageService.setCurrentSession(updated, user.sessionToken ?? '');
-      await cancelBusinessSync();
+       // Downgrade admin and clear their org fields.
+       final updated = user.copyWith(
+         organizationId: null,
+         orgRole: null,
+       );
+       await DatabaseService.updateUser(updated);
+       await StorageService.setCurrentSession(updated, user.sessionToken ?? '');
+       await cancelBusinessSync();
 
-      state = const OrgState();
-      return null;
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
-      return e.toString();
-    }
-  }
+       state = const OrgState();
+
+       // Sync the organization deletion to the cloud in the background
+       _syncDeleteOrganizationToCloud(org.id, updated.id);
+
+       return null;
+     } catch (e) {
+       state = state.copyWith(isLoading: false, error: e.toString());
+       return e.toString();
+     }
+   }
+
+   /// Syncs the organization deletion to the cloud in the background (fire-and-forget).
+   static void _syncDeleteOrganizationToCloud(String orgId, String adminId) {
+     RemoteSyncService.fireAndForget((conn) async {
+       // Delete the organization record from cloud
+       await RemoteSyncService.deleteOrganizationRecord(conn, orgId);
+
+       // Push the admin's updated user row
+       final userRow = await DatabaseService.getRawUserRow(adminId);
+       if (userRow != null) {
+         await RemoteSyncService.upsertUser(conn, userRow);
+       }
+     });
+   }
 
   /// Admin suspends a member (cannot suspend self or another admin).
   Future<String?> suspendMember(String targetUserId) async {
@@ -627,8 +764,9 @@ class OrgNotifier extends StateNotifier<OrgState> {
       (m) => m.userId == targetUserId,
       orElse: () => throw Exception('Membre introuvable'),
     );
-    if (target.role == 'admin')
+    if (target.role == 'admin') {
       return "Impossible de suspendre un administrateur";
+    }
     try {
       await DatabaseService.transferNonDuplicateContactsToAdmin(
           fromUserId: targetUserId, orgId: org.id);
@@ -641,14 +779,19 @@ class OrgNotifier extends StateNotifier<OrgState> {
           userEmail: target.email!,
         );
       }
-      await DatabaseService.updateMemberStatus(
-          orgId: org.id, userId: targetUserId, status: 'suspended');
-      await refreshMembers();
-      return null;
-    } catch (e) {
-      return e.toString();
-    }
-  }
+       await DatabaseService.updateMemberStatus(
+           orgId: org.id, userId: targetUserId, status: 'suspended');
+       await refreshMembers();
+
+       // Sync the member suspension to the cloud in the background
+       _syncMemberToCloud(org.id, targetUserId);
+
+       return null;
+     } catch (e) {
+       return e.toString();
+     }
+   }
+
 
   /// Admin reactivates a suspended member.
   ///
@@ -676,13 +819,17 @@ class OrgNotifier extends StateNotifier<OrgState> {
           orgId: org.id,
           userEmail: target.email!,
         );
-      }
-      await refreshMembers();
-      return null;
-    } catch (e) {
-      return e.toString();
-    }
-  }
+       }
+       await refreshMembers();
+
+       // Sync the member reactivation to the cloud in the background
+       _syncMemberToCloud(org.id, targetUserId);
+
+       return null;
+     } catch (e) {
+       return e.toString();
+     }
+   }
 
   /// Admin regenerates the organization's invite code.
   Future<String?> regenerateInviteCode() async {
@@ -696,6 +843,10 @@ class OrgNotifier extends StateNotifier<OrgState> {
       await DatabaseService.updateOrgInviteCode(org.id, newCode);
       final updated = org.copyWith(inviteCode: newCode);
       state = state.copyWith(organization: updated);
+
+      // Sync updated invite code to the cloud
+      _syncOrgToCloud(org.id);
+
       return null;
     } catch (e) {
       return e.toString();
@@ -715,6 +866,10 @@ class OrgNotifier extends StateNotifier<OrgState> {
       final updated = org.copyWith(name: newName.trim());
       await DatabaseService.updateOrganization(updated);
       state = state.copyWith(organization: updated);
+
+      // Sync updated name to the cloud
+      _syncOrgToCloud(org.id);
+
       return null;
     } catch (e) {
       return e.toString();
@@ -738,6 +893,22 @@ class OrgNotifier extends StateNotifier<OrgState> {
       return code;
     }
     return List.generate(8, (_) => chars[rand.nextInt(chars.length)]).join();
+  }
+
+  /// Refresh organization data from cloud (pull from MySQL), then reload locally.
+  /// Called by pull-to-refresh on the organization admin screen.
+  Future<void> refreshFromCloud() async {
+    final org = state.organization;
+    if (org == null) return;
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      // 1. Pull organization data from cloud
+      await RemoteSyncService.pullOrganizationDataById(org.id);
+      // 2. Reload from local database
+      await loadForCurrentUser();
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
   }
 }
 

@@ -1633,6 +1633,22 @@ class DatabaseService {
     }
   }
 
+  /// Removes all local members for an organization that are not in the
+  /// provided list of [validUserIds]. Used during cloud-sync reconciliation.
+  static Future<void> reconcileOrgMembers(
+      String orgId, List<String> validUserIds) async {
+    final db = await database;
+    if (validUserIds.isEmpty) {
+      await db.delete('organization_members',
+          where: 'organization_id = ?', whereArgs: [orgId]);
+    } else {
+      final placeholders = List.filled(validUserIds.length, '?').join(',');
+      await db.delete('organization_members',
+          where: 'organization_id = ? AND user_id NOT IN ($placeholders)',
+          whereArgs: [orgId, ...validUserIds]);
+    }
+  }
+
   static Future<bool> isUserInOrganization(String orgId, String userId) async {
     final db = await database;
     final rows = await db.query('organization_members',
@@ -2283,6 +2299,16 @@ class DatabaseService {
             where: 'organization_id = ?', whereArgs: [orgId]))
         .map((r) => Map<String, dynamic>.from(r))
         .toList();
+  }
+
+  static Future<Map<String, dynamic>?> getRawOrgMemberRowByOrgAndUser(
+      String orgId, String userId) async {
+    final db = await database;
+    final rows = await db.query('organization_members',
+        where: 'organization_id = ? AND user_id = ?',
+        whereArgs: [orgId, userId],
+        limit: 1);
+    return rows.isEmpty ? null : Map<String, dynamic>.from(rows.first);
   }
 
   static Future<Map<String, dynamic>?> getRawOrgMemberRow(
