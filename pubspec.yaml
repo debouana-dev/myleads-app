@@ -84,8 +84,8 @@ dependencies:
   # Remote database sync
   postgres: ^3.3.0
 
-  # FTP photo sync
-  ftpconnect: ^2.0.10
+  # SFTP photo sync
+  dartssh2: ^2.14.0
 
   # HTTP
   http: ^1.2.0
