@@ -298,7 +298,40 @@ class AppConfig {
 
   // ── RevenueCat payment processing (iOS) ──────────────────────────────────────
   // Replace the empty list with XOR-obfuscated bytes of your Apple API Key.
-  static String get revenueCatApiKey => _deobfuscate(const []);
+  static String get revenueCatApiKey => _deobfuscate(const [
+        44,
+        9,
+        60,
+        9,
+        62,
+        55,
+        37,
+        70,
+        116,
+        71,
+        93,
+        5,
+        12,
+        9,
+        21,
+        12,
+        21,
+        26,
+        0,
+        58,
+        61,
+        48,
+        42,
+        51,
+        14,
+        41,
+        56,
+        95,
+        116,
+        126,
+        112,
+        9
+      ]);
 
   // ── Internal ────────────────────────────────────────────────────────────
 
