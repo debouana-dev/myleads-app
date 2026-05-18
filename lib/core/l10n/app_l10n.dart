@@ -208,6 +208,15 @@ class AppL10n {
       : '8-15 caractères, lettre + chiffre + symbole';
   String get hasAccount =>
       _en ? 'Already have an account?' : 'Déjà un compte ?';
+  String get privacyPolicyAccept => _en ? 'I accept the ' : "J'accepte la ";
+  String get privacyPolicyLink =>
+      _en ? 'privacy policy' : 'politique de confidentialité';
+  String get privacyPolicyDesc => _en
+      ? 'Read our privacy policy'
+      : 'Lire notre politique de confidentialité';
+  String get privacyPolicyRequired => _en
+      ? 'Please accept the privacy policy'
+      : 'Veuillez accepter la politique de confidentialité';
 
   // ─── Auth – Forgot Password ───────────────────────────────────────────────
   String get forgotPasswordTitle =>

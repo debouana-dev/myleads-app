@@ -18,6 +18,7 @@
 		7B2BD62C2FB7935A0000F195 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 7B2BD62A2FB7935A0000F195 /* GoogleService-Info.plist */; };
 		7B537F6A2FBB3846001033C8 /* Me2LeadsStoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 7B537F692FBB3846001033C8 /* Me2LeadsStoreKit.storekit */; };
 		7B537F6B2FBB3846001033C8 /* Me2LeadsStoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 7B537F692FBB3846001033C8 /* Me2LeadsStoreKit.storekit */; };
+		7B7067FE2FBB7A36001E85AD /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7B7067FD2FBB7A36001E85AD /* StoreKit.framework */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
@@ -62,6 +63,7 @@
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
 		7B2BD62A2FB7935A0000F195 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		7B537F692FBB3846001033C8 /* Me2LeadsStoreKit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Me2LeadsStoreKit.storekit; sourceTree = "<group>"; };
+		7B7067FD2FBB7A36001E85AD /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		7BB9A51F2FB7962F00879FAD /* RunnerRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RunnerRelease.entitlements; sourceTree = "<group>"; };
 		80870205E3D6AB3603A8F6FE /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
@@ -90,6 +92,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				483920F4642A63550C2FF6F4 /* Pods_Runner.framework in Frameworks */,
+				7B7067FE2FBB7A36001E85AD /* StoreKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -120,6 +123,7 @@
 		89233EEC5D3001F795E176AD /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				7B7067FD2FBB7A36001E85AD /* StoreKit.framework */,
 				5F1DA011F05382C338B5A0BF /* Pods_Runner.framework */,
 				EF7C6045BABB7B252D4D50CB /* Pods_RunnerTests.framework */,
 			);
@@ -523,6 +527,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.debouana.me2leads.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -709,6 +714,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.debouana.me2leads.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -737,6 +743,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.debouana.me2leads.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
