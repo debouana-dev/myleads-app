@@ -218,7 +218,8 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
 
     if (Platform.isIOS) {
       // Use RevenueCat on iOS for App Store compliance.
-      final rcResult = await RevenueCatService.purchasePlan(planId, _billingCycle);
+      final rcResult =
+          await RevenueCatService.purchasePlan(planId, _billingCycle);
       success = rcResult.success;
       transactionId = rcResult.customerId;
       errorCode = rcResult.errorCode;
@@ -249,7 +250,8 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
         amount: amount,
         currency: 'EUR',
         status: 'succeeded',
-        stripePaymentIntentId: (Platform.isAndroid ? transactionId : null) ?? '',
+        stripePaymentIntentId:
+            (Platform.isAndroid ? transactionId : null) ?? '',
         accountType: 'individual',
         createdAt: DateTime.now().toIso8601String(),
       );
@@ -262,9 +264,8 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
 
       if (mounted) _showSnack(l10n.paymentSuccess, AppColors.success);
     } else {
-      final msg = errorCode == 'cancelled'
-          ? l10n.paymentCancelled
-          : l10n.paymentFailed;
+      final msg =
+          errorCode == 'cancelled' ? l10n.paymentCancelled : l10n.paymentFailed;
       _showSnack(msg, AppColors.error);
     }
   }
@@ -547,8 +548,8 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
           'All Premium included',
           'Multi-user management',
           'Shared team space',
-          'Analytics & reports',
-          'AI lead scoring',
+          // 'Analytics & reports',
+          // 'AI lead scoring',
           'Auto cloud sync',
           'Dedicated onboarding',
         ]
@@ -556,8 +557,8 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
           'Tout Premium inclus',
           'Gestion multi-utilisateurs',
           'Espace équipe partagé',
-          'Analytics & rapports',
-          'Notation des leads par l\'IA',
+          // 'Analytics & rapports',
+          // 'Notation des leads par l\'IA',
           'Synchronisation cloud automatique',
           'Onboarding dédié',
         ];
