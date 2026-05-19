@@ -10,6 +10,7 @@ import '../../core/theme/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/contacts_provider.dart';
 import '../../providers/reminders_provider.dart';
+import '../../widgets/phone_prefix_input.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
@@ -389,27 +390,12 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
             // Phone (optional but enforced unique if provided)
             _buildInputLabel(l10n.phoneOptional),
             const SizedBox(height: 8),
-            TextFormField(
+            PhonePrefixInput(
               controller: _phoneController,
-              keyboardType: TextInputType.phone,
+              hint: '6 99 88 77 66',
               textInputAction: TextInputAction.next,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: AppColors.onSurface(context),
-              ),
-              decoration: InputDecoration(
-                hintText: l10n.phoneHintAuth,
-                prefixIcon: Icon(
-                  Icons.phone_outlined,
-                  color: AppColors.hint(context).withOpacity(0.7),
-                  size: 20,
-                ),
-              ),
             ),
-
             const SizedBox(height: 16),
-
             // Password
             _buildInputLabel(l10n.passwordLabel),
             const SizedBox(height: 8),
