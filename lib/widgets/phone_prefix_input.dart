@@ -1,4 +1,3 @@
-import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
 
@@ -26,6 +25,7 @@ class PhonePrefixInput extends StatefulWidget {
 
 class _PhonePrefixInputState extends State<PhonePrefixInput> {
   String _selectedPrefix = '+352';
+  final List<String> _prefixes = ['+352', '+1'];
   late final TextEditingController _numberCtrl;
   bool _isUpdatingFromInternal = false;
 
@@ -33,39 +33,20 @@ class _PhonePrefixInputState extends State<PhonePrefixInput> {
   void initState() {
     super.initState();
     final initial = widget.controller.text.trim();
-    final parsed = _parseFullNumber(initial);
+    String number = initial;
     
-    _selectedPrefix = parsed.prefix;
-    _numberCtrl = TextEditingController(text: parsed.number);
-    
-    _numberCtrl.addListener(_onInternalChanged);
-    widget.controller.addListener(_onExternalChanged);
-  }
-
-  ({String prefix, String number}) _parseFullNumber(String full) {
-    String clean = full.trim();
-    if (clean.startsWith('00')) {
-      clean = '+' + clean.substring(2);
-    }
-
-    if (!clean.startsWith('+')) {
-      return (prefix: '+352', number: clean);
-    }
-
-    // Try to find the longest matching dial code.
-    // Dial codes can be 1 to 4 digits (e.g., +1, +33, +352, +1242)
-    for (int i = 5; i >= 2; i--) {
-      if (clean.length >= i) {
-        final potential = clean.substring(0, i);
-        if (RegExp(r'^\+\d+$').hasMatch(potential)) {
-          // Here we could ideally validate against a real list of dial codes.
-          // For now, we assume it's a valid prefix if it matches the pattern.
-          return (prefix: potential, number: clean.substring(i).trim());
-        }
+    for (var p in _prefixes) {
+      if (initial.startsWith(p)) {
+        _selectedPrefix = p;
+        number = initial.substring(p.length).trim();
+        break;
       }
     }
     
-    return (prefix: '+352', number: clean);
+    _numberCtrl = TextEditingController(text: number);
+    
+    _numberCtrl.addListener(_onInternalChanged);
+    widget.controller.addListener(_onExternalChanged);
   }
 
   void _onInternalChanged() {
@@ -75,7 +56,6 @@ class _PhonePrefixInputState extends State<PhonePrefixInput> {
     if (num.isEmpty) {
       widget.controller.text = '';
     } else {
-      // Avoid double prefix if it's already there (though internal logic should prevent it)
       widget.controller.text = '$_selectedPrefix $num';
     }
     _isUpdatingFromInternal = false;
@@ -94,17 +74,26 @@ class _PhonePrefixInputState extends State<PhonePrefixInput> {
       return;
     }
 
-    final parsed = _parseFullNumber(externalValue);
+    String number = externalValue;
+    String? matchedPrefix;
 
-    if (parsed.prefix != _selectedPrefix) {
+    for (var p in _prefixes) {
+      if (externalValue.startsWith(p)) {
+        matchedPrefix = p;
+        number = externalValue.substring(p.length).trim();
+        break;
+      }
+    }
+
+    if (matchedPrefix != null && matchedPrefix != _selectedPrefix) {
       setState(() {
-        _selectedPrefix = parsed.prefix;
+        _selectedPrefix = matchedPrefix!;
       });
     }
     
-    if (parsed.number != _numberCtrl.text) {
+    if (number != _numberCtrl.text) {
       _isUpdatingFromInternal = true;
-      _numberCtrl.text = parsed.number;
+      _numberCtrl.text = number;
       _isUpdatingFromInternal = false;
     }
   }
@@ -138,38 +127,34 @@ class _PhonePrefixInputState extends State<PhonePrefixInput> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
+              width: 90,
               height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
                 color: AppColors.surfaceColor(context),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: AppColors.borderColor(context), width: 2),
               ),
-              child: CountryCodePicker(
-                key: ValueKey(_selectedPrefix),
-                onChanged: (code) {
-                  if (code.dialCode != null) {
-                    setState(() => _selectedPrefix = code.dialCode!);
-                    _onInternalChanged();
-                  }
-                },
-                initialSelection: _selectedPrefix,
-                favorite: const ['+352', '+33', '+237', '+1'],
-                showCountryOnly: false,
-                showOnlyCountryWhenClosed: false,
-                alignLeft: false,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                textStyle: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.onSurface(context),
-                ),
-                dialogTextStyle: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.onSurface(context),
-                ),
-                searchStyle: TextStyle(
-                  fontSize: 14,
-                  color: AppColors.onSurface(context),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedPrefix,
+                  isExpanded: true,
+                  dropdownColor: AppColors.surfaceColor(context),
+                  icon: Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.hint(context), size: 18),
+                  items: _prefixes.map((p) => DropdownMenuItem(
+                    value: p,
+                    child: Text(p, style: TextStyle(
+                      fontSize: 14, 
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onSurface(context),
+                    )),
+                  )).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _selectedPrefix = val);
+                      _onInternalChanged();
+                    }
+                  },
                 ),
               ),
             ),
