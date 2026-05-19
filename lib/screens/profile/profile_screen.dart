@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/l10n/app_l10n.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/auth_provider.dart';
@@ -97,6 +98,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     await ref.read(organizationProvider.notifier).loadForCurrentUser();
     await ref.read(contactsProvider.notifier).reload();
     await ref.read(remindersProvider.notifier).reload();
+  }
+
+  Future<void> _launchPrivacyPolicy() async {
+    final url = Uri.parse('https://www.me2leads.com/privacy');
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Could not launch $url: $e');
+    }
   }
 
   @override
@@ -349,6 +361,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         () => context.push('/organization/join'),
                       ),
                     ],
+                    _menuItem(
+                      context,
+                      Icons.privacy_tip_rounded,
+                      l10n.privacyPolicyLink.substring(0, 1).toUpperCase() +
+                          l10n.privacyPolicyLink.substring(1),
+                      l10n.privacyPolicyDesc,
+                      const Color(0xFF607D8B).withOpacity(0.1),
+                      const Color(0xFF607D8B),
+                      _launchPrivacyPolicy,
+                    ),
                     const SizedBox(height: 8),
                     _menuItem(
                       context,
