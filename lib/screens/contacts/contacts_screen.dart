@@ -204,10 +204,17 @@ class ContactsScreen extends ConsumerWidget {
     );
   }
 
+  static Color _resolveAvatarColor(String? hex) {
+    if (hex != null && hex.isNotEmpty) {
+      final stripped = hex.replaceAll('#', '');
+      final value = int.tryParse('FF$stripped', radix: 16);
+      if (value != null) return Color(value);
+    }
+    return AppColors.primary;
+  }
+
   Widget _buildContactItem(BuildContext ctx, Contact contact) {
-    final color = contact.avatarColor != null
-        ? Color(int.parse(contact.avatarColor!))
-        : AppColors.primary;
+    final color = _resolveAvatarColor(contact.avatarColor);
 
     return GestureDetector(
       onTap: () => ctx.push('/contact/${contact.id}'),

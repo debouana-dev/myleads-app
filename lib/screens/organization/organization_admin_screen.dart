@@ -476,7 +476,7 @@ class _OrganizationAdminScreenState
       amount: amountToPayCents / 100,
       currency: 'EUR',
       status: 'succeeded',
-      stripePaymentIntentId: (Platform.isAndroid ? transactionId : null) ?? '',
+      stripePaymentIntentId: transactionId ?? '',
       accountType: 'organization',
       createdAt: DateTime.now().toIso8601String(),
     );

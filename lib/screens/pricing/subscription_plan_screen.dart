@@ -250,8 +250,7 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
         amount: amount,
         currency: 'EUR',
         status: 'succeeded',
-        stripePaymentIntentId:
-            (Platform.isAndroid ? transactionId : null) ?? '',
+        stripePaymentIntentId: transactionId ?? '',
         accountType: 'individual',
         createdAt: DateTime.now().toIso8601String(),
       );
