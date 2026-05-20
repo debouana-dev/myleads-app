@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -94,6 +95,14 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
 
   String? _orNull(String value) => value.trim().isEmpty ? null : value.trim();
 
+  String _randomHexColor() {
+    final r = Random();
+    return '#'
+        '${r.nextInt(256).toRadixString(16).padLeft(2, '0')}'
+        '${r.nextInt(256).toRadixString(16).padLeft(2, '0')}'
+        '${r.nextInt(256).toRadixString(16).padLeft(2, '0')}';
+  }
+
   Future<void> _saveContact({bool andContact = false}) async {
     final contact = Contact(
       id: const Uuid().v4(),
@@ -113,6 +122,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       status: 'warm',
       captureMethod: 'scan',
       photoPath: _photoPath,
+      avatarColor: _randomHexColor(),
     );
 
     final result =

@@ -75,7 +75,8 @@ class _CreateOrganizationScreenState
       if (Platform.isIOS) {
         // Use RevenueCat on iOS. Note: For multi-license, custom packages should be set up in RC.
         // Here we assume 'business_monthly' or 'business_yearly' corresponds to the base org plan.
-        final rcResult = await RevenueCatService.purchasePlan('business', _billingCycle);
+        final rcResult =
+            await RevenueCatService.purchasePlan('business', _billingCycle);
         success = rcResult.success;
         transactionId = rcResult.customerId;
         errorCode = rcResult.errorCode;
@@ -106,9 +107,7 @@ class _CreateOrganizationScreenState
 
       // Payment succeeded — record it and create the org.
       final record = PaymentRecord(
-        id: transactionId?.isNotEmpty == true
-            ? transactionId!
-            : _uuid.v4(),
+        id: transactionId?.isNotEmpty == true ? transactionId! : _uuid.v4(),
         transactionId: PaymentRecord.generateId(),
         userId: StorageService.currentUserId,
         plan: 'business',
@@ -116,7 +115,7 @@ class _CreateOrganizationScreenState
         amount: _totalPrice,
         currency: 'EUR',
         status: 'succeeded',
-        stripePaymentIntentId: (Platform.isAndroid ? transactionId : null) ?? '',
+        stripePaymentIntentId: transactionId ?? '',
         accountType: 'organization',
         createdAt: DateTime.now().toIso8601String(),
       );

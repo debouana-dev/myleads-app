@@ -1,6 +1,8 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // import '../../core/constants/app_strings.dart';
 import '../../core/l10n/app_l10n.dart';
@@ -27,6 +29,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
   final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _acceptedPrivacyPolicy = false;
 
   late final AnimationController _animController;
   late final Animation<double> _headerSlide;
@@ -72,6 +75,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
   Future<void> _handleSignup() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (!_acceptedPrivacyPolicy) {
+      _showPrivacyPolicyError();
+      return;
+    }
+
     final success = await ref.read(authProvider.notifier).signup(
           firstName: _firstNameController.text.trim(),
           lastName: _lastNameController.text.trim(),
@@ -96,6 +104,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
   }
 
   Future<void> _handleGoogleSignIn() async {
+    if (!_acceptedPrivacyPolicy) {
+      _showPrivacyPolicyError();
+      return;
+    }
     final success = await ref.read(authProvider.notifier).signInWithGoogle();
     if (success && mounted) {
       await ref.read(contactsProvider.notifier).reload();
@@ -105,11 +117,37 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
   }
 
   Future<void> _handleAppleSignIn() async {
+    if (!_acceptedPrivacyPolicy) {
+      _showPrivacyPolicyError();
+      return;
+    }
     final success = await ref.read(authProvider.notifier).signInWithApple();
     if (success && mounted) {
       await ref.read(contactsProvider.notifier).reload();
       await ref.read(remindersProvider.notifier).reload();
       if (mounted) context.go('/main');
+    }
+  }
+
+  void _showPrivacyPolicyError() {
+    final l10n = ref.read(l10nProvider);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(l10n.privacyPolicyRequired),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _launchPrivacyPolicy() async {
+    final url = Uri.parse('https://www.me2leads.com/privacy');
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Could not launch $url: $e');
     }
   }
 
@@ -478,6 +516,68 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
                 }
                 return null;
               },
+            ),
+
+            const SizedBox(height: 12),
+
+            // Privacy Policy Checkbox
+            Row(
+              children: [
+                SizedBox(
+                  height: 24,
+                  width: 24,
+                  child: Checkbox(
+                    value: _acceptedPrivacyPolicy,
+                    activeColor: AppColors.accent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    side: BorderSide(
+                      color: AppColors.hint(context).withOpacity(0.5),
+                      width: 1.5,
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _acceptedPrivacyPolicy = value ?? false;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _acceptedPrivacyPolicy = !_acceptedPrivacyPolicy;
+                      });
+                    },
+                    child: Text.rich(
+                      TextSpan(
+                        text: l10n.privacyPolicyAccept,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.secondary(context),
+                        ),
+                        children: [
+                          TextSpan(
+                            text: l10n.privacyPolicyLink,
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = _launchPrivacyPolicy,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.accent,
+                              decoration: TextDecoration.underline,
+                              decorationColor: AppColors.accent,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
 
             const SizedBox(height: 24),

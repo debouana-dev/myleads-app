@@ -200,7 +200,7 @@ class _PricingScreenState extends ConsumerState<PricingScreen>
         amount: amount,
         currency: 'EUR',
         status: 'succeeded',
-        stripePaymentIntentId: (Platform.isAndroid ? transactionId : null) ?? '',
+        stripePaymentIntentId: transactionId ?? '',
         accountType: 'individual',
         createdAt: DateTime.now().toIso8601String(),
       );

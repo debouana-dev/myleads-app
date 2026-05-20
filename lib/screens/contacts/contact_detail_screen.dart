@@ -34,6 +34,15 @@ class ContactDetailScreen extends ConsumerStatefulWidget {
 class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
   List<Interaction> _interactions = [];
 
+  static Color _resolveAvatarColor(String? hex) {
+    if (hex != null && hex.isNotEmpty) {
+      final stripped = hex.replaceAll('#', '');
+      final value = int.tryParse('FF$stripped', radix: 16);
+      if (value != null) return Color(value);
+    }
+    return AppColors.primary;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -73,9 +82,7 @@ class _ContactDetailScreenState extends ConsumerState<ContactDetailScreen> {
       );
     }
 
-    final avatarColor = contact.avatarColor != null
-        ? Color(int.parse(contact.avatarColor!))
-        : AppColors.primary;
+    final avatarColor = _resolveAvatarColor(contact.avatarColor);
 
     final currentUser = StorageService.currentUser;
     final inOrg = currentUser?.organizationId != null;

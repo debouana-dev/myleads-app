@@ -2,37 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>FLTEnableImpeller</key>
-	<false/>
-	<key>NSCalendarsUsageDescription</key>
-	<string>Me2Leads adds follow-up reminders and meetings to your calendar so you never miss an appointment with a lead.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Me2Leads uses your photo library to let you upload a profile picture and attach images to your contacts and leads.</string>
-    <key>NSPhotoLibraryAddUsageDescription</key>
-    <string>Me2Leads saves photos to your library when you download images shared by your contacts or leads.</string>
-    <key>NSUserNotificationsUsageDescription</key>
-    <string>Me2Leads sends notifications to remind you of follow-ups, meetings, and updates from your leads and contacts.</string>
-    <key>NSCameraUsageDescription</key>
-	<string>Me2Leads uses your camera to let you take a profile photo or scan a QR code to quickly add a new contact.</string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>com.googleusercontent.apps.772969451694-thhinvi6buauusle546su8irssfdb6t3</string>
-			</array>
-		</dict>
-	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Me2Leads uses the microphone to record voice notes that you can attach to your leads and contacts</string>
-	<key>com.apple.developer.in-app-payments</key>
-	<array>
-		<string>merchant.com.debouana.me2leads.app</string>
-	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -51,10 +22,37 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.772969451694-thhinvi6buauusle546su8irssfdb6t3</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>FLTEnableImpeller</key>
+	<false/>
+	<key>LSApplicationCategoryType</key>
+	<string></string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Me2Leads adds follow-up reminders and meetings to your calendar so you never miss an appointment with a lead.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Me2Leads uses your camera to let you take a profile photo or scan a QR code to quickly add a new contact.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Me2Leads uses the microphone to record voice notes that you can attach to your leads and contacts</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Me2Leads saves photos to your library when you download images shared by your contacts or leads.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Me2Leads uses your photo library to let you upload a profile picture and attach images to your contacts and leads.</string>
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>Me2Leads sends notifications to remind you of follow-ups, meetings, and updates from your leads and contacts.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -78,6 +76,10 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -88,14 +90,16 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>LSApplicationCategoryType</key>
-	<string></string>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>com.apple.developer.in-app-payments</key>
+	<array>
+		<string>merchant.com.debouana.me2leads.app</string>
 	</array>
 </dict>
 </plist>
