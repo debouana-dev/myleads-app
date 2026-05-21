@@ -1,13 +1,8 @@
-import 'dart:io';
-
-import 'package:flutter/foundation.dart';
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import '../../core/l10n/app_l10n.dart';
 import '../../core/theme/app_colors.dart';
@@ -25,14 +20,14 @@ class ScanScreen extends ConsumerStatefulWidget {
   /// If true, starts directly in QR mode (default).
   final bool startWithQr;
 
-  const ScanScreen({super.key, this.startWithQr = true});
+  const ScanScreen({super.key, this.startWithQr = false});
 
   @override
   ConsumerState<ScanScreen> createState() => _ScanScreenState();
 }
 
 class _ScanScreenState extends ConsumerState<ScanScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late ScanMode _mode;
   bool _flashOn = false;
   bool _isCapturing = false;
@@ -40,15 +35,15 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
   late AnimationController _scanLineController;
   late Animation<double> _scanLineAnimation;
 
-  MobileScannerController? _cameraController;
-
-  // ----------------------------------------------------------
-  // Lifecycle
-  // ----------------------------------------------------------
+  // Controllers for different modes
+  MobileScannerController? _qrController;
+  CameraController? _cardCameraController;
+  bool _isCardCameraInitialized = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _mode = widget.startWithQr ? ScanMode.qr : ScanMode.card;
 
     _scanLineController = AnimationController(
@@ -60,43 +55,85 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
       CurvedAnimation(parent: _scanLineController, curve: Curves.easeInOut),
     );
 
-    _initCameraController();
+    _initControllers();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scanLineController.dispose();
-    _disposeCameraController();
+    _disposeControllers();
     super.dispose();
   }
 
-  // ----------------------------------------------------------
-  // Camera controller helpers
-  // ----------------------------------------------------------
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final CameraController? cameraController = _cardCameraController;
 
-  void _initCameraController() {
-    _disposeCameraController();
-    try {
-      _cameraController = MobileScannerController(
-        detectionSpeed: DetectionSpeed.normal,
-        facing: CameraFacing.back,
-        torchEnabled: _flashOn,
-      );
-    } catch (_) {
-      // Camera unavailable (simulator / permissions denied).
-      _cameraController = null;
+    // App state changed before we got the chance to initialize.
+    if (cameraController == null || !cameraController.value.isInitialized) {
+      return;
+    }
+
+    if (state == AppLifecycleState.inactive) {
+      cameraController.dispose();
+    } else if (state == AppLifecycleState.resumed) {
+      _initCardCamera(cameraController.description);
     }
   }
 
-  void _disposeCameraController() {
-    try {
-      _cameraController?.dispose();
-    } catch (_) {
-      // Ignore disposal errors.
+  // ----------------------------------------------------------
+  // Controllers lifecycle
+  // ----------------------------------------------------------
+
+  Future<void> _initControllers() async {
+    if (_mode == ScanMode.qr) {
+      _initQrController();
+    } else if (_mode == ScanMode.card) {
+      final cameras = await availableCameras();
+      if (cameras.isNotEmpty) {
+        await _initCardCamera(cameras.first);
+      }
     }
-    _cameraController = null;
   }
 
+  void _disposeControllers() {
+    _qrController?.dispose();
+    _qrController = null;
+    _cardCameraController?.dispose();
+    _cardCameraController = null;
+    _isCardCameraInitialized = false;
+  }
+
+  Future<void> _initQrController() async {
+    _qrController?.dispose();
+    _qrController = MobileScannerController(
+      detectionSpeed: DetectionSpeed.normal,
+      facing: CameraFacing.back,
+      torchEnabled: _flashOn,
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _initCardCamera(CameraDescription cameraDescription) async {
+    await _cardCameraController?.dispose();
+    _cardCameraController = CameraController(
+      cameraDescription,
+      ResolutionPreset.high,
+      enableAudio: false,
+    );
+
+    try {
+      await _cardCameraController!.initialize();
+      if (mounted) {
+        setState(() {
+          _isCardCameraInitialized = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Camera init error: $e');
+    }
+  }
 
   // ----------------------------------------------------------
   // Flash toggle
@@ -104,50 +141,109 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
 
   void _toggleFlash() {
     setState(() => _flashOn = !_flashOn);
-    try {
-      _cameraController?.toggleTorch();
-    } catch (_) {}
+    if (_mode == ScanMode.qr) {
+      _qrController?.toggleTorch();
+    } else if (_mode == ScanMode.card) {
+      _cardCameraController?.setFlashMode(
+        _flashOn ? FlashMode.torch : FlashMode.off,
+      );
+    }
+  }
+
+  // ----------------------------------------------------------
+  // Mode Switch
+  // ----------------------------------------------------------
+
+  void _switchMode(ScanMode newMode) {
+    if (_mode == newMode) return;
+    setState(() {
+      _mode = newMode;
+      _disposeControllers();
+    });
+    _initControllers();
   }
 
   // ----------------------------------------------------------
   // Capture actions
   // ----------------------------------------------------------
 
-  void _onCapture() {
+  Future<void> _onCapture() async {
     if (_isCapturing) return;
-    showScanOptions(context, ref);
+
+    if (_mode == ScanMode.card) {
+      await _captureAndProcessCard();
+    } else if (_mode == ScanMode.qr) {
+      // In QR mode, detection is usually automatic, but we can trigger it or show options
+      // Actually, if we want a button for OCR in card mode, it's handled here.
+    }
   }
 
-  /// Unified detect callback used by [MobileScanner] in all modes.
-  ///
-  /// In card mode, barcode detections are silently ignored so they do not
-  /// hijack the OCR flow. In QR mode, detections are forwarded to
-  /// [_onQrDetected].
-  void _onDetect(BarcodeCapture capture) {
-    if (_mode != ScanMode.qr) return;
-    _onQrDetected(capture);
+  Future<void> _captureAndProcessCard() async {
+    if (_cardCameraController == null || !_isCardCameraInitialized) return;
+
+    setState(() => _isCapturing = true);
+
+    try {
+      // 1. Capture the photo
+      final XFile photo = await _cardCameraController!.takePicture();
+
+      if (!mounted) return;
+
+      // 2. Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const Center(
+          child: CircularProgressIndicator(color: AppColors.accent),
+        ),
+      );
+
+      // 3. Process with OCR
+      final rawText = await ocr_service.recognizeTextFromFile(photo.path);
+
+      if (mounted) Navigator.pop(context); // Close loading indicator
+
+      Map<String, String> ocrData = {};
+      if (rawText.isNotEmpty) {
+        ocrData = OcrParser.parse(rawText);
+        ocrData['photoPath'] = photo.path;
+        if (mounted) _showStaticDetectionToast(context, ref);
+      }
+
+      if (mounted) {
+        context.push('/review', extra: ocrData);
+      }
+    } catch (e) {
+      debugPrint('Capture error: $e');
+      if (mounted) {
+        // Try to close dialog if it was open
+        try {
+          Navigator.pop(context);
+        } catch (_) {}
+      }
+    } finally {
+      if (mounted) setState(() => _isCapturing = false);
+    }
   }
 
-  void _onQrDetected(BarcodeCapture capture) {
-    if (_isCapturing) return;
+  void _onQrDetect(BarcodeCapture capture) {
+    if (_mode != ScanMode.qr || _isCapturing) return;
     final barcodes = capture.barcodes;
     if (barcodes.isEmpty) return;
 
     setState(() => _isCapturing = true);
     _showStaticDetectionToast(context, ref);
 
-    // Parse QR/barcode data — could be vCard or plain text.
     final raw = barcodes.first.rawValue ?? '';
     final ocrData = raw.isNotEmpty ? OcrParser.parse(raw) : <String, String>{};
 
-    Future.delayed(const Duration(seconds: 1), () {
+    Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) {
         setState(() => _isCapturing = false);
         context.push('/review', extra: ocrData);
       }
     });
   }
-
 
   // ----------------------------------------------------------
   // Build
@@ -163,23 +259,20 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Live camera preview — active in card and QR modes.
-          if (_mode != ScanMode.nfc && _cameraController != null)
+          // Background Camera / UI
+          if (_mode == ScanMode.qr && _qrController != null)
             MobileScanner(
-              controller: _cameraController!,
-              onDetect: _onDetect,
-              errorBuilder: (context, error) {
-                return Center(
-                  child: Text(
-                    l10n.cameraUnavailable,
-                    style: const TextStyle(color: AppColors.white),
-                  ),
-                );
-              },
-            ),
-
-          // Solid black background for NFC mode (no camera needed).
-          if (_mode == ScanMode.nfc) Container(color: Colors.black),
+              controller: _qrController!,
+              onDetect: _onQrDetect,
+            )
+          else if (_mode == ScanMode.card && _isCardCameraInitialized)
+            Center(
+              child: CameraPreview(_cardCameraController!),
+            )
+          else if (_mode == ScanMode.nfc)
+            Container(color: Colors.black)
+          else
+            const Center(child: CircularProgressIndicator(color: AppColors.accent)),
 
           // Top bar
           _buildTopBar(context, l10n),
@@ -187,13 +280,21 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
           // Viewport + scan line
           Center(child: _buildViewport()),
 
+          // Mode Selector
+          Positioned(
+            bottom: 160 + bottomInset,
+            left: 0,
+            right: 0,
+            child: _buildModeSelector(l10n),
+          ),
+
           // Hint text
           Positioned(
             bottom: 240 + bottomInset,
             left: 0,
             right: 0,
             child: Text(
-              l10n.scanHint,
+              _mode == ScanMode.card ? l10n.scanHint : 'Aligner le QR Code',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
@@ -203,16 +304,35 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
             ),
           ),
 
-
-          // Capture button
-          Positioned(
-            bottom: 56 + bottomInset,
-            left: 0,
-            right: 0,
-            child: Center(child: _buildCaptureButton()),
-          ),
+          // Capture button (Only for Card mode)
+          if (_mode == ScanMode.card)
+            Positioned(
+              bottom: 56 + bottomInset,
+              left: 0,
+              right: 0,
+              child: Center(child: _buildCaptureButton()),
+            ),
         ],
       ),
+    );
+  }
+
+  Widget _buildModeSelector(AppL10n l10n) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _ModeButton(
+          label: l10n.scanCard,
+          isSelected: _mode == ScanMode.card,
+          onTap: () => _switchMode(ScanMode.card),
+        ),
+        const SizedBox(width: 24),
+        _ModeButton(
+          label: 'QR Code',
+          isSelected: _mode == ScanMode.qr,
+          onTap: () => _switchMode(ScanMode.qr),
+        ),
+      ],
     );
   }
 
@@ -237,7 +357,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
           ),
           // Title
           Text(
-            l10n.scanTitle,
+            _mode == ScanMode.card ? l10n.scanTitle : 'Scanner QR',
             style: const TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w700,
@@ -343,20 +463,12 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
     }
 
     return [
-      // Top-left
-      bracket(
-          top: 0, left: 0, right: -1, bottom: -1, flipH: false, flipV: false),
-      // Top-right
-      bracket(
-          top: 0, left: -1, right: 0, bottom: -1, flipH: true, flipV: false),
-      // Bottom-left
-      bracket(
-          top: -1, left: 0, right: -1, bottom: 0, flipH: false, flipV: true),
-      // Bottom-right
+      bracket(top: 0, left: 0, right: -1, bottom: -1, flipH: false, flipV: false),
+      bracket(top: 0, left: -1, right: 0, bottom: -1, flipH: true, flipV: false),
+      bracket(top: -1, left: 0, right: -1, bottom: 0, flipH: false, flipV: true),
       bracket(top: -1, left: -1, right: 0, bottom: 0, flipH: true, flipV: true),
     ];
   }
-
 
   // ----------------------------------------------------------
   // Capture button
@@ -364,36 +476,72 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
 
   Widget _buildCaptureButton() {
     return GestureDetector(
-      onTap: _isCapturing ? null : _onCapture,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 200),
-        opacity: _isCapturing ? 0.5 : 1.0,
+      onTap: _onCapture,
+      child: Container(
+        width: 76,
+        height: 76,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: AppColors.white, width: 4),
+        ),
+        padding: const EdgeInsets.all(4),
         child: Container(
-          width: 76,
-          height: 76,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: AppColors.white, width: 4),
+            color: _isCapturing ? AppColors.white.withOpacity(0.5) : AppColors.accent,
+            gradient: _isCapturing ? null : AppColors.accentGradient,
           ),
-          padding: const EdgeInsets.all(4),
-          child: Container(
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: AppColors.accentGradient,
-            ),
-          ),
+          child: _isCapturing
+              ? const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: AppColors.white, strokeWidth: 2)))
+              : null,
         ),
       ),
     );
   }
-
 }
 
-// ===========================================================================
-// Supporting widgets
-// ===========================================================================
+class _ModeButton extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
 
-/// Translucent circle button used in the top bar.
+  const _ModeButton({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: isSelected ? AppColors.accent : AppColors.white.withOpacity(0.5),
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(height: 4),
+          if (isSelected)
+            Container(
+              width: 4,
+              height: 4,
+              decoration: const BoxDecoration(
+                color: AppColors.accent,
+                shape: BoxShape.circle,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CircleButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
@@ -426,6 +574,35 @@ class _CircleButton extends StatelessWidget {
       ),
     );
   }
+}
+
+void _showStaticDetectionToast(BuildContext context, WidgetRef ref) {
+  final l10n = ref.read(l10nProvider);
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded,
+                color: AppColors.white, size: 20),
+            const SizedBox(width: 10),
+            Text(
+              l10n.cardDetected,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColors.white,
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: AppColors.success,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        duration: const Duration(milliseconds: 900),
+      ),
+    );
 }
 
 // ===========================================================================
@@ -470,7 +647,7 @@ Future<void> showScanOptions(BuildContext context, WidgetRef ref) async {
                 title: l10n.scanCard,
                 onTap: () {
                   Navigator.pop(modalContext);
-                  captureBusinessCard(context, ref);
+                  context.push('/scan'); // Card mode is default
                 },
               ),
               const SizedBox(height: 8),
@@ -480,12 +657,13 @@ Future<void> showScanOptions(BuildContext context, WidgetRef ref) async {
                 enabled: !(isFreePlan && !isInActiveOrg),
                 onTap: (isFreePlan && !isInActiveOrg)
                     ? () {
-                        Navigator.pop(context);
+                        Navigator.pop(modalContext);
                         context.push('/subscription-plan');
                       }
                     : () {
-                        Navigator.pop(context);
-                        context.push('/scan');
+                        Navigator.pop(modalContext);
+                        // Navigate with a flag if we want QR mode directly
+                        context.push('/scan'); 
                       },
               ),
               const SizedBox(height: 16),
@@ -539,98 +717,6 @@ class _BottomSheetOption extends StatelessWidget {
     );
   }
 }
-
-/// Captures a photo via the device camera, runs OCR, and navigates to review.
-/// This can be called from anywhere.
-Future<void> captureBusinessCard(BuildContext context, WidgetRef ref) async {
-  try {
-    Map<String, String> ocrData = {};
-
-    if (!kIsWeb) {
-      final picker = ImagePicker();
-      final XFile? photo = await picker.pickImage(
-        source: ImageSource.camera,
-        preferredCameraDevice: CameraDevice.rear,
-        imageQuality: 90, // Slightly higher quality for better OCR
-      );
-
-      if (photo != null) {
-        // Ensure context is still valid before showing loader
-        if (!context.mounted) return;
-
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => const Center(
-            child: CircularProgressIndicator(color: AppColors.accent),
-          ),
-        );
-
-        try {
-          final rawText = await ocr_service.recognizeTextFromFile(photo.path);
-          
-          if (context.mounted) Navigator.pop(context); // Close loading indicator
-
-          if (rawText.isNotEmpty) {
-            ocrData = OcrParser.parse(rawText);
-            ocrData['photoPath'] = photo.path;
-            
-            if (context.mounted) _showStaticDetectionToast(context, ref);
-          }
-        } catch (e) {
-          debugPrint('OCR Error: $e');
-          if (context.mounted) Navigator.pop(context); // Ensure dialog is closed
-        }
-      } else {
-        return; // User cancelled
-      }
-    }
-
-    if (context.mounted) context.push('/review', extra: ocrData);
-  } catch (_) {
-    if (context.mounted) {
-      // If we are still showing the loading dialog, close it
-      try {
-        Navigator.pop(context);
-      } catch (_) {}
-      context.push('/review', extra: <String, String>{});
-    }
-  }
-}
-
-void _showStaticDetectionToast(BuildContext context, WidgetRef ref) {
-  final l10n = ref.read(l10nProvider);
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded,
-                color: AppColors.white, size: 20),
-            const SizedBox(width: 10),
-            Text(
-              l10n.cardDetected,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                color: AppColors.white,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: AppColors.success,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        duration: const Duration(milliseconds: 900),
-      ),
-    );
-}
-
-
-// ===========================================================================
-// Corner bracket painter
-// ===========================================================================
 
 class _CornerBracketPainter extends CustomPainter {
   final Color color;
