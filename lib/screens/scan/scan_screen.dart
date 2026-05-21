@@ -449,7 +449,7 @@ Future<void> showScanOptions(BuildContext context, WidgetRef ref) async {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (context) {
+    builder: (modalContext) {
       return SafeArea(
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 24),
@@ -469,7 +469,7 @@ Future<void> showScanOptions(BuildContext context, WidgetRef ref) async {
                 icon: Icons.credit_card_rounded,
                 title: l10n.scanCard,
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(modalContext);
                   captureBusinessCard(context, ref);
                 },
               ),
@@ -551,29 +551,35 @@ Future<void> captureBusinessCard(BuildContext context, WidgetRef ref) async {
       final XFile? photo = await picker.pickImage(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.rear,
+        imageQuality: 90, // Slightly higher quality for better OCR
       );
 
       if (photo != null) {
+        // Ensure context is still valid before showing loader
         if (!context.mounted) return;
-        // Show detection toast
-        _showStaticDetectionToast(context, ref);
+
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => const Center(
+            child: CircularProgressIndicator(color: AppColors.accent),
+          ),
+        );
 
         try {
-          final tmpDir = await getTemporaryDirectory();
-          final tmpPath = p.join(
-            tmpDir.path,
-            'card_scan_${DateTime.now().millisecondsSinceEpoch}.jpg',
-          );
-          final bytes = await photo.readAsBytes();
-          await File(tmpPath).writeAsBytes(bytes, flush: true);
+          final rawText = await ocr_service.recognizeTextFromFile(photo.path);
+          
+          if (context.mounted) Navigator.pop(context); // Close loading indicator
 
-          final rawText = await ocr_service.recognizeTextFromFile(tmpPath);
           if (rawText.isNotEmpty) {
             ocrData = OcrParser.parse(rawText);
-            ocrData['photoPath'] = tmpPath;
+            ocrData['photoPath'] = photo.path;
+            
+            if (context.mounted) _showStaticDetectionToast(context, ref);
           }
-        } catch (_) {
-          // OCR failed — proceed with empty data.
+        } catch (e) {
+          debugPrint('OCR Error: $e');
+          if (context.mounted) Navigator.pop(context); // Ensure dialog is closed
         }
       } else {
         return; // User cancelled
@@ -582,7 +588,13 @@ Future<void> captureBusinessCard(BuildContext context, WidgetRef ref) async {
 
     if (context.mounted) context.push('/review', extra: ocrData);
   } catch (_) {
-    if (context.mounted) context.push('/review', extra: <String, String>{});
+    if (context.mounted) {
+      // If we are still showing the loading dialog, close it
+      try {
+        Navigator.pop(context);
+      } catch (_) {}
+      context.push('/review', extra: <String, String>{});
+    }
   }
 }
 
