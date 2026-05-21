@@ -22,7 +22,10 @@ import '../../services/ocr_service_stub.dart'
 enum ScanMode { card, qr, nfc }
 
 class ScanScreen extends ConsumerStatefulWidget {
-  const ScanScreen({super.key});
+  /// If true, starts directly in QR mode (default).
+  final bool startWithQr;
+
+  const ScanScreen({super.key, this.startWithQr = true});
 
   @override
   ConsumerState<ScanScreen> createState() => _ScanScreenState();
@@ -30,7 +33,7 @@ class ScanScreen extends ConsumerStatefulWidget {
 
 class _ScanScreenState extends ConsumerState<ScanScreen>
     with SingleTickerProviderStateMixin {
-  ScanMode _mode = ScanMode.card;
+  late ScanMode _mode;
   bool _flashOn = false;
   bool _isCapturing = false;
 
@@ -46,6 +49,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
   @override
   void initState() {
     super.initState();
+    _mode = widget.startWithQr ? ScanMode.qr : ScanMode.card;
 
     _scanLineController = AnimationController(
       vsync: this,
@@ -56,7 +60,6 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
       CurvedAnimation(parent: _scanLineController, curve: Curves.easeInOut),
     );
 
-    // Start camera immediately so card/QR views are never black on first load.
     _initCameraController();
   }
 
@@ -94,26 +97,6 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
     _cameraController = null;
   }
 
-  // ----------------------------------------------------------
-  // Mode switching
-  // ----------------------------------------------------------
-
-  void _switchMode(ScanMode mode) {
-    if (mode == _mode) return;
-
-    // NFC needs no camera; card and QR both need the live preview.
-    if (mode == ScanMode.nfc) {
-      _disposeCameraController();
-    } else if (_cameraController == null) {
-      // Returning from NFC — restart the camera before rebuilding.
-      _initCameraController();
-    }
-
-    setState(() {
-      _mode = mode;
-      _flashOn = false;
-    });
-  }
 
   // ----------------------------------------------------------
   // Flash toggle
@@ -130,57 +113,9 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
   // Capture actions
   // ----------------------------------------------------------
 
-  Future<void> _onCapture() async {
+  void _onCapture() {
     if (_isCapturing) return;
-    setState(() => _isCapturing = true);
-    await _captureCard();
-  }
-
-  /// Captures a photo via the device camera, runs OCR, and navigates to review.
-  Future<void> _captureCard() async {
-    try {
-      Map<String, String> ocrData = {};
-
-      if (!kIsWeb) {
-        final picker = ImagePicker();
-        final XFile? photo = await picker.pickImage(
-          source: ImageSource.camera,
-          preferredCameraDevice: CameraDevice.rear,
-        );
-
-        if (!mounted) return;
-
-        if (photo != null) {
-          _showDetectionToast();
-          try {
-            final tmpDir = await getTemporaryDirectory();
-            final tmpPath = p.join(
-              tmpDir.path,
-              'card_scan_${DateTime.now().millisecondsSinceEpoch}.jpg',
-            );
-            final bytes = await photo.readAsBytes();
-            await File(tmpPath).writeAsBytes(bytes, flush: true);
-
-            final rawText = await ocr_service.recognizeTextFromFile(tmpPath);
-            if (rawText.isNotEmpty) {
-              ocrData = OcrParser.parse(rawText);
-              ocrData['photoPath'] = tmpPath;
-            }
-          } catch (_) {
-            // OCR failed — proceed with empty data.
-          }
-        }
-      }
-
-      if (mounted) context.push('/review', extra: ocrData);
-    } catch (_) {
-      if (!mounted) return;
-      _showDetectionToast();
-      await Future.delayed(const Duration(seconds: 1));
-      if (mounted) context.push('/review', extra: <String, String>{});
-    } finally {
-      if (mounted) setState(() => _isCapturing = false);
-    }
+    showScanOptions(context, ref);
   }
 
   /// Unified detect callback used by [MobileScanner] in all modes.
@@ -199,7 +134,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
     if (barcodes.isEmpty) return;
 
     setState(() => _isCapturing = true);
-    _showDetectionToast();
+    _showStaticDetectionToast(context, ref);
 
     // Parse QR/barcode data — could be vCard or plain text.
     final raw = barcodes.first.rawValue ?? '';
@@ -213,35 +148,6 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
     });
   }
 
-  void _showDetectionToast() {
-    final l10n = ref.read(l10nProvider);
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle_rounded,
-                  color: AppColors.white, size: 20),
-              const SizedBox(width: 10),
-              Text(
-                l10n.cardDetected,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.white,
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          duration: const Duration(milliseconds: 900),
-        ),
-      );
-  }
 
   // ----------------------------------------------------------
   // Build
@@ -250,13 +156,6 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
   @override
   Widget build(BuildContext context) {
     final l10n = ref.watch(l10nProvider);
-    final isFreePlan = ref
-        .watch(effectivePlanProvider)
-        .maybeWhen(data: (plan) => plan == 'free', orElse: () => true);
-    final orgState = ref.watch(organizationProvider);
-    final isInActiveOrg = orgState.organization != null &&
-        !orgState.isOrgExpired &&
-        !orgState.isOrgSuspended;
     final bottomInset = (88.0 + MediaQuery.of(context).padding.bottom) / 4;
 
     return Scaffold(
@@ -304,13 +203,6 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
             ),
           ),
 
-          // Mode selector
-          Positioned(
-            bottom: 160 + bottomInset,
-            left: 0,
-            right: 0,
-            child: _buildModeSelector(l10n, isFreePlan, isInActiveOrg),
-          ),
 
           // Capture button
           Positioned(
@@ -465,40 +357,6 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
     ];
   }
 
-  // ----------------------------------------------------------
-  // Mode selector (Carte / QR Code / NFC)
-  // ----------------------------------------------------------
-
-  Widget _buildModeSelector(AppL10n l10n, bool isFreePlan, bool isInActiveOrg) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _ModeButton(
-          label: l10n.scanCard,
-          icon: Icons.credit_card_rounded,
-          active: _mode == ScanMode.card,
-          onTap: () => _switchMode(ScanMode.card),
-        ),
-        const SizedBox(width: 12),
-        _ModeButton(
-          label: l10n.scanQR,
-          icon: Icons.qr_code_scanner_rounded,
-          active: _mode == ScanMode.qr,
-          enabled: !(isFreePlan && !isInActiveOrg),
-          onTap: (isFreePlan && !isInActiveOrg)
-              ? () => context.push('/subscription-plan')
-              : () => _switchMode(ScanMode.qr),
-        ),
-        // const SizedBox(width: 12),
-        // _ModeButton(
-        //   label: l10n.scanNFC,
-        //   icon: Icons.nfc_rounded,
-        //   active: _mode == ScanMode.nfc,
-        //   onTap: () => _switchMode(ScanMode.nfc),
-        // ),
-      ],
-    );
-  }
 
   // ----------------------------------------------------------
   // Capture button
@@ -570,69 +428,193 @@ class _CircleButton extends StatelessWidget {
   }
 }
 
-/// A mode selector button (Carte / QR Code / NFC).
-class _ModeButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool active;
-  final bool enabled;
-  final VoidCallback onTap;
+// ===========================================================================
+// Scan Options Modal
+// ===========================================================================
 
-  const _ModeButton({
-    required this.label,
+Future<void> showScanOptions(BuildContext context, WidgetRef ref) async {
+  final l10n = ref.read(l10nProvider);
+  final isFreePlan = ref.read(effectivePlanProvider).maybeWhen(
+        data: (plan) => plan == 'free',
+        orElse: () => true,
+      );
+  final orgState = ref.read(organizationProvider);
+  final isInActiveOrg = orgState.organization != null &&
+      !orgState.isOrgExpired &&
+      !orgState.isOrgSuspended;
+
+  return showModalBottomSheet(
+    context: context,
+    backgroundColor: AppColors.cardDark,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (context) {
+      return SafeArea(
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+              _BottomSheetOption(
+                icon: Icons.credit_card_rounded,
+                title: l10n.scanCard,
+                onTap: () {
+                  Navigator.pop(context);
+                  captureBusinessCard(context, ref);
+                },
+              ),
+              const SizedBox(height: 8),
+              _BottomSheetOption(
+                icon: Icons.qr_code_scanner_rounded,
+                title: l10n.scanQR,
+                enabled: !(isFreePlan && !isInActiveOrg),
+                onTap: (isFreePlan && !isInActiveOrg)
+                    ? () {
+                        Navigator.pop(context);
+                        context.push('/subscription-plan');
+                      }
+                    : () {
+                        Navigator.pop(context);
+                        context.push('/scan');
+                      },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _BottomSheetOption extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+  final bool enabled;
+
+  const _BottomSheetOption({
     required this.icon,
-    required this.active,
+    required this.title,
     required this.onTap,
     this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return ListTile(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      leading: Container(
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          gradient: active ? AppColors.accentGradient : null,
-          color: active
-              ? null
-              : AppColors.white.withOpacity(enabled ? 0.08 : 0.04),
-          borderRadius: BorderRadius.circular(24),
-          border: active
-              ? null
-              : Border.all(
-                  color: enabled
-                      ? AppColors.white.withOpacity(0.15)
-                      : AppColors.white.withOpacity(0.08),
-                ),
+          color: AppColors.accent.withOpacity(0.1),
+          shape: BoxShape.circle,
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+        child: Icon(
+          icon,
+          color: enabled ? AppColors.accent : AppColors.white.withOpacity(0.3),
+        ),
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: enabled ? AppColors.white : AppColors.white.withOpacity(0.3),
+          fontWeight: FontWeight.w600,
+          fontSize: 16,
+        ),
+      ),
+      trailing: !enabled
+          ? const Icon(Icons.lock_rounded, color: AppColors.accent, size: 20)
+          : null,
+    );
+  }
+}
+
+/// Captures a photo via the device camera, runs OCR, and navigates to review.
+/// This can be called from anywhere.
+Future<void> captureBusinessCard(BuildContext context, WidgetRef ref) async {
+  try {
+    Map<String, String> ocrData = {};
+
+    if (!kIsWeb) {
+      final picker = ImagePicker();
+      final XFile? photo = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+      );
+
+      if (photo != null) {
+        if (!context.mounted) return;
+        // Show detection toast
+        _showStaticDetectionToast(context, ref);
+
+        try {
+          final tmpDir = await getTemporaryDirectory();
+          final tmpPath = p.join(
+            tmpDir.path,
+            'card_scan_${DateTime.now().millisecondsSinceEpoch}.jpg',
+          );
+          final bytes = await photo.readAsBytes();
+          await File(tmpPath).writeAsBytes(bytes, flush: true);
+
+          final rawText = await ocr_service.recognizeTextFromFile(tmpPath);
+          if (rawText.isNotEmpty) {
+            ocrData = OcrParser.parse(rawText);
+            ocrData['photoPath'] = tmpPath;
+          }
+        } catch (_) {
+          // OCR failed — proceed with empty data.
+        }
+      } else {
+        return; // User cancelled
+      }
+    }
+
+    if (context.mounted) context.push('/review', extra: ocrData);
+  } catch (_) {
+    if (context.mounted) context.push('/review', extra: <String, String>{});
+  }
+}
+
+void _showStaticDetectionToast(BuildContext context, WidgetRef ref) {
+  final l10n = ref.read(l10nProvider);
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Row(
           children: [
-            Icon(
-              icon,
-              size: 16,
-              color:
-                  active ? AppColors.white : AppColors.white.withOpacity(0.6),
-            ),
-            const SizedBox(width: 6),
+            const Icon(Icons.check_circle_rounded,
+                color: AppColors.white, size: 20),
+            const SizedBox(width: 10),
             Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                color:
-                    active ? AppColors.white : AppColors.white.withOpacity(0.6),
+              l10n.cardDetected,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: AppColors.white,
               ),
             ),
           ],
         ),
+        backgroundColor: AppColors.success,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        duration: const Duration(milliseconds: 900),
       ),
     );
-  }
 }
+
 
 // ===========================================================================
 // Corner bracket painter
