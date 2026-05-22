@@ -210,7 +210,7 @@ class AppL10n {
       _en ? 'Already have an account?' : 'Déjà un compte ?';
   String get privacyPolicyAccept => _en ? 'I accept the ' : "J'accepte la ";
   String get privacyPolicyLink =>
-      _en ? 'privacy policy' : 'politique de confidentialité';
+      _en ? 'privacy Policy' : 'politique de confidentialité';
   String get privacyPolicyDesc => _en
       ? 'Read our privacy policy'
       : 'Lire notre politique de confidentialité';
@@ -465,11 +465,14 @@ class AppL10n {
   String get logoutLabel => _en ? 'Logout' : 'Déconnexion';
   String get logoutDesc => _en ? 'Sign out' : 'Se déconnecter';
   String get contactUs => _en ? 'Contact Us' : 'Contactez-nous';
-  String get contactUsDesc =>
-      _en ? 'Need help? Contact our team' : 'Besoin d\'aide ? Contactez notre équipe';
-  String get refundPolicy => _en ? 'Refund Policy' : 'Politique de remboursement';
-  String get refundPolicyDesc =>
-      _en ? 'Learn about our refund terms' : 'Consultez nos conditions de remboursement';
+  String get contactUsDesc => _en
+      ? 'Need help? Contact our team'
+      : 'Besoin d\'aide ? Contactez notre équipe';
+  String get refundPolicy =>
+      _en ? 'Refund Policy' : 'Politique de remboursement';
+  String get refundPolicyDesc => _en
+      ? 'Learn about our refund terms'
+      : 'Consultez nos conditions de remboursement';
   String get helpLabel => _en ? 'Help' : 'Aide';
   String get helpDesc => _en ? 'Support & Legal' : 'Assistance & Légal';
   String get photoTooLarge => _en

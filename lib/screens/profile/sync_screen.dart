@@ -7,6 +7,9 @@ import '../../core/l10n/app_l10n.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/contacts_provider.dart';
+import '../../providers/organization_provider.dart';
+import '../../providers/reminders_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/ftp_photo_service.dart';
 import '../../services/remote_sync_service.dart';
@@ -117,6 +120,11 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
       _lastResult = null;
     });
     final result = await RemoteSyncService.pull(userId);
+    if (result.success && mounted) {
+      await ref.read(organizationProvider.notifier).loadForCurrentUser();
+      await ref.read(contactsProvider.notifier).reload();
+      await ref.read(remindersProvider.notifier).reload();
+    }
     await _loadLastSync();
     if (mounted) {
       setState(() {

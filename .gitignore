@@ -52,5 +52,6 @@ build/
 *.lock
 *.log
 .env
-**/docs/dummy_data.sql
-**/docs/PHOTO_SYNC_FIX.md
+**/docs/screenshots/
+**/docs/sql_scripts/dummy_data.sql
+**/docs/python_scripts/
