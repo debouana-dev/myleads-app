@@ -8,6 +8,7 @@ import '../../core/l10n/app_l10n.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/contact.dart';
 import '../../providers/contacts_provider.dart';
+import '../../widgets/phone_prefix_input.dart';
 
 class ReviewScreen extends ConsumerStatefulWidget {
   final Map<String, String> ocrData;
@@ -275,8 +276,14 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                   _buildField(l10n.lastName, _lastNameCtrl),
                   _buildField(l10n.jobTitleLabel, _jobTitleCtrl),
                   _buildField(l10n.companyLabel, _companyCtrl),
-                  _buildField(l10n.phoneLabel, _phoneCtrl,
-                      type: TextInputType.phone),
+                  const SizedBox(height: 4),
+                  PhonePrefixInput(
+                    controller: _phoneCtrl,
+                    labelText: l10n.phoneLabel,
+                    showLabel: true,
+                    hint: '6 99 88 77 66',
+                  ),
+                  const SizedBox(height: 16),
                   _buildField(l10n.emailLabel, _emailCtrl,
                       type: TextInputType.emailAddress),
                   _buildField(l10n.sourceLabel, _sourceCtrl),

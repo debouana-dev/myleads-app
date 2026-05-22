@@ -13,6 +13,7 @@ import '../../providers/contacts_provider.dart';
 import '../../services/ftp_photo_service.dart';
 import '../../services/photo_storage_service.dart';
 import '../../services/storage_service.dart';
+import '../../widgets/phone_prefix_input.dart';
 
 /// Screen used both for editing an existing contact and for creating a new
 /// contact manually. When [contactId] is null we render empty fields with
@@ -137,7 +138,8 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
       tags: _selectedTags.toList(),
       status: _status,
       photoPath: _photoPath,
-      avatarColor: _existing == null ? _randomHexColor() : _existing?.avatarColor,
+      avatarColor:
+          _existing == null ? _randomHexColor() : _existing?.avatarColor,
     );
 
     final notifier = ref.read(contactsProvider.notifier);
@@ -389,6 +391,12 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
                       _companyCtrl,
                       hint: 'Ex : GreenTech Cameroon',
                     ),
+                    // PhonePrefixInput(
+                    //   controller: _phoneCtrl,
+                    //   labelText: l10n.phoneLabel,
+                    //   showLabel: true,
+                    //   hint: '6 99 88 77 66',
+                    // ),
                     _buildField(
                       context,
                       l10n.phoneLabel,
@@ -396,6 +404,7 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
                       hint: 'Ex : +352 6 99 88 77 66',
                       type: TextInputType.phone,
                     ),
+                    const SizedBox(height: 16),
                     _buildField(
                       context,
                       l10n.emailLabel,

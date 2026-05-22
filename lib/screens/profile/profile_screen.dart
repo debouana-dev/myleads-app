@@ -111,6 +111,103 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
+  Future<void> _launchContactUs() async {
+    final url = Uri.parse('https://me2leads.com/contact');
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Could not launch $url: $e');
+    }
+  }
+
+  Future<void> _launchRefundPolicy() async {
+    final url = Uri.parse('https://www.me2leads.com/refund');
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Could not launch $url: $e');
+    }
+  }
+
+  void _showHelpBottomSheet() {
+    final l10n = ref.read(l10nProvider);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: AppColors.surfaceColor(context),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.borderColor(context),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              l10n.helpLabel,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: AppColors.onSurface(context),
+              ),
+            ),
+            const SizedBox(height: 24),
+            _menuItem(
+              context,
+              Icons.contact_support_rounded,
+              l10n.contactUs,
+              l10n.contactUsDesc,
+              AppColors.accent.withOpacity(0.1),
+              AppColors.accent,
+              () {
+                Navigator.pop(context);
+                _launchContactUs();
+              },
+            ),
+            _menuItem(
+              context,
+              Icons.privacy_tip_rounded,
+              l10n.privacyPolicyLink.substring(0, 1).toUpperCase() +
+                  l10n.privacyPolicyLink.substring(1),
+              l10n.privacyPolicyDesc,
+              const Color(0xFF607D8B).withOpacity(0.1),
+              const Color(0xFF607D8B),
+              () {
+                Navigator.pop(context);
+                _launchPrivacyPolicy();
+              },
+            ),
+            _menuItem(
+              context,
+              Icons.receipt_long_rounded,
+              l10n.refundPolicy,
+              l10n.refundPolicyDesc,
+              AppColors.warm.withOpacity(0.1),
+              AppColors.warm,
+              () {
+                Navigator.pop(context);
+                _launchRefundPolicy();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = ref.watch(l10nProvider);
@@ -363,13 +460,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ],
                     _menuItem(
                       context,
-                      Icons.privacy_tip_rounded,
-                      l10n.privacyPolicyLink.substring(0, 1).toUpperCase() +
-                          l10n.privacyPolicyLink.substring(1),
-                      l10n.privacyPolicyDesc,
+                      Icons.help_outline_rounded,
+                      l10n.helpLabel,
+                      l10n.helpDesc,
                       const Color(0xFF607D8B).withOpacity(0.1),
                       const Color(0xFF607D8B),
-                      _launchPrivacyPolicy,
+                      _showHelpBottomSheet,
                     ),
                     const SizedBox(height: 8),
                     _menuItem(

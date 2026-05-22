@@ -464,6 +464,14 @@ class AppL10n {
   String get settingsDesc => _en ? "App preferences" : "Préférences de l'app";
   String get logoutLabel => _en ? 'Logout' : 'Déconnexion';
   String get logoutDesc => _en ? 'Sign out' : 'Se déconnecter';
+  String get contactUs => _en ? 'Contact Us' : 'Contactez-nous';
+  String get contactUsDesc =>
+      _en ? 'Need help? Contact our team' : 'Besoin d\'aide ? Contactez notre équipe';
+  String get refundPolicy => _en ? 'Refund Policy' : 'Politique de remboursement';
+  String get refundPolicyDesc =>
+      _en ? 'Learn about our refund terms' : 'Consultez nos conditions de remboursement';
+  String get helpLabel => _en ? 'Help' : 'Aide';
+  String get helpDesc => _en ? 'Support & Legal' : 'Assistance & Légal';
   String get photoTooLarge => _en
       ? 'Image too large. Maximum allowed size is 5 MB.'
       : "L'image est trop volumineuse. La taille maximale autorisée est de 5 Mo.";
