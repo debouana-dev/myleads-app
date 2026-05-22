@@ -138,7 +138,8 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
       tags: _selectedTags.toList(),
       status: _status,
       photoPath: _photoPath,
-      avatarColor: _existing == null ? _randomHexColor() : _existing?.avatarColor,
+      avatarColor:
+          _existing == null ? _randomHexColor() : _existing?.avatarColor,
     );
 
     final notifier = ref.read(contactsProvider.notifier);
@@ -390,11 +391,18 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
                       _companyCtrl,
                       hint: 'Ex : GreenTech Cameroon',
                     ),
-                    PhonePrefixInput(
-                      controller: _phoneCtrl,
-                      labelText: l10n.phoneLabel,
-                      showLabel: true,
-                      hint: '6 99 88 77 66',
+                    // PhonePrefixInput(
+                    //   controller: _phoneCtrl,
+                    //   labelText: l10n.phoneLabel,
+                    //   showLabel: true,
+                    //   hint: '6 99 88 77 66',
+                    // ),
+                    _buildField(
+                      context,
+                      l10n.phoneLabel,
+                      _phoneCtrl,
+                      hint: 'Ex : +352 6 99 88 77 66',
+                      type: TextInputType.phone,
                     ),
                     const SizedBox(height: 16),
                     _buildField(
