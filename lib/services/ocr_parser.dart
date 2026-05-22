@@ -32,29 +32,34 @@ class OcrParser {
 
     for (final line in lines) {
       // ── 1. Regex extractors ─────────────────────────────────────────────
+      // Email
       final emailMatch = RegExp(
               r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
           .firstMatch(line);
-      if (emailMatch != null && email == null) {
-        email = emailMatch.group(0);
+      if (emailMatch != null) {
+        email ??= emailMatch.group(0);
         continue;
       }
 
+      // Phone
       final phoneMatch = RegExp(
         r'(?:\+?\d{1,3}[\s\-.]?)?\(?\d{2,4}\)?[\s\-.]?\d{2,4}[\s\-.]?\d{2,4}[\s\-.]?\d{0,4}',
       ).firstMatch(line);
       if (phoneMatch != null) {
         final digits =
             phoneMatch.group(0)!.replaceAll(RegExp(r'[^\d+]'), '');
-        if (digits.length >= 8 && phone == null) {
-          phone = phoneMatch.group(0)!.trim();
+        if (digits.length >= 8) {
+          phone ??= phoneMatch.group(0)!.trim();
+          // If the line contains more than just the phone, keep it for other checks
           if (line.replaceAll(phoneMatch.group(0)!, '').trim().length < 3) {
             continue;
           }
         }
       }
 
-      if (RegExp(r'www\.|https?://', caseSensitive: false).hasMatch(line)) {
+      // Website
+      if (RegExp(r'(www\.|https?://|[a-z0-9]+\.[a-z]{2,}/)', caseSensitive: false).hasMatch(line) &&
+          !line.contains('@')) {
         website ??= line;
         continue;
       }
@@ -115,17 +120,29 @@ class OcrParser {
         }
 
         // Job title explicit
-        if (RegExp(r'^(poste|fonction|title|role)$', caseSensitive: false)
+        if (RegExp(r'^(poste|fonction|title|role|titre)$', caseSensitive: false)
             .hasMatch(key)) {
           result.putIfAbsent('jobTitle', () => value);
           continue;
         }
 
         // Company explicit
-        if (RegExp(r'^(entreprise|societe|société|company|organisation)$',
+        if (RegExp(r'^(entreprise|societe|société|company|organisation|org)$',
                 caseSensitive: false)
             .hasMatch(key)) {
           result.putIfAbsent('company', () => value);
+          continue;
+        }
+
+        // Name explicit (vCard or labeled)
+        if (RegExp(r'^(nom|name|fn)$', caseSensitive: false).hasMatch(key)) {
+          final parts = value.split(RegExp(r'\s+'));
+          if (parts.length >= 2) {
+            result['firstName'] = parts.first;
+            result['lastName'] = parts.sublist(1).join(' ');
+          } else {
+            result['lastName'] = value;
+          }
           continue;
         }
       }
@@ -144,7 +161,7 @@ class OcrParser {
       }
 
       // Skip obvious address lines
-      if (RegExp(r'\b(rue|avenue|boulevard|bp|boîte|cedex|street|road|box)\b',
+      if (RegExp(r'\b(rue|avenue|boulevard|bp|boîte|cedex|street|road|box|chemin|route|allée|impasse|place|square|parc|quartier|ville|pays|city|country|state|zip|postal|cedex)\b',
               caseSensitive: false)
           .hasMatch(line)) {
         continue;
@@ -160,39 +177,74 @@ class OcrParser {
     if (phone != null) result['phone'] = phone;
 
     // ── 3. Name / title / company from leftover lines ────────────────────
-    if (leftover.isNotEmpty) {
-      final name = leftover[0];
-      final parts = name.split(RegExp(r'\s+'));
+    final titleKeywords = RegExp(
+      r'\b(ceo|cto|cfo|coo|cmo|directeur|directrice|manager|head|chef|responsable|ingenieur|ingénieur|engineer|consultant|partner|founder|president|président|associate|analyst|developer|designer|vp|vice|commercial|sales|marketing|account|expert|specialist|spécialiste|architecte|architect|fondateur|co-fondateur|fondatrice|co-fondatrice|gérant|gérante|directeur général|dg|pdg)\b',
+      caseSensitive: false,
+    );
+
+    final companySuffixes = RegExp(
+      r'\b(sarl|sas|sas u|eurl|sa|inc|ltd|co|gmbh|llc|corp|corporation|group|groupe|solutions|technologies|services|associés|associés|university|université|école|institute|association|ngo|ong)\b',
+      caseSensitive: false,
+    );
+
+    String? detectedName;
+    String? detectedTitle;
+    String? detectedCompany;
+
+    final remaining = <String>[];
+
+    for (final line in leftover) {
+      if (titleKeywords.hasMatch(line)) {
+        detectedTitle ??= line;
+      } else if (companySuffixes.hasMatch(line)) {
+        detectedCompany ??= line;
+      } else {
+        remaining.add(line);
+      }
+    }
+
+    // Heuristic for name: usually 2 or 3 words, no digits.
+    for (var i = 0; i < remaining.length; i++) {
+      final line = remaining[i];
+      final words = line.split(RegExp(r'\s+'));
+      final hasDigits = line.contains(RegExp(r'\d'));
+      if (words.length >= 2 && words.length <= 4 && !hasDigits && detectedName == null) {
+        detectedName = line;
+        remaining.removeAt(i);
+        break;
+      }
+    }
+
+    // If still no name, take the first remaining line that's not too long
+    if (detectedName == null && remaining.isNotEmpty) {
+      detectedName = remaining.removeAt(0);
+    }
+
+    // If no company, take the next remaining line
+    if (detectedCompany == null && remaining.isNotEmpty) {
+      detectedCompany = remaining.removeAt(0);
+    }
+
+    // Set results
+    if (detectedName != null) {
+      final parts = detectedName.split(RegExp(r'\s+'));
       if (parts.length >= 2) {
         result['firstName'] = parts.first;
         result['lastName'] = parts.sublist(1).join(' ');
       } else {
-        result['lastName'] = name;
+        result['lastName'] = detectedName;
       }
     }
 
-    final titleKeywords = RegExp(
-      r'\b(ceo|cto|cfo|coo|cmo|directeur|directrice|manager|head|chef|responsable|ingenieur|ingénieur|engineer|consultant|partner|founder|president|président|associate|analyst|developer|designer|vp|vice)\b',
-      caseSensitive: false,
-    );
+    if (detectedTitle != null) result['jobTitle'] = detectedTitle;
+    if (detectedCompany != null) result['company'] = detectedCompany;
 
-    for (var i = 1; i < leftover.length; i++) {
-      final line = leftover[i];
-      if (titleKeywords.hasMatch(line)) {
-        result.putIfAbsent('jobTitle', () => line);
-      } else {
-        result.putIfAbsent('company', () => line);
-      }
+    // Remaining lines go to notes
+    if (remaining.isNotEmpty) {
+      notes.insert(0, remaining.join('\n'));
     }
 
-    if (!result.containsKey('jobTitle') && leftover.length > 2) {
-      for (var i = 1; i < leftover.length; i++) {
-        if (leftover[i] != result['company']) {
-          result['jobTitle'] = leftover[i];
-          break;
-        }
-      }
-    }
+    if (website != null) notes.add('Web: $website');
 
     if (tags.isNotEmpty) {
       // Deduplicate preserving order.

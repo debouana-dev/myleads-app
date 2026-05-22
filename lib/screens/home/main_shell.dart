@@ -15,7 +15,6 @@ class MainShell extends ConsumerWidget {
   static final _screens = [
     const HomeScreen(),
     const ContactsScreen(),
-    const ScanScreen(),
     const RemindersScreen(),
     const ProfileScreen(),
   ];
@@ -59,8 +58,8 @@ class MainShell extends ConsumerWidget {
             _navItem(Icons.people_rounded, l10n.navContacts, 1, current, ref),
             _scanButton(context, ref),
             _navItem(
-                Icons.access_time_rounded, l10n.navReminders, 3, current, ref),
-            _navItem(Icons.person_rounded, l10n.navAccount, 4, current, ref),
+                Icons.access_time_rounded, l10n.navReminders, 2, current, ref),
+            _navItem(Icons.person_rounded, l10n.navAccount, 3, current, ref),
           ],
         ),
       ),
@@ -100,9 +99,7 @@ class MainShell extends ConsumerWidget {
 
   Widget _scanButton(BuildContext context, WidgetRef ref) {
     return GestureDetector(
-      onTap: () {
-        ref.read(currentTabProvider.notifier).state = 2;
-      },
+      onTap: () => showScanOptions(context, ref),
       child: Container(
         width: 64,
         height: 64,

@@ -13,6 +13,7 @@ import '../../services/database_service.dart';
 import '../../services/ftp_photo_service.dart';
 import '../../services/photo_storage_service.dart';
 import '../../services/storage_service.dart';
+import '../../widgets/phone_prefix_input.dart';
 
 class MyProfileScreen extends ConsumerStatefulWidget {
   const MyProfileScreen({super.key});
@@ -478,7 +479,11 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
                             value: user?.phone ?? '—',
                             controller: _phoneCtrl,
                             keyboardType: TextInputType.phone,
-                            hint: '+352 XXX XXX XXX',
+                            hint: '6 99 88 77 66',
+                            customEditWidget: PhonePrefixInput(
+                              controller: _phoneCtrl,
+                              hint: '6 99 88 77 66',
+                            ),
                           ),
                           _divider(context),
                           _profileField(
@@ -672,6 +677,7 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
     TextInputType? keyboardType,
     int? maxLines,
     String? Function(String?)? validator,
+    Widget? customEditWidget,
   }) {
     final borderRadius = BorderRadius.only(
       topLeft: isFirst ? const Radius.circular(16) : Radius.zero,
@@ -681,7 +687,7 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
     );
 
     if (_isEditing && !readOnly && controller != null) {
-      // Edit mode: TextFormField
+      // Edit mode: TextFormField or customEditWidget
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
@@ -697,8 +703,11 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
               ),
             ),
             const SizedBox(height: 6),
-            TextFormField(
-              controller: controller,
+            if (customEditWidget != null)
+              customEditWidget
+            else
+              TextFormField(
+                controller: controller,
               keyboardType: keyboardType,
               validator: validator,
               maxLines: maxLines ?? 1,

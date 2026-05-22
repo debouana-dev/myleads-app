@@ -14,6 +14,7 @@ import '../../providers/contacts_provider.dart';
 import '../../providers/navigation_provider.dart';
 import '../../providers/notifications_provider.dart';
 import '../../providers/reminders_provider.dart';
+import '../scan/scan_screen.dart';
 import '../../services/photo_storage_service.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -64,7 +65,7 @@ class HomeScreen extends ConsumerWidget {
                   children: [
                     // CTA cards
                     _CTARow(
-                      onScanTap: () => context.push('/scan'),
+                      onScanTap: () => showScanOptions(context, ref),
                       onManualTap: () => context.push('/contact/new'),
                       l10n: l10n,
                     ),
@@ -85,7 +86,7 @@ class HomeScreen extends ConsumerWidget {
                         ref.read(currentTabProvider.notifier).state = 1;
                       },
                       onRemindersTap: () =>
-                          ref.read(currentTabProvider.notifier).state = 3,
+                          ref.read(currentTabProvider.notifier).state = 2,
                       l10n: l10n,
                     ),
                     const SizedBox(height: 28),
@@ -124,7 +125,7 @@ class HomeScreen extends ConsumerWidget {
                       icon: Icons.notifications_active_rounded,
                       iconColor: AppColors.warm,
                       onViewAll: () =>
-                          ref.read(currentTabProvider.notifier).state = 3,
+                          ref.read(currentTabProvider.notifier).state = 2,
                       viewAllLabel: l10n.viewAll,
                     ),
                     const SizedBox(height: 12),
