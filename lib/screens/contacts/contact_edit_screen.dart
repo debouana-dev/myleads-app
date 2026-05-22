@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -137,6 +138,7 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
       tags: _selectedTags.toList(),
       status: _status,
       photoPath: _photoPath,
+      avatarColor: _existing == null ? _randomHexColor() : _existing?.avatarColor,
     );
 
     final notifier = ref.read(contactsProvider.notifier);
@@ -172,6 +174,14 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
   }
 
   String? _orNull(String value) => value.trim().isEmpty ? null : value.trim();
+
+  String _randomHexColor() {
+    final r = Random();
+    return '#'
+        '${r.nextInt(256).toRadixString(16).padLeft(2, '0')}'
+        '${r.nextInt(256).toRadixString(16).padLeft(2, '0')}'
+        '${r.nextInt(256).toRadixString(16).padLeft(2, '0')}';
+  }
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
