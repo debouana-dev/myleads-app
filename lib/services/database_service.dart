@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:uuid/uuid.dart';
 
 import '../models/app_notification.dart';
 import '../models/contact.dart';
@@ -28,6 +29,7 @@ class DatabaseService {
   static Database? _db;
   static const _dbName = 'myleads.db';
   static const _dbVersion = 23;
+  static const _uuid = Uuid();
 
   // ── Remote sync callbacks ──────────────────────────────────────────────────
   static void Function(String table, Map<String, dynamic> row)? _onRemoteUpsert;
@@ -1804,6 +1806,19 @@ class DatabaseService {
     final adminId = orgRows.first['owner_id'] as String;
     if (adminId == fromUserId) return null;
 
+    // Determine when the member joined so we can distinguish contacts they
+    // brought in (pre-join) from contacts they created inside the org (post-join).
+    final memberJoinRow = await db.query(
+      'organization_members',
+      columns: ['joined_at'],
+      where: 'organization_id = ? AND user_id = ?',
+      whereArgs: [orgId, fromUserId],
+      limit: 1,
+    );
+    final joinedAt = memberJoinRow.isEmpty
+        ? null
+        : memberJoinRow.first['joined_at'] as String?;
+
     final otherMemberRows = await db.query('organization_members',
         columns: ['user_id'],
         where: "organization_id = ? AND status = 'active' AND user_id != ?",
@@ -1828,46 +1843,97 @@ class DatabaseService {
 
     final memberContacts = await db
         .query('contacts', where: 'owner_id = ?', whereArgs: [fromUserId]);
-    final transferredIds = <String>[];
+    final upsertIds = <String>[];
+    final deletedIds = <String>[];
+
     await db.transaction((txn) async {
       for (final row in memberContacts) {
         final contactId = row['id'] as String;
         final phoneLookup = row['phone_lookup'] as String?;
         final emailLookup = row['email_lookup'] as String?;
+        final contactCreatedAt = row['created_at'] as String?;
+
         final isDuplicate = (phoneLookup != null &&
                 otherPhoneLookups.contains(phoneLookup)) ||
             (emailLookup != null && otherEmailLookups.contains(emailLookup));
-        if (isDuplicate) continue;
-        final updates = <String, Object?>{'owner_id': adminId};
-        if (phoneLookup != null) {
-          final conflict = await txn.query('contacts',
-              columns: ['id'],
-              where: 'owner_id = ? AND phone_lookup = ?',
-              whereArgs: [adminId, phoneLookup],
-              limit: 1);
-          if (conflict.isNotEmpty) updates['phone_lookup'] = null;
+
+        // A contact is pre-join when it existed before the member joined.
+        final isPreJoin = joinedAt != null &&
+            contactCreatedAt != null &&
+            contactCreatedAt.compareTo(joinedAt) < 0;
+
+        if (isPreJoin) {
+          if (isDuplicate) {
+            // Pre-join + duplicate: member keeps their original — no action.
+            continue;
+          }
+          // Pre-join + non-duplicate: copy to admin, member retains original.
+          final adminCopyId = _uuid.v4();
+          final adminCopy = Map<String, Object?>.from(row);
+          adminCopy['id'] = adminCopyId;
+          adminCopy['owner_id'] = adminId;
+          if (phoneLookup != null) {
+            final conflict = await txn.query('contacts',
+                columns: ['id'],
+                where: 'owner_id = ? AND phone_lookup = ?',
+                whereArgs: [adminId, phoneLookup],
+                limit: 1);
+            if (conflict.isNotEmpty) adminCopy['phone_lookup'] = null;
+          }
+          if (emailLookup != null) {
+            final conflict = await txn.query('contacts',
+                columns: ['id'],
+                where: 'owner_id = ? AND email_lookup = ?',
+                whereArgs: [adminId, emailLookup],
+                limit: 1);
+            if (conflict.isNotEmpty) adminCopy['email_lookup'] = null;
+          }
+          await txn.insert('contacts', adminCopy);
+          upsertIds.add(adminCopyId);
+        } else {
+          if (isDuplicate) {
+            // Post-join + duplicate: member loses it; org already holds it via
+            // another active member.
+            await txn.delete('contacts',
+                where: 'id = ?', whereArgs: [contactId]);
+            deletedIds.add(contactId);
+          } else {
+            // Post-join + non-duplicate: move to admin (member loses).
+            final updates = <String, Object?>{'owner_id': adminId};
+            if (phoneLookup != null) {
+              final conflict = await txn.query('contacts',
+                  columns: ['id'],
+                  where: 'owner_id = ? AND phone_lookup = ?',
+                  whereArgs: [adminId, phoneLookup],
+                  limit: 1);
+              if (conflict.isNotEmpty) updates['phone_lookup'] = null;
+            }
+            if (emailLookup != null) {
+              final conflict = await txn.query('contacts',
+                  columns: ['id'],
+                  where: 'owner_id = ? AND email_lookup = ?',
+                  whereArgs: [adminId, emailLookup],
+                  limit: 1);
+              if (conflict.isNotEmpty) updates['email_lookup'] = null;
+            }
+            await txn.update('contacts', updates,
+                where: 'id = ?', whereArgs: [contactId]);
+            upsertIds.add(contactId);
+          }
         }
-        if (emailLookup != null) {
-          final conflict = await txn.query('contacts',
-              columns: ['id'],
-              where: 'owner_id = ? AND email_lookup = ?',
-              whereArgs: [adminId, emailLookup],
-              limit: 1);
-          if (conflict.isNotEmpty) updates['email_lookup'] = null;
-        }
-        await txn.update('contacts', updates,
-            where: 'id = ?', whereArgs: [contactId]);
-        transferredIds.add(contactId);
       }
     });
 
     if (_onRemoteUpsert != null) {
-      for (final id in transferredIds) {
+      for (final id in upsertIds) {
         final rows = await db.query('contacts',
             where: 'id = ?', whereArgs: [id], limit: 1);
         if (rows.isNotEmpty)
           _onRemoteUpsert!('contacts', Map<String, dynamic>.from(rows.first));
       }
+    }
+    for (final id in deletedIds) {
+      _onRemoteDelete?.call('contacts', id);
     }
     return adminId;
   }
