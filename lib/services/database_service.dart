@@ -27,7 +27,7 @@ import 'web_db_factory_stub.dart'
 class DatabaseService {
   static Database? _db;
   static const _dbName = 'myleads.db';
-  static const _dbVersion = 23;
+  static const _dbVersion = 24;
 
   // ── Remote sync callbacks ──────────────────────────────────────────────────
   static void Function(String table, Map<String, dynamic> row)? _onRemoteUpsert;
@@ -397,6 +397,13 @@ class DatabaseService {
             'ALTER TABLE users ADD COLUMN apple_user_identifier TEXT');
       } catch (_) {}
     }
+    if (oldVersion < 24) {
+      // v23 → v24: denormalized member phone, encrypted with org key.
+      try {
+        await db.execute(
+            'ALTER TABLE organization_members ADD COLUMN phone TEXT');
+      } catch (_) {}
+    }
   }
 
   // =====================================================================
@@ -576,6 +583,7 @@ class DatabaseService {
         first_name TEXT NOT NULL,
         last_name TEXT NOT NULL,
         email TEXT,
+        phone TEXT,
         nickname TEXT,
         company TEXT,
         biography TEXT,
@@ -693,6 +701,9 @@ class DatabaseService {
         'last_name': user.lastName,
         'email': user.email.isNotEmpty
             ? EncryptionService.encryptTextWithKeyMaterial(user.email, orgId)
+            : null,
+        'phone': (user.phone != null && user.phone!.isNotEmpty)
+            ? EncryptionService.encryptTextWithKeyMaterial(user.phone!, orgId)
             : null,
         'nickname': user.nickname,
         'company': user.companyName,
@@ -1560,6 +1571,7 @@ class DatabaseService {
         firstName: row['first_name'] as String? ?? user?.firstName ?? '',
         lastName: row['last_name'] as String? ?? user?.lastName ?? '',
         email: _decOrgEmail(row['email'] as String?, orgId) ?? user?.email,
+        phone: _decOrgEmail(row['phone'] as String?, orgId) ?? user?.phone,
         nickname: row['nickname'] as String? ?? user?.nickname,
         company: row['company'] as String? ?? user?.companyName,
         biography: row['biography'] as String? ?? user?.biography,
@@ -1597,6 +1609,9 @@ class DatabaseService {
       'last_name': user?.lastName ?? '',
       'email': (user?.email != null && user!.email.isNotEmpty)
           ? EncryptionService.encryptTextWithKeyMaterial(user.email, orgId)
+          : null,
+      'phone': (user?.phone != null && user!.phone!.isNotEmpty)
+          ? EncryptionService.encryptTextWithKeyMaterial(user.phone!, orgId)
           : null,
       'nickname': user?.nickname,
       'company': user?.companyName,

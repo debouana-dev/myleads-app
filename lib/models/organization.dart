@@ -75,6 +75,7 @@ class OrgMember {
   final String firstName;
   final String lastName;
   final String? email;
+  final String? phone;
   final String? nickname;
   final String? company;
   final String? biography;
@@ -99,6 +100,7 @@ class OrgMember {
     required this.firstName,
     required this.lastName,
     this.email,
+    this.phone,
     this.nickname,
     this.company,
     this.biography,
@@ -123,6 +125,7 @@ class OrgMember {
     String? firstName,
     String? lastName,
     String? email,
+    String? phone,
     String? nickname,
     String? company,
     String? biography,
@@ -144,6 +147,7 @@ class OrgMember {
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
       email: email ?? this.email,
+      phone: phone ?? this.phone,
       nickname: nickname ?? this.nickname,
       company: company ?? this.company,
       biography: biography ?? this.biography,

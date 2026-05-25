@@ -306,6 +306,7 @@ class RemoteSyncService {
         "first_name"         VARCHAR(255) NOT NULL,
         "last_name"          VARCHAR(255) NOT NULL,
         "email"              VARCHAR(255),
+        "phone"              VARCHAR(100),
         "nickname"           VARCHAR(255),
         "company"            VARCHAR(255),
         "biography"          TEXT,
@@ -345,6 +346,11 @@ class RemoteSyncService {
     );
     await conn.execute(
       'UPDATE "organization_members" SET "can_export_contacts" = 1 WHERE "role" = \'admin\' AND "can_export_contacts" = 0',
+    );
+
+    // v24: denormalized member phone, encrypted with org key.
+    await conn.execute(
+      'ALTER TABLE "organization_members" ADD COLUMN IF NOT EXISTS "phone" VARCHAR(100)',
     );
 
     // v18: denormalized member profile fields on org membership rows.
@@ -1635,16 +1641,16 @@ class RemoteSyncService {
       Sql.named('''
         INSERT INTO "organization_members"
           (id,organization_id,user_id,role,status,joined_at,
-           first_name,last_name,email,nickname,company,biography,photo_path,
+           first_name,last_name,email,phone,nickname,company,biography,photo_path,
            can_edit,can_create,can_view_reminders,can_view_history,can_export_contacts)
         VALUES
           (@id,@organization_id,@user_id,@role,@status,@joined_at,
-           @first_name,@last_name,@email,@nickname,@company,@biography,@photo_path,
+           @first_name,@last_name,@email,@phone,@nickname,@company,@biography,@photo_path,
            @can_edit,@can_create,@can_view_reminders,@can_view_history,@can_export_contacts)
         ON CONFLICT (id) DO UPDATE SET
           role=EXCLUDED.role,status=EXCLUDED.status,
           first_name=EXCLUDED.first_name,last_name=EXCLUDED.last_name,
-          email=EXCLUDED.email,nickname=EXCLUDED.nickname,company=EXCLUDED.company,
+          email=EXCLUDED.email,phone=EXCLUDED.phone,nickname=EXCLUDED.nickname,company=EXCLUDED.company,
           biography=EXCLUDED.biography,photo_path=EXCLUDED.photo_path,
           can_edit=EXCLUDED.can_edit,can_create=EXCLUDED.can_create,
           can_view_reminders=EXCLUDED.can_view_reminders,
@@ -1661,6 +1667,7 @@ class RemoteSyncService {
         'first_name': r['first_name'] ?? '',
         'last_name': r['last_name'] ?? '',
         'email': r['email'],
+        'phone': r['phone'],
         'nickname': r['nickname'],
         'company': r['company'],
         'biography': r['biography'],
