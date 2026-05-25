@@ -210,17 +210,14 @@ class AppL10n {
       _en ? 'Already have an account?' : 'Déjà un compte ?';
   String get privacyPolicyAccept => _en ? 'I accept the ' : "J'accepte la ";
   String get privacyPolicyLink =>
-      _en ? 'Privacy Policy' : 'Politique de confidentialité';
-  String get termsOfUseLink =>
-      _en ? 'Terms of Use' : 'Conditions d\'utilisation';
-  String get and => _en ? ' and ' : ' et les ';
+      _en ? 'privacy Policy' : 'politique de confidentialité';
   String get eulaLink => 'EULA';
   String get privacyPolicyDesc => _en
       ? 'Read our privacy policy'
       : 'Lire notre politique de confidentialité';
   String get privacyPolicyRequired => _en
-      ? 'Please accept the privacy policy and terms of use'
-      : 'Veuillez accepter la politique de confidentialité et les conditions d\'utilisation';
+      ? 'Please accept the privacy policy'
+      : 'Veuillez accepter la politique de confidentialité';
 
   // ─── Auth – Forgot Password ───────────────────────────────────────────────
   String get forgotPasswordTitle =>
@@ -352,14 +349,8 @@ class AppL10n {
   String get reviewSubtitle => _en
       ? 'Verify and complete the information'
       : 'Vérifiez et complétez les informations';
-  String ocrConfidencePercent(String pct) =>
-      _en ? 'OCR — $pct% confidence' : 'OCR — $pct% de confiance';
-  String get confidenceHigh => _en ? 'High confidence' : 'Haute confiance';
-  String get confidenceFair => _en ? 'Fair confidence' : 'Confiance moyenne';
-  String get confidenceLow => _en ? 'Low confidence' : 'Confiance faible';
-  String get confidenceBadgeFair => _en ? 'FAIR' : 'MOYEN';
-  String get confidenceBadgeLow => _en ? 'LOW' : 'FAIBLE';
-  String get capturedCardPhoto => _en ? 'Captured card' : 'Carte capturée';
+  String get ocrConfidence =>
+      _en ? 'OCR - 95% confidence' : 'OCR - 95% de confiance';
   String get quickActions => _en ? 'Quick actions' : 'Actions rapides';
   String get contactSaved =>
       _en ? 'Contact saved successfully!' : 'Contact sauvegardé avec succès !';
@@ -452,20 +443,6 @@ class AppL10n {
   String get sendSms => _en ? 'Send SMS' : 'Envoyer un SMS';
   String get openWhatsapp => _en ? 'Open WhatsApp' : 'Ouvrir WhatsApp';
   String get sendEmail => _en ? 'Send email' : 'Envoyer un email';
-  String get taskAssigneeNoPhone => _en
-      ? "This team member hasn't registered a phone number in their profile"
-      : "Ce membre n'a pas enregistré de numéro de téléphone dans son profil";
-  String get taskAssigneeNoEmail => _en
-      ? "This team member hasn't registered an email address in their profile"
-      : "Ce membre n'a pas enregistré d'adresse e-mail dans son profil";
-  String get contactNoPhone => _en
-      ? 'No phone number registered for this contact'
-      : 'Aucun numéro de téléphone pour ce contact';
-  String get contactNoEmail => _en
-      ? 'No email address registered for this contact'
-      : 'Aucun e-mail pour ce contact';
-  String get contactInvalidPhone =>
-      _en ? 'Invalid phone number' : 'Numéro de téléphone invalide';
 
   // ─── Profile ─────────────────────────────────────────────────────────────
   String get accountLabel => _en ? 'Account' : 'Compte';
@@ -500,10 +477,6 @@ class AppL10n {
       : 'Consultez nos conditions de remboursement';
   String get helpLabel => _en ? 'Help' : 'Aide';
   String get helpDesc => _en ? 'Support & Legal' : 'Assistance & Légal';
-  String get termsOfUse => _en ? 'Terms of Use' : 'Conditions d\'utilisation';
-  String get termsOfUseDesc => _en
-      ? 'Read our terms and conditions'
-      : 'Lire nos conditions d\'utilisation';
   String get photoTooLarge => _en
       ? 'Image too large. Maximum allowed size is 5 MB.'
       : "L'image est trop volumineuse. La taille maximale autorisée est de 5 Mo.";
@@ -645,16 +618,13 @@ class AppL10n {
       _en ? 'Plan updated successfully' : 'Forfait mis à jour avec succès';
   String get planChangeError =>
       _en ? 'Error changing plan' : 'Erreur lors du changement de forfait';
-  String get acceptTermsTitle =>
-      _en ? 'Accept Terms' : 'Accepter les conditions';
+  String get acceptTermsTitle => _en ? 'Accept Terms' : 'Accepter les conditions';
   String get acceptTermsSubtitle => _en
       ? 'Please review and accept our policies before subscribing.'
       : 'Veuillez consulter et accepter nos politiques avant de vous abonner.';
-  String get acceptPrivacyPolicy => _en
-      ? 'I accept the Privacy Policy'
-      : 'J\'accepte la politique de confidentialité';
-  String get acceptEula =>
-      _en ? 'I accept the EULA' : 'J\'accepte le CLUF (EULA)';
+  String get acceptPrivacyPolicy =>
+      _en ? 'I accept the Privacy Policy' : 'J\'accepte la politique de confidentialité';
+  String get acceptEula => _en ? 'I accept the EULA' : 'J\'accepte le CLUF (EULA)';
   String get mustAcceptTerms => _en
       ? 'You must accept the terms to continue'
       : 'Vous devez accepter les conditions pour continuer';
@@ -1005,39 +975,33 @@ class AppL10n {
   String get ownerCannotLeaveOrg => _en
       ? 'The owner cannot leave. Delete the organization instead.'
       : "Le propriétaire ne peut pas quitter l'organisation. Supprimez-la.";
-  String get cannotSuspendOwner => _en
-      ? 'The owner cannot be suspended'
-      : 'Le propriétaire ne peut pas être suspendu';
+  String get cannotSuspendOwner =>
+      _en ? 'The owner cannot be suspended' : 'Le propriétaire ne peut pas être suspendu';
   String get adminCannotManageAdmins => _en
       ? 'Admins cannot manage other admin-level accounts'
       : "Les admins ne peuvent pas gérer d'autres comptes admin";
   String get assignAdminRole => _en ? 'Make admin' : 'Nommer admin';
-  String get revokeAdminRole =>
-      _en ? 'Revoke admin role' : 'Révoquer le rôle admin';
-  String get assignAdminTitle =>
-      _en ? 'Assign admin role' : 'Attribuer le rôle admin';
+  String get revokeAdminRole => _en ? 'Revoke admin role' : 'Révoquer le rôle admin';
+  String get assignAdminTitle => _en ? 'Assign admin role' : 'Attribuer le rôle admin';
   String assignAdminConfirm(String name) => _en
       ? 'Grant admin privileges to $name?'
       : 'Accorder les droits admin à $name ?';
-  String get revokeAdminTitle =>
-      _en ? 'Revoke admin role' : 'Révoquer le rôle admin';
+  String get revokeAdminTitle => _en ? 'Revoke admin role' : 'Révoquer le rôle admin';
   String revokeAdminConfirm(String name) => _en
       ? 'Revoke admin privileges from $name?'
       : 'Retirer les droits admin à $name ?';
   String get cannotAssignAdminToSuspended => _en
       ? 'Reactivate this member before assigning admin role'
       : 'Réactivez ce membre avant de lui attribuer le rôle admin';
-  String get adminAssignedSuccess =>
-      _en ? 'Admin role assigned' : 'Rôle admin attribué';
-  String get adminRevokedSuccess =>
-      _en ? 'Admin role revoked' : 'Rôle admin révoqué';
-  String get adminPrivilegesNote => _en
-      ? 'Admins always have full privileges'
-      : 'Les admins ont toujours tous les droits';
+  String get adminAssignedSuccess => _en ? 'Admin role assigned' : 'Rôle admin attribué';
+  String get adminRevokedSuccess => _en ? 'Admin role revoked' : 'Rôle admin révoqué';
+  String get adminPrivilegesNote =>
+      _en ? 'Admins always have full privileges' : 'Les admins ont toujours tous les droits';
 
   // ─── Ownership transfer ──────────────────────────────────────────────────
-  String get transferOwnershipAndLeave =>
-      _en ? 'Transfer ownership & leave' : 'Transférer la propriété et quitter';
+  String get transferOwnershipAndLeave => _en
+      ? 'Transfer ownership & leave'
+      : 'Transférer la propriété et quitter';
   String get transferOwnershipNoAdmins => _en
       ? 'No active admin found. Promote a member to admin before leaving.'
       : "Aucun admin actif trouvé. Promouvez un membre en admin avant de quitter.";
@@ -1341,76 +1305,6 @@ class AppL10n {
   String subscriptionDaysLeft(int days) => _en
       ? '$days day${days > 1 ? "s" : ""} remaining'
       : '$days jour${days > 1 ? "s" : ""} restant${days > 1 ? "s" : ""}';
-
-  // ─── Tasks ────────────────────────────────────────────────────────────────
-  String get tasksTitle => _en ? 'Tasks' : 'Tâches';
-  String get tasksSection => _en ? 'Team Tasks' : "Tâches d'équipe";
-  String get newTask => _en ? 'New task' : 'Nouvelle tâche';
-  String get createTaskTitle => _en ? 'Create a task' : 'Créer une tâche';
-  String get editTaskTitle => _en ? 'Edit task' : 'Modifier la tâche';
-  String get assigneeSection => _en ? 'Assigned to' : 'Assigné à';
-  String get assignedTo => _en ? 'Assigned to' : 'Assigné à';
-  String get assignedBy => _en ? 'Assigned by' : 'Assigné par';
-  String get assignToSelf => _en ? 'Assign to myself' : "M'assigner";
-  String get selectMember => _en ? 'Select a member' : 'Sélectionner un membre';
-  String get taskPending => _en ? 'Pending' : 'En cours';
-  String get taskCompletedTab => _en ? 'Completed' : 'Terminées';
-  String get completeTask =>
-      _en ? 'Mark as complete' : 'Marquer comme terminée';
-  String get uncompleteTask => _en ? 'Reopen task' : 'Rouvrir la tâche';
-  String get noTask => _en ? 'No tasks' : 'Aucune tâche';
-  String get noTaskDesc => _en
-      ? 'Tasks assigned to the team will appear here.'
-      : "Les tâches assignées à l'équipe apparaîtront ici.";
-  String get noMyTaskDesc => _en
-      ? 'Tasks assigned to you will appear here.'
-      : 'Les tâches qui vous sont assignées apparaîtront ici.';
-  String get deleteTaskTitle => _en ? 'Delete task?' : 'Supprimer la tâche ?';
-  String get deleteTaskWarning =>
-      _en ? 'This action is irreversible.' : 'Cette action est irréversible.';
-  String get taskNotFound => _en ? 'Task not found' : 'Tâche introuvable';
-  String get taskUpcomingNotif => _en ? 'Task in 15 min' : 'Tâche dans 15 min';
-  String get taskOntimeNotif =>
-      _en ? 'Me2Leads: Task now!' : 'Me2Leads : Tâche maintenant !';
-  String get taskOverdueNotif => _en ? 'Task overdue' : 'Tâche en retard';
-  String get taskRepeatNotif => _en ? 'Recurring task' : 'Tâche récurrente';
-  String get taskNoteHint => _en
-      ? 'Ex: Prepare quarterly report'
-      : 'Ex: Préparer le rapport trimestriel';
-  String get noAssigneeSelected =>
-      _en ? 'Select an assignee' : 'Sélectionnez un assigné';
-  String get createTaskBtn => _en ? 'Create task' : 'Créer la tâche';
-  String get saveTaskBtn => _en ? 'Save' : 'Enregistrer';
-  String get taskCompletedBy => _en ? 'Completed by' : 'Terminée par';
-  String get taskOnlyAdminCanDelete => _en
-      ? 'Only admins can delete tasks'
-      : 'Seuls les admins peuvent supprimer les tâches';
-  String get taskOnlyCreatorOrAssigneeCanComplete => _en
-      ? 'Only the creator or assignee can mark this task complete'
-      : 'Seul le créateur ou l\'assigné peut marquer cette tâche comme terminée';
-  String tasksCount(int n) =>
-      _en ? '$n task${n == 1 ? '' : 's'}' : '$n tâche${n > 1 ? 's' : ''}';
-  String get noMembersAvailable =>
-      _en ? 'No members available' : 'Aucun membre disponible';
-  String get taskSuspendedTitle =>
-      _en ? 'Access restricted' : 'Accès restreint';
-  String get taskSuspendedDesc => _en
-      ? 'Your membership is suspended. You cannot view or be assigned organization tasks.'
-      : "Votre adhésion est suspendue. Vous ne pouvez pas consulter ni recevoir des tâches de l'organisation.";
-
-  String get taskAssigneesLabel => _en ? 'Assigned to' : 'Assigné à';
-  String get taskSelectAssignees =>
-      _en ? 'Select assignees' : 'Sélectionner les assignés';
-  String get taskNoAssigneeSelected =>
-      _en ? 'Select at least one assignee' : 'Sélectionnez au moins un assigné';
-  String taskAssigneesCount(int n) =>
-      _en ? '$n assignee${n == 1 ? '' : 's'}' : '$n assigné${n > 1 ? 's' : ''}';
-  String get myTasks => _en ? 'My Tasks' : 'Mes tâches';
-  String get allTasks => _en ? 'All Tasks' : 'Toutes les tâches';
-  String tasksAssignedToYou(int n) =>
-      _en ? '$n assigned to you' : '$n assignée${n > 1 ? 's' : ''} à vous';
-  String get viewOthersTasksPrivilege =>
-      _en ? 'Can view team tasks' : "Peut voir les tâches d'équipe";
 }
 
 final l10nProvider = Provider<AppL10n>((ref) {
