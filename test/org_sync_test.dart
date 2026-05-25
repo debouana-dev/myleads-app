@@ -17,6 +17,7 @@
 /// without an FTP connection.
 library;
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -69,7 +70,10 @@ Future<void> _createSchema(Database db, int version) async {
       organization_id TEXT,
       org_role TEXT,
       plan TEXT NOT NULL DEFAULT 'free',
-      last_sync_at TEXT
+      last_sync_at TEXT,
+      plan_expires_at TEXT,
+      subscription_billing_cycle TEXT,
+      apple_user_identifier TEXT
     )
   ''');
 
@@ -185,7 +189,11 @@ Future<void> _createSchema(Database db, int version) async {
       name TEXT NOT NULL,
       owner_id TEXT NOT NULL,
       invite_code TEXT NOT NULL UNIQUE,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      license_count INTEGER NOT NULL DEFAULT 1,
+      org_plan_expires_at TEXT,
+      org_status TEXT NOT NULL DEFAULT 'active',
+      org_suspended_at TEXT
     )
   ''');
 
@@ -208,6 +216,7 @@ Future<void> _createSchema(Database db, int version) async {
       can_create INTEGER NOT NULL DEFAULT 1,
       can_view_reminders INTEGER NOT NULL DEFAULT 0,
       can_view_history INTEGER NOT NULL DEFAULT 0,
+      can_export_contacts INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       UNIQUE (organization_id, user_id)
@@ -323,12 +332,13 @@ void main() {
   late Database db;
 
   setUpAll(() async {
+    dotenv.loadFromString(envString: 'SECRET_KEY=test_key_for_tests');
     EncryptionService.initForTest(keyB64: _kTestKeyB64, ivB64: _kTestIvB64);
 
     db = await databaseFactoryFfi.openDatabase(
       inMemoryDatabasePath,
       options: OpenDatabaseOptions(
-        version: 12,
+        version: 23,
         onCreate: _createSchema,
       ),
     );
@@ -603,7 +613,9 @@ void main() {
       final bobRow = rows.firstWhere((r) => r['user_id'] == _member1Id);
       expect(bobRow['first_name'], equals('Robert'));
       expect(bobRow['last_name'], equals('Memberson'));
-      expect(bobRow['email'], equals('robert@acme.com'));
+      // email is AES-CBC encrypted in organization_members — verify the plaintext
+      // via the decoded OrgMember object below, not the raw encrypted column.
+      expect(bobRow['email'], isNotNull);
       expect(bobRow['nickname'], equals('Rob'));
       expect(bobRow['company'], equals('Acme Subsidiary'));
       expect(bobRow['biography'], equals('Updated member bio'));
@@ -908,10 +920,9 @@ void main() {
       expect(adminContacts.map((c) => c.id), contains('bob-unique'));
     });
 
-    test('transferNonDuplicate leaves contacts that duplicate another member',
-        () async {
-      // Carol has the same phone as Bob → Bob's contact is a dup from Carol's perspective
-      // when we transfer Bob's, Carol still owns hers.
+    test('transferNonDuplicate deletes post-join duplicate contacts', () async {
+      // Bob's contact was created after he joined (post-join) and has the same
+      // phone as Carol's contact → post-join duplicate is deleted, not kept.
       await DatabaseService.insertContact(_makeContact(
           id: 'bob-dup', ownerId: _member1Id, phone: '+33699111111'));
       await DatabaseService.insertContact(_makeContact(
@@ -920,18 +931,22 @@ void main() {
       await DatabaseService.transferNonDuplicateContactsToAdmin(
           fromUserId: _member1Id, orgId: _orgId);
 
-      // bob-dup stays with bob (duplicate of carol's contact)
+      // bob-dup is deleted (post-join + duplicate of carol's contact).
       final bobContacts =
           await DatabaseService.getAllContactsForOwner(_member1Id);
-      expect(bobContacts.map((c) => c.id), contains('bob-dup'));
+      expect(bobContacts.map((c) => c.id), isNot(contains('bob-dup')));
+      // Carol's original is untouched.
+      final carolContacts =
+          await DatabaseService.getAllContactsForOwner(_member2Id);
+      expect(carolContacts.map((c) => c.id), contains('carol-same'));
     });
 
     test(
-        'transferNonDuplicate treats admin-matching phone as a duplicate (stays with member)',
+        'transferNonDuplicate deletes post-join contact that duplicates admin phone',
         () async {
-      // Admin is also counted in "other active members", so if admin already has
-      // a contact with the same phone, Bob's contact is treated as a duplicate
-      // and stays with Bob — it is NOT transferred to avoid a double-copy.
+      // Admin is included in "other active members". A post-join contact whose
+      // phone matches the admin's is treated as a duplicate and deleted — it is
+      // NOT transferred to avoid creating a double-copy on the admin.
       await DatabaseService.insertContact(_makeContact(
           id: 'admin-c', ownerId: _adminId, phone: '+33699222222'));
       await DatabaseService.insertContact(_makeContact(
@@ -940,14 +955,40 @@ void main() {
       await DatabaseService.transferNonDuplicateContactsToAdmin(
           fromUserId: _member1Id, orgId: _orgId);
 
-      // bob-c is a duplicate of admin's contact → stays with Bob
+      // bob-c is deleted (post-join + duplicate of admin's contact).
       final bobContacts =
           await DatabaseService.getAllContactsForOwner(_member1Id);
-      expect(bobContacts.map((c) => c.id), contains('bob-c'));
-      // Admin's original contact is unaffected
+      expect(bobContacts.map((c) => c.id), isNot(contains('bob-c')));
+      // Admin's original contact is present and not duplicated.
       final adminContacts =
           await DatabaseService.getAllContactsForOwner(_adminId);
-      expect(adminContacts.map((c) => c.id), isNot(contains('bob-c')));
+      expect(adminContacts.map((c) => c.id), contains('admin-c'));
+      expect(adminContacts.where((c) => c.id == 'bob-c'), isEmpty);
+    });
+
+    test(
+        'transferNonDuplicate copies pre-join unique contact to admin while member retains it',
+        () async {
+      // Contact created well before the member joined → pre-join.
+      // Pre-join + non-duplicate: admin gets a copy, member keeps original.
+      final preJoinTime = DateTime(2025, 1, 1);
+      await DatabaseService.insertContact(_makeContact(
+          id: 'bob-pre',
+          ownerId: _member1Id,
+          phone: '+33699444444',
+          createdAt: preJoinTime));
+
+      await DatabaseService.transferNonDuplicateContactsToAdmin(
+          fromUserId: _member1Id, orgId: _orgId);
+
+      // Admin now has a copy with the same phone.
+      final adminContacts =
+          await DatabaseService.getAllContactsForOwner(_adminId);
+      expect(adminContacts.any((c) => c.phone == '+33699444444'), isTrue);
+      // Bob still holds his original.
+      final bobContacts =
+          await DatabaseService.getAllContactsForOwner(_member1Id);
+      expect(bobContacts.map((c) => c.id), contains('bob-pre'));
     });
 
     test('transferNonDuplicate returns null when fromUser is the admin',
@@ -1135,8 +1176,19 @@ void main() {
     test('getRawOrganizationRow returns all required MySQL columns', () async {
       final row = await DatabaseService.getRawOrganizationRow(_orgId);
       expect(row, isNotNull);
-      expect(row!.keys,
-          containsAll(['id', 'name', 'owner_id', 'invite_code', 'created_at']));
+      expect(
+          row!.keys,
+          containsAll([
+            'id',
+            'name',
+            'owner_id',
+            'invite_code',
+            'created_at',
+            'license_count',
+            'org_plan_expires_at',
+            'org_status',
+            'org_suspended_at',
+          ]));
       expect(row['id'], equals(_orgId));
       expect(row['owner_id'], equals(_adminId));
     });
@@ -1158,15 +1210,18 @@ void main() {
               'can_create',
               'can_view_reminders',
               'can_view_history',
+              'can_export_contacts',
             ]));
       }
       final adminRow = rows.firstWhere((r) => r['user_id'] == _adminId);
       expect(adminRow['can_edit'], equals(1));
       expect(adminRow['can_view_reminders'], equals(1));
+      expect(adminRow['can_export_contacts'], equals(1));
 
       final memberRow = rows.firstWhere((r) => r['user_id'] == _member1Id);
       expect(memberRow['can_edit'], equals(0));
       expect(memberRow['can_view_reminders'], equals(0));
+      expect(memberRow['can_export_contacts'], equals(0));
     });
 
     test('upsertRawRow inserts and replaces on conflict', () async {

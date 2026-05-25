@@ -23,7 +23,8 @@
       "Bash(where python *)",
       "Bash(python -c \"import sys; print\\(sys.executable\\)\")",
       "Bash(C:\\\\Python312\\\\python.exe -c \"import docx\")",
-      "Bash(C:\\\\Users\\\\munki\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\python.exe -c \"import docx; print\\('ok'\\)\")"
+      "Bash(C:\\\\Users\\\\munki\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\python.exe -c \"import docx; print\\('ok'\\)\")",
+      "Bash(git stash *)"
     ]
   }
 }
