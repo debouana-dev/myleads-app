@@ -300,6 +300,40 @@ class EmailService {
     );
   }
 
+  /// Notifies [toEmail] that their access to [orgName] has been reactivated.
+  /// Returns true if SMTP delivery succeeded; callers must not depend on the result.
+  static Future<bool> sendMemberReactivatedNotification({
+    required String toEmail,
+    required String orgName,
+    required String memberName,
+  }) async {
+    final year = DateTime.now().year;
+    final htmlBody = '''
+<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #0B3C5D; margin: 0;">Me2Leads</h1>
+    <p style="color: #666; font-size: 14px;">Votre assistant de prospection intelligent</p>
+  </div>
+  <div style="background-color: #f9f9f9; border-radius: 8px; padding: 30px; border: 1px solid #eee;">
+    <h2 style="margin-top: 0; color: #333; font-size: 20px;">Votre accès à l'organisation a été réactivé</h2>
+    <p>Bonjour $memberName,</p>
+    <p>Votre accès à l'organisation <strong>$orgName</strong> sur Me2Leads a été réactivé par un administrateur.</p>
+    <p>Vous pouvez à nouveau accéder aux contacts et fonctionnalités de l'organisation.</p>
+    <p style="font-size: 14px; color: #666;">Si vous avez des questions, veuillez contacter l'administrateur de votre organisation.</p>
+  </div>
+  <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
+    <p>&copy; $year Me2Leads. Tous droits réservés.</p>
+  </div>
+</div>
+''';
+    return _sendEmail(
+      to: toEmail,
+      subject: 'Me2Leads — Votre accès à $orgName a été réactivé',
+      body: 'Bonjour $memberName,\n\nVotre accès à l\'organisation "$orgName" a été réactivé par un administrateur.\n\nVous pouvez à nouveau accéder aux contacts et fonctionnalités de l\'organisation.\n\n© $year Me2Leads.',
+      htmlBody: htmlBody,
+    );
+  }
+
   // ── Internal ────────────────────────────────────────────────────────────
 
   static Future<bool> _sendEmail({

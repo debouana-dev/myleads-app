@@ -907,6 +907,20 @@ class OrgNotifier extends StateNotifier<OrgState> {
     ));
   }
 
+  /// Notifies the reactivated member by email (fire-and-forget).
+  static void _notifyMemberOfReactivation({
+    required String targetEmail,
+    required String targetName,
+    required String orgName,
+  }) {
+    if (targetEmail.isEmpty) return;
+    unawaited(EmailService.sendMemberReactivatedNotification(
+      toEmail: targetEmail,
+      orgName: orgName,
+      memberName: targetName,
+    ));
+  }
+
   /// Notifies the suspended member by email (fire-and-forget).
   static void _notifyMemberOfSuspension({
     required String targetEmail,
@@ -1089,6 +1103,11 @@ class OrgNotifier extends StateNotifier<OrgState> {
 
        // Sync the member reactivation to the cloud in the background
        _syncMemberToCloud(org.id, targetUserId);
+       _notifyMemberOfReactivation(
+         targetEmail: target.email ?? '',
+         targetName: target.fullName,
+         orgName: org.name,
+       );
        _backgroundRefreshFromCloud();
 
        return null;
