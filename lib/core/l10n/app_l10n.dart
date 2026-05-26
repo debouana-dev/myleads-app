@@ -349,8 +349,14 @@ class AppL10n {
   String get reviewSubtitle => _en
       ? 'Verify and complete the information'
       : 'Vérifiez et complétez les informations';
-  String get ocrConfidence =>
-      _en ? 'OCR - 95% confidence' : 'OCR - 95% de confiance';
+  String ocrConfidencePercent(String pct) =>
+      _en ? 'OCR — $pct% confidence' : 'OCR — $pct% de confiance';
+  String get confidenceHigh => _en ? 'High confidence' : 'Haute confiance';
+  String get confidenceFair => _en ? 'Fair confidence' : 'Confiance moyenne';
+  String get confidenceLow => _en ? 'Low confidence' : 'Confiance faible';
+  String get confidenceBadgeFair => _en ? 'FAIR' : 'MOYEN';
+  String get confidenceBadgeLow => _en ? 'LOW' : 'FAIBLE';
+  String get capturedCardPhoto => _en ? 'Captured card' : 'Carte capturée';
   String get quickActions => _en ? 'Quick actions' : 'Actions rapides';
   String get contactSaved =>
       _en ? 'Contact saved successfully!' : 'Contact sauvegardé avec succès !';

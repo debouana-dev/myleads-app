@@ -76,9 +76,9 @@ class OcrParser {
     for (final line in lines) {
       // ── 1. Regex extractors ───────────────────────────────────────────────
       // Email
-      final emailMatch =
-          RegExp(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
-              .firstMatch(line);
+      final emailMatch = RegExp(
+              r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
+          .firstMatch(line);
       if (emailMatch != null) {
         email ??= emailMatch.group(0);
         continue;
@@ -89,7 +89,8 @@ class OcrParser {
         r'(?<!\d)(\+?[\d\s\-.\(\)]{6,20})(?!\d)',
       ).firstMatch(line);
       if (phoneMatch != null) {
-        final digits = phoneMatch.group(0)!.replaceAll(RegExp(r'[^\d+]'), '');
+        final digits =
+            phoneMatch.group(0)!.replaceAll(RegExp(r'[^\d+]'), '');
         if (digits.length >= 6) {
           phone ??= phoneMatch.group(0)!.trim();
           if (line.replaceAll(phoneMatch.group(0)!, '').trim().length < 3) {
@@ -100,8 +101,8 @@ class OcrParser {
 
       // Website
       if (RegExp(r'(www\.|https?://|[a-z0-9]+\.[a-z]{2,}/)',
-                  caseSensitive: false)
-              .hasMatch(line) &&
+              caseSensitive: false)
+          .hasMatch(line) &&
           !line.contains('@')) {
         website ??= line;
         continue;
@@ -161,18 +162,33 @@ class OcrParser {
           continue;
         }
 
-        if (RegExp(r'^(poste|fonction|title|role|titre)$', caseSensitive: false)
+        if (RegExp(r'^(poste|fonction|title|role|titre)$',
+                caseSensitive: false)
             .hasMatch(key)) {
           result.putIfAbsent('jobTitle', () => value);
           confidences.putIfAbsent('jobTitle', () => FieldConfidence.high);
           continue;
         }
 
-        if (RegExp(r'^(entreprise|societe|société|company|organisation|org)$',
+        if (RegExp(
+                r'^(entreprise|societe|société|company|organisation|org)$',
                 caseSensitive: false)
             .hasMatch(key)) {
           result.putIfAbsent('company', () => value);
           confidences.putIfAbsent('company', () => FieldConfidence.high);
+          continue;
+        }
+
+        if (RegExp(r'^(nom|name|fn)$', caseSensitive: false).hasMatch(key)) {
+          final parts = value.split(RegExp(r'\s+'));
+          if (parts.length >= 2) {
+            result['firstName'] = parts.first;
+            result['lastName'] = parts.sublist(1).join(' ');
+          } else {
+            result['lastName'] = value;
+          }
+          confidences['firstName'] = FieldConfidence.high;
+          confidences['lastName'] = FieldConfidence.high;
           continue;
         }
 
@@ -192,20 +208,6 @@ class OcrParser {
             .hasMatch(key)) {
           result.putIfAbsent('lastName', () => value);
           confidences.putIfAbsent('lastName', () => FieldConfidence.high);
-          continue;
-        }
-
-        // Full name (explicit label)
-        if (RegExp(r'^(nom|name|fn)$', caseSensitive: false).hasMatch(key)) {
-          final parts = value.split(RegExp(r'\s+'));
-          if (parts.length >= 2) {
-            result['firstName'] = parts.first;
-            result['lastName'] = parts.sublist(1).join(' ');
-          } else {
-            result['lastName'] = value;
-          }
-          confidences['firstName'] = FieldConfidence.high;
-          confidences['lastName'] = FieldConfidence.high;
           continue;
         }
 
@@ -276,9 +278,9 @@ class OcrParser {
         for (final m in hashtagMatches) {
           tags.add(m.group(1)!);
         }
-        final stripped = line
-            .replaceAll(RegExp(r'#([\p{L}\p{N}_\-]+)', unicode: true), '')
-            .trim();
+        final stripped =
+            line.replaceAll(RegExp(r'#([\p{L}\p{N}_\-]+)', unicode: true), '')
+                .trim();
         if (stripped.isEmpty) continue;
       }
 
