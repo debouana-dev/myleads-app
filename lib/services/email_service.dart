@@ -334,6 +334,77 @@ class EmailService {
     );
   }
 
+  /// Notifies [toEmail] that they have been promoted to admin in [orgName].
+  /// Returns true if SMTP delivery succeeded; callers must not depend on the result.
+  static Future<bool> sendAdminPromotedNotification({
+    required String toEmail,
+    required String orgName,
+    required String memberName,
+  }) async {
+    final year = DateTime.now().year;
+    final htmlBody = '''
+<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #0B3C5D; margin: 0;">Me2Leads</h1>
+    <p style="color: #666; font-size: 14px;">Votre assistant de prospection intelligent</p>
+  </div>
+  <div style="background-color: #f9f9f9; border-radius: 8px; padding: 30px; border: 1px solid #eee;">
+    <h2 style="margin-top: 0; color: #333; font-size: 20px;">Vous êtes désormais administrateur</h2>
+    <p>Bonjour $memberName,</p>
+    <p>Vous avez été promu(e) <strong>administrateur</strong> de l'organisation <strong>$orgName</strong> sur Me2Leads.</p>
+    <p>En tant qu'administrateur, vous disposez désormais de tous les droits de gestion : création, modification, historique, rappels et export des contacts.</p>
+    <p style="font-size: 14px; color: #666;">Si vous avez des questions, veuillez contacter le propriétaire de votre organisation.</p>
+  </div>
+  <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
+    <p>&copy; $year Me2Leads. Tous droits réservés.</p>
+  </div>
+</div>
+''';
+    return _sendEmail(
+      to: toEmail,
+      subject: 'Me2Leads — Vous êtes désormais administrateur de $orgName',
+      body:
+          'Bonjour $memberName,\n\nVous avez été promu(e) administrateur de l\'organisation "$orgName" sur Me2Leads.\n\nVous disposez désormais de tous les droits de gestion de l\'organisation.\n\n© $year Me2Leads.',
+      htmlBody: htmlBody,
+    );
+  }
+
+  /// Notifies [toEmail] that their admin role in [orgName] has been revoked.
+  /// Returns true if SMTP delivery succeeded; callers must not depend on the result.
+  static Future<bool> sendAdminDemotedNotification({
+    required String toEmail,
+    required String orgName,
+    required String memberName,
+  }) async {
+    final year = DateTime.now().year;
+    final htmlBody = '''
+<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #0B3C5D; margin: 0;">Me2Leads</h1>
+    <p style="color: #666; font-size: 14px;">Votre assistant de prospection intelligent</p>
+  </div>
+  <div style="background-color: #f9f9f9; border-radius: 8px; padding: 30px; border: 1px solid #eee;">
+    <h2 style="margin-top: 0; color: #333; font-size: 20px;">Votre rôle d'administrateur a été révoqué</h2>
+    <p>Bonjour $memberName,</p>
+    <p>Votre rôle d'<strong>administrateur</strong> dans l'organisation <strong>$orgName</strong> sur Me2Leads a été révoqué par le propriétaire.</p>
+    <p>Vous êtes désormais membre standard et disposez des droits qui vous ont été attribués par l'administration.</p>
+    <p style="font-size: 14px; color: #666;">Si vous avez des questions, veuillez contacter le propriétaire de votre organisation.</p>
+  </div>
+  <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
+    <p>&copy; $year Me2Leads. Tous droits réservés.</p>
+  </div>
+</div>
+''';
+    return _sendEmail(
+      to: toEmail,
+      subject:
+          'Me2Leads — Votre rôle d\'administrateur dans $orgName a été révoqué',
+      body:
+          'Bonjour $memberName,\n\nVotre rôle d\'administrateur dans l\'organisation "$orgName" sur Me2Leads a été révoqué par le propriétaire.\n\nVous êtes désormais membre standard.\n\n© $year Me2Leads.',
+      htmlBody: htmlBody,
+    );
+  }
+
   // ── Internal ────────────────────────────────────────────────────────────
 
   static Future<bool> _sendEmail({

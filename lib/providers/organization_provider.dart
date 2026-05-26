@@ -921,6 +921,34 @@ class OrgNotifier extends StateNotifier<OrgState> {
     ));
   }
 
+  /// Notifies the promoted member by email (fire-and-forget).
+  static void _notifyMemberOfAdminPromotion({
+    required String targetEmail,
+    required String targetName,
+    required String orgName,
+  }) {
+    if (targetEmail.isEmpty) return;
+    unawaited(EmailService.sendAdminPromotedNotification(
+      toEmail: targetEmail,
+      orgName: orgName,
+      memberName: targetName,
+    ));
+  }
+
+  /// Notifies the demoted member by email (fire-and-forget).
+  static void _notifyMemberOfAdminDemotion({
+    required String targetEmail,
+    required String targetName,
+    required String orgName,
+  }) {
+    if (targetEmail.isEmpty) return;
+    unawaited(EmailService.sendAdminDemotedNotification(
+      toEmail: targetEmail,
+      orgName: orgName,
+      memberName: targetName,
+    ));
+  }
+
   /// Notifies the suspended member by email (fire-and-forget).
   static void _notifyMemberOfSuspension({
     required String targetEmail,
@@ -1181,6 +1209,11 @@ class OrgNotifier extends StateNotifier<OrgState> {
     try {
       await DatabaseService.updateOrgMemberRole(
           orgId: org.id, userId: targetUserId, newRole: 'admin');
+      _notifyMemberOfAdminPromotion(
+        targetEmail: target.email ?? '',
+        targetName: target.fullName,
+        orgName: org.name,
+      );
       await refreshMembers();
       _syncMemberToCloud(org.id, targetUserId);
       _backgroundRefreshFromCloud();
@@ -1205,6 +1238,11 @@ class OrgNotifier extends StateNotifier<OrgState> {
     try {
       await DatabaseService.updateOrgMemberRole(
           orgId: org.id, userId: targetUserId, newRole: 'member');
+      _notifyMemberOfAdminDemotion(
+        targetEmail: target.email ?? '',
+        targetName: target.fullName,
+        orgName: org.name,
+      );
       await refreshMembers();
       _syncMemberToCloud(org.id, targetUserId);
       _backgroundRefreshFromCloud();
