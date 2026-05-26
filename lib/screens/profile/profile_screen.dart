@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -436,7 +437,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             : l10n.orgMemberMenuDesc,
                         AppColors.primary.withValues(alpha: 0.08),
                         AppColors.primary,
-                        () => context.push('/organization'),
+                        () async {
+                          final l10nRead = ref.read(l10nProvider);
+                          final connectivity =
+                              await Connectivity().checkConnectivity();
+                          if (!context.mounted) return;
+                          if (connectivity.contains(ConnectivityResult.none)) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content:
+                                  Text(l10nRead.orgScreenRequiresInternet),
+                              backgroundColor: AppColors.hot,
+                              duration: const Duration(seconds: 2),
+                            ));
+                            return;
+                          }
+                          context.push('/organization');
+                        },
                       )
                     else ...[
                       _menuItem(

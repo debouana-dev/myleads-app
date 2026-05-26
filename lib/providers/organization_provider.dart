@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import '../core/l10n/app_l10n.dart';
 import '../models/organization.dart';
 import '../services/background_task.dart';
 import '../services/database_service.dart';
+import '../services/email_service.dart';
 import '../services/remote_sync_service.dart';
 import '../services/storage_service.dart';
 
@@ -28,6 +30,8 @@ class OrgState {
       currentUserCanExportContacts; // can export shared org contacts
   // Deduplicated total contact count for the org (excludes hidden duplicates).
   final int uniqueContactCount;
+  // True when the current user is the org creator (role = 'owner').
+  final bool currentUserIsOwner;
 
   const OrgState({
     this.organization,
@@ -40,6 +44,7 @@ class OrgState {
     this.currentUserCanViewHistory = true,
     this.currentUserCanExportContacts = false,
     this.uniqueContactCount = 0,
+    this.currentUserIsOwner = false,
   });
 
   // ── Derived from organization ──────────────────────────────────────────────
@@ -67,6 +72,7 @@ class OrgState {
     bool? currentUserCanViewHistory,
     bool? currentUserCanExportContacts,
     int? uniqueContactCount,
+    bool? currentUserIsOwner,
     bool clearError = false,
     bool clearOrg = false,
   }) {
@@ -84,6 +90,7 @@ class OrgState {
       currentUserCanExportContacts:
           currentUserCanExportContacts ?? this.currentUserCanExportContacts,
       uniqueContactCount: uniqueContactCount ?? this.uniqueContactCount,
+      currentUserIsOwner: currentUserIsOwner ?? this.currentUserIsOwner,
     );
   }
 }
@@ -140,6 +147,19 @@ class OrgNotifier extends StateNotifier<OrgState> {
       final uniqueCount =
           await DatabaseService.getOrgDeduplicatedContactCount(org.id);
 
+      // Guard against stale cached orgRole after v25 migration: if the member
+      // row says 'owner' but the user session still says 'admin', correct it.
+      final currentMemberMatches = members.where((m) => m.userId == user.id);
+      final currentMember =
+          currentMemberMatches.isNotEmpty ? currentMemberMatches.first : null;
+      if (currentMember != null && currentMember.role != user.orgRole) {
+        final corrected = user.copyWith(orgRole: currentMember.role);
+        await DatabaseService.updateUser(corrected);
+        await StorageService.setCurrentSession(
+            corrected, user.sessionToken ?? '');
+      }
+      final isOwner = currentMember?.isOwner ?? false;
+
       // Migration: re-encrypt any personal-key contacts to the org key for
       // active members. Idempotent — already org-encrypted contacts are skipped.
       final memberStatus = await DatabaseService.getMemberStatus(
@@ -164,6 +184,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
         currentUserCanViewHistory: privs.canViewHistory,
         currentUserCanExportContacts: privs.canExportContacts,
         uniqueContactCount: uniqueCount,
+        currentUserIsOwner: isOwner,
       );
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
@@ -184,6 +205,10 @@ class OrgNotifier extends StateNotifier<OrgState> {
           userId: user.id,
           orgId: org.id,
         );
+        final currentMemberMatches = members.where((m) => m.userId == user.id);
+        final currentMember =
+            currentMemberMatches.isNotEmpty ? currentMemberMatches.first : null;
+        final isOwner = currentMember?.isOwner ?? false;
         state = state.copyWith(
           members: members,
           uniqueContactCount: uniqueCount,
@@ -192,6 +217,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
           currentUserCanViewReminders: privs.canViewReminders,
           currentUserCanViewHistory: privs.canViewHistory,
           currentUserCanExportContacts: privs.canExportContacts,
+          currentUserIsOwner: isOwner,
         );
       } else {
         state =
@@ -211,15 +237,17 @@ class OrgNotifier extends StateNotifier<OrgState> {
   }) async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
-    if (user.orgRole != 'admin') return "Action réservée à l'administrateur";
+    if (user.orgRole != 'owner' && user.orgRole != 'admin') {
+      return "Action réservée à l'administrateur";
+    }
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
-    // Cannot change admin privileges.
+    // Cannot change owner or admin privileges (always full).
     final target = state.members.firstWhere(
       (m) => m.userId == userId,
       orElse: () => throw Exception('Membre introuvable'),
     );
-    if (target.role == 'admin') {
+    if (target.role == 'admin' || target.role == 'owner') {
       return "Les droits de l'administrateur ne peuvent pas être modifiés";
     }
 
@@ -237,6 +265,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
 
       // Sync updated privileges to the cloud
       _syncMemberToCloud(org.id, userId);
+      _backgroundRefreshFromCloud();
 
       return null;
     } catch (e) {
@@ -280,10 +309,10 @@ class OrgNotifier extends StateNotifier<OrgState> {
         id: _uuid.v4(),
         orgId: orgId,
         userId: user.id,
-        role: 'admin',
+        role: 'owner',
       );
 
-      final updated = user.copyWith(organizationId: orgId, orgRole: 'admin');
+      final updated = user.copyWith(organizationId: orgId, orgRole: 'owner');
       await DatabaseService.updateUser(updated);
       await StorageService.setCurrentSession(updated, user.sessionToken ?? '');
 
@@ -323,7 +352,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
   }) async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
-    if (user.orgRole != 'admin') return "Action réservée à l'administrateur";
+    if (user.orgRole != 'owner') return _l10n.orgOwnerOnlyAction;
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
 
@@ -348,6 +377,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
 
       // Sync updated license/expiry to the cloud
       _syncOrgToCloud(org.id);
+      _backgroundRefreshFromCloud();
 
       return null;
     } catch (e) {
@@ -465,6 +495,13 @@ class OrgNotifier extends StateNotifier<OrgState> {
          currentUserCanExportContacts: privs.canExportContacts,
        );
 
+       _notifyAdminsOfNewMember(
+         members: members,
+         orgName: org.name,
+         memberName: user.fullName,
+         joiningUserId: user.id,
+       );
+
        // Sync the join event to the cloud in the background
        _syncJoinToCloud(user.id);
 
@@ -521,17 +558,25 @@ class OrgNotifier extends StateNotifier<OrgState> {
   Future<String?> removeMember(String targetUserId) async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
-    if (user.orgRole != 'admin') return "Action réservée à l'administrateur";
+    if (user.orgRole != 'owner' && user.orgRole != 'admin') {
+      return "Action réservée à l'administrateur";
+    }
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
-    if (targetUserId == user.id)
+    if (targetUserId == user.id) {
       return "Utilisez \"Quitter l'organisation\" pour vous retirer";
+    }
 
     try {
       final target = state.members.firstWhere(
         (m) => m.userId == targetUserId,
         orElse: () => throw Exception('Membre introuvable'),
       );
+      // Admin cannot remove owner or other admins.
+      if (user.orgRole == 'admin' &&
+          (target.role == 'admin' || target.role == 'owner')) {
+        return _l10n.adminCannotManageAdmins;
+      }
 
       // Get member info before deletion to sync it if needed
       final memberRow = await DatabaseService.getRawOrgMemberRowByOrgAndUser(org.id, targetUserId);
@@ -555,6 +600,12 @@ class OrgNotifier extends StateNotifier<OrgState> {
        if (memberRow != null) {
          _syncRemovalToCloud(org.id, memberRow['id'] as String, targetUserId);
        }
+       _notifyMemberOfRemoval(
+         targetEmail: target.email ?? '',
+         targetName: target.fullName,
+         orgName: org.name,
+       );
+       _backgroundRefreshFromCloud();
 
        return null;
      } catch (e) {
@@ -590,8 +641,14 @@ class OrgNotifier extends StateNotifier<OrgState> {
     if (org == null) return 'Aucune organisation';
 
     try {
+      // Owner must delete the org instead of leaving.
+      if (user.orgRole == 'owner') return _l10n.ownerCannotLeaveOrg;
+
       final isLastAdmin = user.orgRole == 'admin' &&
-          state.members.where((m) => m.role == 'admin').length == 1;
+          state.members
+                  .where((m) => m.role == 'admin' || m.role == 'owner')
+                  .length ==
+              1;
 
       if (isLastAdmin && state.members.length > 1) {
         return "Transférez l'administration avant de quitter, ou supprimez l'organisation.";
@@ -645,6 +702,13 @@ class OrgNotifier extends StateNotifier<OrgState> {
          if (memberRow != null) {
             _syncLeaveToCloud(updated.id, org.id, memberRow['id'] as String);
          }
+         // Notify the org owner (and admins, if departing member is not an admin) by email (fire-and-forget)
+         _notifyOwnerOfMemberLeave(
+           members: state.members,
+           orgName: org.name,
+           memberName: user.fullName,
+           departingRole: user.orgRole ?? 'member',
+         );
        }
 
        state = const OrgState();
@@ -654,8 +718,111 @@ class OrgNotifier extends StateNotifier<OrgState> {
      }
    }
 
-   /// Syncs the user leaving the organization to the cloud in the background (fire-and-forget).
-   static void _syncLeaveToCloud(String userId, String orgId, String memberId) {
+  /// Owner transfers their role to an existing admin and leaves the organization.
+  /// All contacts move to the new owner; personal copies of pre-join contacts
+  /// are retained by the outgoing owner.
+  Future<String?> transferOwnershipAndLeave(String newOwnerId) async {
+    final user = StorageService.currentUser;
+    if (user == null) return 'Aucun utilisateur connecté';
+    if (user.orgRole != 'owner') return _l10n.orgOwnerOnlyAction;
+    final org = state.organization;
+    if (org == null) return 'Aucune organisation';
+
+    final target = state.members.firstWhere(
+      (m) => m.userId == newOwnerId,
+      orElse: () => throw Exception('Membre introuvable'),
+    );
+    if (target.role != 'admin') return _l10n.transferOwnershipAdminOnly;
+    if (target.status != 'active') return _l10n.transferOwnershipAdminOnly;
+
+    try {
+      final memberRow =
+          await DatabaseService.getRawOrgMemberRowByOrgAndUser(org.id, user.id);
+
+      // 1. Transfer contacts + promote new owner in a single DB transaction.
+      await DatabaseService.transferOwnershipOnLeave(
+        outgoingOwnerId: user.id,
+        newOwnerId: newOwnerId,
+        orgId: org.id,
+      );
+
+      // 2. Re-encrypt outgoing owner's personal copies from org key → personal key.
+      await DatabaseService.reencryptUserContactsToPersonalKey(
+        userId: user.id,
+        orgId: org.id,
+        userEmail: user.email,
+      );
+
+      // 3. Remove outgoing owner's member row.
+      await DatabaseService.removeOrgMember(org.id, user.id);
+
+      // 4. Clear outgoing owner's user row.
+      final updated = user.copyWith(organizationId: null, orgRole: null);
+      await DatabaseService.updateUser(updated);
+      await StorageService.setCurrentSession(updated, user.sessionToken ?? '');
+      await cancelBusinessSync();
+
+      // 5. Cloud sync (fire-and-forget).
+      if (memberRow != null) {
+        _syncOwnershipTransferToCloud(
+          outgoingUserId: user.id,
+          outgoingMemberId: memberRow['id'] as String,
+          newOwnerId: newOwnerId,
+          orgId: org.id,
+        );
+      }
+
+      // 6. Email the new owner (fire-and-forget; failure is non-fatal).
+      final newOwnerEmail =
+          target.email?.isNotEmpty == true ? target.email! : '';
+      if (newOwnerEmail.isNotEmpty) {
+        unawaited(EmailService.sendOwnershipTransferNotification(
+          toEmail: newOwnerEmail,
+          orgName: org.name,
+          outgoingOwnerName: user.fullName,
+        ));
+      }
+
+      state = const OrgState();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  /// Syncs the ownership transfer to the cloud (fire-and-forget).
+  static void _syncOwnershipTransferToCloud({
+    required String outgoingUserId,
+    required String outgoingMemberId,
+    required String newOwnerId,
+    required String orgId,
+  }) {
+    RemoteSyncService.fireAndForget((conn) async {
+      final outgoingUserRow = await DatabaseService.getRawUserRow(outgoingUserId);
+      if (outgoingUserRow != null) {
+        await RemoteSyncService.upsertUser(conn, outgoingUserRow);
+      }
+      await RemoteSyncService.deleteOrgMember(conn, outgoingMemberId);
+
+      final newMemberRow = await DatabaseService.getRawOrgMemberRowByOrgAndUser(
+          orgId, newOwnerId);
+      if (newMemberRow != null) {
+        await RemoteSyncService.upsertOrgMember(conn, newMemberRow);
+      }
+      final newUserRow = await DatabaseService.getRawUserRow(newOwnerId);
+      if (newUserRow != null) {
+        await RemoteSyncService.upsertUser(conn, newUserRow);
+      }
+
+      final orgRow = await DatabaseService.getRawOrganizationRow(orgId);
+      if (orgRow != null) {
+        await RemoteSyncService.upsertOrganization(conn, orgRow);
+      }
+    });
+  }
+
+  /// Syncs the user leaving the organization to the cloud in the background (fire-and-forget).
+  static void _syncLeaveToCloud(String userId, String orgId, String memberId) {
      RemoteSyncService.fireAndForget((conn) async {
        // Push updated user row with cleared organization fields
        final userRow = await DatabaseService.getRawUserRow(userId);
@@ -674,11 +841,133 @@ class OrgNotifier extends StateNotifier<OrgState> {
      });
    }
 
+  /// Notifies the org owner by email that [memberName] voluntarily left (fire-and-forget).
+  static void _notifyOwnerOfMemberLeave({
+    required List<OrgMember> members,
+    required String orgName,
+    required String memberName,
+    required String departingRole,
+  }) {
+    final recipients = members
+        .where((m) =>
+            m.role == 'owner' ||
+            (departingRole != 'admin' && m.role == 'admin'))
+        .toList();
+    if (recipients.isEmpty) return;
+    unawaited(Future(() async {
+      for (final m in recipients) {
+        final email = m.email;
+        if (email == null || email.isEmpty) continue;
+        await EmailService.sendMemberLeaveNotification(
+          toEmail: email,
+          orgName: orgName,
+          memberName: memberName,
+        );
+      }
+    }));
+  }
+
+  /// Notifies the org owner and admins by email that [memberName] joined (fire-and-forget).
+  static void _notifyAdminsOfNewMember({
+    required List<OrgMember> members,
+    required String orgName,
+    required String memberName,
+    required String joiningUserId,
+  }) {
+    final recipients = members
+        .where((m) =>
+            m.userId != joiningUserId &&
+            (m.role == 'owner' || m.role == 'admin'))
+        .toList();
+    if (recipients.isEmpty) return;
+    unawaited(Future(() async {
+      for (final m in recipients) {
+        final email = m.email;
+        if (email == null || email.isEmpty) continue;
+        await EmailService.sendMemberJoinNotification(
+          toEmail: email,
+          orgName: orgName,
+          memberName: memberName,
+        );
+      }
+    }));
+  }
+
+  /// Notifies the removed member by email (fire-and-forget).
+  static void _notifyMemberOfRemoval({
+    required String targetEmail,
+    required String targetName,
+    required String orgName,
+  }) {
+    if (targetEmail.isEmpty) return;
+    unawaited(EmailService.sendMemberRemovedNotification(
+      toEmail: targetEmail,
+      orgName: orgName,
+      memberName: targetName,
+    ));
+  }
+
+  /// Notifies the reactivated member by email (fire-and-forget).
+  static void _notifyMemberOfReactivation({
+    required String targetEmail,
+    required String targetName,
+    required String orgName,
+  }) {
+    if (targetEmail.isEmpty) return;
+    unawaited(EmailService.sendMemberReactivatedNotification(
+      toEmail: targetEmail,
+      orgName: orgName,
+      memberName: targetName,
+    ));
+  }
+
+  /// Notifies the promoted member by email (fire-and-forget).
+  static void _notifyMemberOfAdminPromotion({
+    required String targetEmail,
+    required String targetName,
+    required String orgName,
+  }) {
+    if (targetEmail.isEmpty) return;
+    unawaited(EmailService.sendAdminPromotedNotification(
+      toEmail: targetEmail,
+      orgName: orgName,
+      memberName: targetName,
+    ));
+  }
+
+  /// Notifies the demoted member by email (fire-and-forget).
+  static void _notifyMemberOfAdminDemotion({
+    required String targetEmail,
+    required String targetName,
+    required String orgName,
+  }) {
+    if (targetEmail.isEmpty) return;
+    unawaited(EmailService.sendAdminDemotedNotification(
+      toEmail: targetEmail,
+      orgName: orgName,
+      memberName: targetName,
+    ));
+  }
+
+  /// Notifies the suspended member by email (fire-and-forget).
+  static void _notifyMemberOfSuspension({
+    required String targetEmail,
+    required String targetName,
+    required String orgName,
+  }) {
+    if (targetEmail.isEmpty) return;
+    unawaited(EmailService.sendMemberSuspendedNotification(
+      toEmail: targetEmail,
+      orgName: orgName,
+      memberName: targetName,
+    ));
+  }
+
   /// Admin deletes the entire organization.
   Future<String?> deleteOrganization() async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
-    if (user.orgRole != 'admin') return "Action réservée à l'administrateur";
+    if (user.orgRole != 'owner') return _l10n.orgOwnerOnlyAction;
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
 
@@ -755,17 +1044,23 @@ class OrgNotifier extends StateNotifier<OrgState> {
   Future<String?> suspendMember(String targetUserId) async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
-    if (user.orgRole != 'admin') return "Action réservée à l'administrateur";
+    if (user.orgRole != 'owner' && user.orgRole != 'admin') {
+      return "Action réservée à l'administrateur";
+    }
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
-    if (targetUserId == user.id)
+    if (targetUserId == user.id) {
       return 'Vous ne pouvez pas vous suspendre vous-même';
+    }
     final target = state.members.firstWhere(
       (m) => m.userId == targetUserId,
       orElse: () => throw Exception('Membre introuvable'),
     );
-    if (target.role == 'admin') {
-      return "Impossible de suspendre un administrateur";
+    // Nobody can suspend the owner.
+    if (target.role == 'owner') return _l10n.cannotSuspendOwner;
+    // Admin cannot suspend other admins.
+    if (user.orgRole == 'admin' && target.role == 'admin') {
+      return _l10n.adminCannotManageAdmins;
     }
     try {
       await DatabaseService.transferNonDuplicateContactsToAdmin(
@@ -785,6 +1080,12 @@ class OrgNotifier extends StateNotifier<OrgState> {
 
        // Sync the member suspension to the cloud in the background
        _syncMemberToCloud(org.id, targetUserId);
+       _notifyMemberOfSuspension(
+         targetEmail: target.email ?? '',
+         targetName: target.fullName,
+         orgName: org.name,
+       );
+       _backgroundRefreshFromCloud();
 
        return null;
      } catch (e) {
@@ -802,7 +1103,9 @@ class OrgNotifier extends StateNotifier<OrgState> {
   Future<String?> reactivateMember(String targetUserId) async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
-    if (user.orgRole != 'admin') return "Action réservée à l'administrateur";
+    if (user.orgRole != 'owner' && user.orgRole != 'admin') {
+      return "Action réservée à l'administrateur";
+    }
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
     try {
@@ -810,6 +1113,10 @@ class OrgNotifier extends StateNotifier<OrgState> {
         (m) => m.userId == targetUserId,
         orElse: () => throw Exception('Membre introuvable'),
       );
+      // Admin cannot reactivate a suspended admin — only owner can.
+      if (user.orgRole == 'admin' && target.role == 'admin') {
+        return _l10n.adminCannotManageAdmins;
+      }
       await DatabaseService.updateMemberStatus(
           orgId: org.id, userId: targetUserId, status: 'active');
       // Re-encrypt the reactivated member's contacts back to the org key.
@@ -824,6 +1131,12 @@ class OrgNotifier extends StateNotifier<OrgState> {
 
        // Sync the member reactivation to the cloud in the background
        _syncMemberToCloud(org.id, targetUserId);
+       _notifyMemberOfReactivation(
+         targetEmail: target.email ?? '',
+         targetName: target.fullName,
+         orgName: org.name,
+       );
+       _backgroundRefreshFromCloud();
 
        return null;
      } catch (e) {
@@ -835,7 +1148,9 @@ class OrgNotifier extends StateNotifier<OrgState> {
   Future<String?> regenerateInviteCode() async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
-    if (user.orgRole != 'admin') return "Action réservée à l'administrateur";
+    if (user.orgRole != 'owner' && user.orgRole != 'admin') {
+      return "Action réservée à l'administrateur";
+    }
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
     try {
@@ -846,6 +1161,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
 
       // Sync updated invite code to the cloud
       _syncOrgToCloud(org.id);
+      _backgroundRefreshFromCloud();
 
       return null;
     } catch (e) {
@@ -857,7 +1173,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
   Future<String?> updateOrgName(String newName) async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
-    if (user.orgRole != 'admin') return "Action réservée à l'administrateur";
+    if (user.orgRole != 'owner') return _l10n.orgOwnerOnlyAction;
     if (newName.trim().isEmpty) return 'Le nom est obligatoire';
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
@@ -869,7 +1185,67 @@ class OrgNotifier extends StateNotifier<OrgState> {
 
       // Sync updated name to the cloud
       _syncOrgToCloud(org.id);
+      _backgroundRefreshFromCloud();
 
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  /// Owner promotes a member to admin role.
+  Future<String?> assignAdminRole(String targetUserId) async {
+    final user = StorageService.currentUser;
+    if (user == null) return 'Aucun utilisateur connecté';
+    if (user.orgRole != 'owner') return _l10n.orgOwnerOnlyAction;
+    final org = state.organization;
+    if (org == null) return 'Aucune organisation';
+    final target = state.members.firstWhere(
+      (m) => m.userId == targetUserId,
+      orElse: () => throw Exception('Membre introuvable'),
+    );
+    if (target.role != 'member') return 'Ce membre est déjà administrateur';
+    if (target.status != 'active') return _l10n.cannotAssignAdminToSuspended;
+    try {
+      await DatabaseService.updateOrgMemberRole(
+          orgId: org.id, userId: targetUserId, newRole: 'admin');
+      _notifyMemberOfAdminPromotion(
+        targetEmail: target.email ?? '',
+        targetName: target.fullName,
+        orgName: org.name,
+      );
+      await refreshMembers();
+      _syncMemberToCloud(org.id, targetUserId);
+      _backgroundRefreshFromCloud();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  /// Owner demotes an admin back to member.
+  Future<String?> revokeAdminRole(String targetUserId) async {
+    final user = StorageService.currentUser;
+    if (user == null) return 'Aucun utilisateur connecté';
+    if (user.orgRole != 'owner') return _l10n.orgOwnerOnlyAction;
+    final org = state.organization;
+    if (org == null) return 'Aucune organisation';
+    final target = state.members.firstWhere(
+      (m) => m.userId == targetUserId,
+      orElse: () => throw Exception('Membre introuvable'),
+    );
+    if (target.role != 'admin') return "Ce membre n'est pas administrateur";
+    try {
+      await DatabaseService.updateOrgMemberRole(
+          orgId: org.id, userId: targetUserId, newRole: 'member');
+      _notifyMemberOfAdminDemotion(
+        targetEmail: target.email ?? '',
+        targetName: target.fullName,
+        orgName: org.name,
+      );
+      await refreshMembers();
+      _syncMemberToCloud(org.id, targetUserId);
+      _backgroundRefreshFromCloud();
       return null;
     } catch (e) {
       return e.toString();
@@ -895,16 +1271,34 @@ class OrgNotifier extends StateNotifier<OrgState> {
     return List.generate(8, (_) => chars[rand.nextInt(chars.length)]).join();
   }
 
-  /// Refresh organization data from cloud (pull from MySQL), then reload locally.
-  /// Called by pull-to-refresh on the organization admin screen.
+  /// Silently pulls the latest org data from cloud and refreshes local state
+  /// after a management action. Does not set isLoading — runs transparently.
+  void _backgroundRefreshFromCloud() {
+    final orgId = state.organization?.id;
+    if (orgId == null) return;
+    unawaited(Future(() async {
+      await RemoteSyncService.pullOrganizationDataById(orgId);
+      await loadForCurrentUser();
+    }));
+  }
+
+  /// Refresh organization data from cloud, then reload locally.
+  /// Called on screen entry, pull-to-refresh, and the AppBar refresh button.
+  /// Handles first-open when state.organization is not yet populated.
   Future<void> refreshFromCloud() async {
-    final org = state.organization;
-    if (org == null) return;
+    final user = StorageService.currentUser;
+    if (user?.organizationId == null) return;
+
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      // 1. Pull organization data from cloud
-      await RemoteSyncService.pullOrganizationDataById(org.id);
-      // 2. Reload from local database
+      final orgId = state.organization?.id ??
+          (await DatabaseService.findOrganizationById(user!.organizationId!))
+              ?.id;
+      if (orgId == null) {
+        state = const OrgState();
+        return;
+      }
+      await RemoteSyncService.pullOrganizationDataById(orgId);
       await loadForCurrentUser();
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
@@ -949,4 +1343,9 @@ final orgCanExportContactsProvider = Provider<bool>((ref) {
   if (user?.organizationId == null)
     return true; // solo: always can export own contacts
   return ref.watch(organizationProvider).currentUserCanExportContacts;
+});
+
+/// True when the current user is the org creator (role = 'owner').
+final orgIsOwnerProvider = Provider<bool>((ref) {
+  return StorageService.currentUser?.orgRole == 'owner';
 });
