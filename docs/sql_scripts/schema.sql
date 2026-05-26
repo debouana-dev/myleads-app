@@ -168,14 +168,14 @@ CREATE TABLE IF NOT EXISTS "organizations" (
 
 
 -- ============================================================
--- TABLE: organization_members  (v7 + v8 privileges + v10 reminder access + v12 history access + v18 member profile denormalization + v20 export access + v21 email encryption)
--- role: admin | member
+-- TABLE: organization_members  (v7 + v8 privileges + v10 reminder access + v12 history access + v18 member profile denormalization + v20 export access + v21 email encryption + v24 phone + v25 owner role)
+-- role: owner | admin | member
 -- status: active | suspended
 -- Denormalized member profile fields are stored here for fast local display.
 -- can_edit / can_create / can_view_reminders / can_view_history / can_export_contacts: per-member flags.
 -- Admins always have all five set to 1 regardless of stored value.
--- email: AES-256-CBC ciphertext, key = SHA256(SECRET_KEY:organization_id).
---        Same encryption scheme as contacts.email / contacts.phone (v21+).
+-- email: AES-256-CBC ciphertext, key = SHA256(SECRET_KEY:organization_id). (v21+)
+-- phone: AES-256-CBC ciphertext, key = SHA256(SECRET_KEY:organization_id). (v24+)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS "organization_members" (
   "id"                  VARCHAR(36)  NOT NULL,
@@ -187,6 +187,7 @@ CREATE TABLE IF NOT EXISTS "organization_members" (
   "first_name"          VARCHAR(255) NOT NULL DEFAULT '',
   "last_name"           VARCHAR(255) NOT NULL DEFAULT '',
   "email"               VARCHAR(255),
+  "phone"               VARCHAR(100),
   "nickname"            VARCHAR(255),
   "company"             VARCHAR(255),
   "biography"           TEXT,
@@ -331,6 +332,10 @@ UPDATE "organization_members" SET "can_export_contacts" = 1 WHERE "role" = 'admi
 ALTER TABLE "payment_history"
   ADD COLUMN IF NOT EXISTS "account_type" VARCHAR(20) NOT NULL DEFAULT 'individual';
 
+-- v24: denormalized member phone number, encrypted with org key
+ALTER TABLE "organization_members"
+  ADD COLUMN IF NOT EXISTS "phone" VARCHAR(100);
+
 -- v21: encrypt existing plaintext member emails with the org ID as key material.
 -- Valid email addresses contain '@'; AES-CBC base64 output never does.
 -- This UPDATE is a one-time data migration — no column type change required.
@@ -370,6 +375,9 @@ ALTER TABLE "payment_history"
 --         whether the payment was made by a personal subscriber or an org admin
 -- v23   : users.apple_user_identifier — Apple Sign-In unique identifier for
 --         multi-device authentication when Apple returns userIdentifier only
+-- v24   : organization_members.phone — AES-256-CBC ciphertext, key = SHA256(SECRET_KEY:org_id)
+-- v25   : organization_members.role gains 'owner' value — org creator promoted from
+--         'admin' to 'owner'; users.org_role updated to match
 -- ============================================================
 
 
@@ -380,3 +388,26 @@ ALTER TABLE "payment_history"
 
 ALTER TABLE "users"
 ADD COLUMN IF NOT EXISTS "apple_user_identifier" VARCHAR(255) DEFAULT NULL;
+
+-- ============================================================
+-- UPGRADE SCRIPT (v24 → v25)
+-- Introduce 'owner' role: promote org creator member rows from
+-- 'admin' to 'owner' and sync users.org_role accordingly.
+-- ============================================================
+
+UPDATE "organization_members"
+  SET "role" = 'owner'
+  WHERE "role" = 'admin'
+    AND "user_id" IN (
+      SELECT "owner_id" FROM "organizations"
+      WHERE "organizations"."id" = "organization_members"."organization_id"
+    );
+
+UPDATE "users"
+  SET "org_role" = 'owner'
+  WHERE "organization_id" IS NOT NULL
+    AND "org_role" = 'admin'
+    AND "id" IN (
+      SELECT "owner_id" FROM "organizations"
+      WHERE "organizations"."id" = "users"."organization_id"
+    );

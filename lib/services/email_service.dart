@@ -105,6 +105,306 @@ class EmailService {
     );
   }
 
+  /// Notifies [toEmail] that they have become the owner of [orgName].
+  /// [outgoingOwnerName] is the display name of the previous owner.
+  /// Returns true if SMTP delivery succeeded; callers must not depend on the result.
+  static Future<bool> sendOwnershipTransferNotification({
+    required String toEmail,
+    required String orgName,
+    required String outgoingOwnerName,
+  }) async {
+    final year = DateTime.now().year;
+    final htmlBody = '''
+<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #0B3C5D; margin: 0;">Me2Leads</h1>
+    <p style="color: #666; font-size: 14px;">Votre assistant de prospection intelligent</p>
+  </div>
+
+  <div style="background-color: #f9f9f9; border-radius: 8px; padding: 30px; border: 1px solid #eee;">
+    <h2 style="margin-top: 0; color: #333; font-size: 20px;">Vous êtes maintenant propriétaire de l\'organisation</h2>
+    <p>Bonjour,</p>
+    <p><strong>$outgoingOwnerName</strong> vous a transféré la propriété de l\'organisation <strong>$orgName</strong> sur Me2Leads.</p>
+    <p>Vous disposez désormais de tous les droits de propriétaire, notamment :</p>
+    <ul style="color: #444;">
+      <li>Gérer les membres et leurs rôles</li>
+      <li>Renommer ou supprimer l\'organisation</li>
+      <li>Gérer les licences et les abonnements</li>
+    </ul>
+    <p style="font-size: 14px; color: #666;">Connectez-vous à l\'application Me2Leads pour accéder à votre tableau de bord d\'organisation.</p>
+  </div>
+
+  <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
+    <p>Si vous pensez avoir reçu cet email par erreur, contactez le support Me2Leads.</p>
+    <p>&copy; $year Me2Leads. Tous droits réservés.</p>
+  </div>
+</div>
+''';
+
+    return _sendEmail(
+      to: toEmail,
+      subject: 'Me2Leads — Vous êtes maintenant propriétaire de $orgName',
+      body: 'Bonjour,\n\n$outgoingOwnerName vous a transféré la propriété de'
+          ' l\'organisation "$orgName" sur Me2Leads.\n\n'
+          'Connectez-vous à l\'application pour gérer votre organisation.\n\n'
+          '© $year Me2Leads.',
+      htmlBody: htmlBody,
+    );
+  }
+
+  /// Notifies the org owner that [memberName] has voluntarily left [orgName].
+  /// Returns true if SMTP delivery succeeded; callers must not depend on the result.
+  static Future<bool> sendMemberLeaveNotification({
+    required String toEmail,
+    required String orgName,
+    required String memberName,
+  }) async {
+    final year = DateTime.now().year;
+    final htmlBody = '''
+<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #0B3C5D; margin: 0;">Me2Leads</h1>
+    <p style="color: #666; font-size: 14px;">Votre assistant de prospection intelligent</p>
+  </div>
+
+  <div style="background-color: #f9f9f9; border-radius: 8px; padding: 30px; border: 1px solid #eee;">
+    <h2 style="margin-top: 0; color: #333; font-size: 20px;">Un membre a quitté votre organisation</h2>
+    <p>Bonjour,</p>
+    <p><strong>$memberName</strong> a quitté l'organisation <strong>$orgName</strong>.</p>
+    <p>Les contacts qu'il/elle avait apportés à l'organisation ont été copiés dans votre compte. Les contacts créés pendant son appartenance à l'organisation ont été transférés à votre compte.</p>
+    <p style="font-size: 14px; color: #666;">Connectez-vous à l'application Me2Leads pour consulter et gérer vos contacts.</p>
+  </div>
+
+  <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
+    <p>Si vous pensez avoir reçu cet email par erreur, contactez le support Me2Leads.</p>
+    <p>&copy; $year Me2Leads. Tous droits réservés.</p>
+  </div>
+</div>
+''';
+
+    return _sendEmail(
+      to: toEmail,
+      subject: 'Me2Leads — $memberName a quitté $orgName',
+      body: 'Bonjour,\n\n$memberName a quitté l\'organisation "$orgName".\n\n'
+          'Les contacts apportés lors de son adhésion ont été copiés dans votre compte. '
+          'Les contacts créés pendant son appartenance ont été transférés à votre compte.\n\n'
+          '© $year Me2Leads.',
+      htmlBody: htmlBody,
+    );
+  }
+
+  /// Notifies the org owner/admins that [memberName] has joined [orgName].
+  /// Returns true if SMTP delivery succeeded; callers must not depend on the result.
+  static Future<bool> sendMemberJoinNotification({
+    required String toEmail,
+    required String orgName,
+    required String memberName,
+  }) async {
+    final year = DateTime.now().year;
+    final htmlBody = '''
+<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #0B3C5D; margin: 0;">Me2Leads</h1>
+    <p style="color: #666; font-size: 14px;">Votre assistant de prospection intelligent</p>
+  </div>
+
+  <div style="background-color: #f9f9f9; border-radius: 8px; padding: 30px; border: 1px solid #eee;">
+    <h2 style="margin-top: 0; color: #333; font-size: 20px;">Un nouveau membre a rejoint votre organisation</h2>
+    <p>Bonjour,</p>
+    <p><strong>$memberName</strong> a rejoint l\'organisation <strong>$orgName</strong>.</p>
+    <p style="font-size: 14px; color: #666;">Connectez-vous à l\'application Me2Leads pour gérer les membres et leurs privilèges.</p>
+  </div>
+
+  <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
+    <p>Si vous pensez avoir reçu cet email par erreur, contactez le support Me2Leads.</p>
+    <p>&copy; $year Me2Leads. Tous droits réservés.</p>
+  </div>
+</div>
+''';
+
+    return _sendEmail(
+      to: toEmail,
+      subject: 'Me2Leads — $memberName a rejoint $orgName',
+      body: 'Bonjour,\n\n$memberName a rejoint votre organisation "$orgName".\n\n'
+          'Connectez-vous à l\'application pour gérer vos membres.\n\n'
+          '© $year Me2Leads.',
+      htmlBody: htmlBody,
+    );
+  }
+
+  /// Notifies [toEmail] that their access to [orgName] has been suspended.
+  /// Returns true if SMTP delivery succeeded; callers must not depend on the result.
+  static Future<bool> sendMemberSuspendedNotification({
+    required String toEmail,
+    required String orgName,
+    required String memberName,
+  }) async {
+    final year = DateTime.now().year;
+    final htmlBody = '''
+<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #0B3C5D; margin: 0;">Me2Leads</h1>
+    <p style="color: #666; font-size: 14px;">Votre assistant de prospection intelligent</p>
+  </div>
+  <div style="background-color: #f9f9f9; border-radius: 8px; padding: 30px; border: 1px solid #eee;">
+    <h2 style="margin-top: 0; color: #333; font-size: 20px;">Votre accès à l'organisation a été suspendu</h2>
+    <p>Bonjour $memberName,</p>
+    <p>Votre accès à l'organisation <strong>$orgName</strong> sur Me2Leads a été suspendu par un administrateur.</p>
+    <p>Vos contacts personnels restent accessibles dans votre compte.</p>
+    <p style="font-size: 14px; color: #666;">Si vous pensez qu'il s'agit d'une erreur, veuillez contacter l'administrateur de votre organisation.</p>
+  </div>
+  <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
+    <p>&copy; $year Me2Leads. Tous droits réservés.</p>
+  </div>
+</div>
+''';
+    return _sendEmail(
+      to: toEmail,
+      subject: 'Me2Leads — Votre accès à $orgName a été suspendu',
+      body: 'Bonjour $memberName,\n\nVotre accès à l\'organisation "$orgName" a été suspendu par un administrateur.\n\nVos contacts personnels restent accessibles.\n\n© $year Me2Leads.',
+      htmlBody: htmlBody,
+    );
+  }
+
+  /// Notifies [toEmail] that they have been removed from [orgName].
+  /// Returns true if SMTP delivery succeeded; callers must not depend on the result.
+  static Future<bool> sendMemberRemovedNotification({
+    required String toEmail,
+    required String orgName,
+    required String memberName,
+  }) async {
+    final year = DateTime.now().year;
+    final htmlBody = '''
+<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #0B3C5D; margin: 0;">Me2Leads</h1>
+    <p style="color: #666; font-size: 14px;">Votre assistant de prospection intelligent</p>
+  </div>
+  <div style="background-color: #f9f9f9; border-radius: 8px; padding: 30px; border: 1px solid #eee;">
+    <h2 style="margin-top: 0; color: #333; font-size: 20px;">Vous avez été retiré de l'organisation</h2>
+    <p>Bonjour $memberName,</p>
+    <p>Vous avez été retiré de l'organisation <strong>$orgName</strong> sur Me2Leads par un administrateur.</p>
+    <p>Les contacts que vous aviez apportés lors de votre adhésion restent disponibles dans votre compte personnel.</p>
+    <p style="font-size: 14px; color: #666;">Si vous pensez qu'il s'agit d'une erreur, veuillez contacter l'administrateur de votre organisation.</p>
+  </div>
+  <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
+    <p>&copy; $year Me2Leads. Tous droits réservés.</p>
+  </div>
+</div>
+''';
+    return _sendEmail(
+      to: toEmail,
+      subject: 'Me2Leads — Vous avez été retiré de $orgName',
+      body: 'Bonjour $memberName,\n\nVous avez été retiré de l\'organisation "$orgName" par un administrateur.\n\nLes contacts apportés lors de votre adhésion restent dans votre compte personnel.\n\n© $year Me2Leads.',
+      htmlBody: htmlBody,
+    );
+  }
+
+  /// Notifies [toEmail] that their access to [orgName] has been reactivated.
+  /// Returns true if SMTP delivery succeeded; callers must not depend on the result.
+  static Future<bool> sendMemberReactivatedNotification({
+    required String toEmail,
+    required String orgName,
+    required String memberName,
+  }) async {
+    final year = DateTime.now().year;
+    final htmlBody = '''
+<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #0B3C5D; margin: 0;">Me2Leads</h1>
+    <p style="color: #666; font-size: 14px;">Votre assistant de prospection intelligent</p>
+  </div>
+  <div style="background-color: #f9f9f9; border-radius: 8px; padding: 30px; border: 1px solid #eee;">
+    <h2 style="margin-top: 0; color: #333; font-size: 20px;">Votre accès à l'organisation a été réactivé</h2>
+    <p>Bonjour $memberName,</p>
+    <p>Votre accès à l'organisation <strong>$orgName</strong> sur Me2Leads a été réactivé par un administrateur.</p>
+    <p>Vous pouvez à nouveau accéder aux contacts et fonctionnalités de l'organisation.</p>
+    <p style="font-size: 14px; color: #666;">Si vous avez des questions, veuillez contacter l'administrateur de votre organisation.</p>
+  </div>
+  <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
+    <p>&copy; $year Me2Leads. Tous droits réservés.</p>
+  </div>
+</div>
+''';
+    return _sendEmail(
+      to: toEmail,
+      subject: 'Me2Leads — Votre accès à $orgName a été réactivé',
+      body: 'Bonjour $memberName,\n\nVotre accès à l\'organisation "$orgName" a été réactivé par un administrateur.\n\nVous pouvez à nouveau accéder aux contacts et fonctionnalités de l\'organisation.\n\n© $year Me2Leads.',
+      htmlBody: htmlBody,
+    );
+  }
+
+  /// Notifies [toEmail] that they have been promoted to admin in [orgName].
+  /// Returns true if SMTP delivery succeeded; callers must not depend on the result.
+  static Future<bool> sendAdminPromotedNotification({
+    required String toEmail,
+    required String orgName,
+    required String memberName,
+  }) async {
+    final year = DateTime.now().year;
+    final htmlBody = '''
+<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #0B3C5D; margin: 0;">Me2Leads</h1>
+    <p style="color: #666; font-size: 14px;">Votre assistant de prospection intelligent</p>
+  </div>
+  <div style="background-color: #f9f9f9; border-radius: 8px; padding: 30px; border: 1px solid #eee;">
+    <h2 style="margin-top: 0; color: #333; font-size: 20px;">Vous êtes désormais administrateur</h2>
+    <p>Bonjour $memberName,</p>
+    <p>Vous avez été promu(e) <strong>administrateur</strong> de l'organisation <strong>$orgName</strong> sur Me2Leads.</p>
+    <p>En tant qu'administrateur, vous disposez désormais de tous les droits de gestion : création, modification, historique, rappels et export des contacts.</p>
+    <p style="font-size: 14px; color: #666;">Si vous avez des questions, veuillez contacter le propriétaire de votre organisation.</p>
+  </div>
+  <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
+    <p>&copy; $year Me2Leads. Tous droits réservés.</p>
+  </div>
+</div>
+''';
+    return _sendEmail(
+      to: toEmail,
+      subject: 'Me2Leads — Vous êtes désormais administrateur de $orgName',
+      body:
+          'Bonjour $memberName,\n\nVous avez été promu(e) administrateur de l\'organisation "$orgName" sur Me2Leads.\n\nVous disposez désormais de tous les droits de gestion de l\'organisation.\n\n© $year Me2Leads.',
+      htmlBody: htmlBody,
+    );
+  }
+
+  /// Notifies [toEmail] that their admin role in [orgName] has been revoked.
+  /// Returns true if SMTP delivery succeeded; callers must not depend on the result.
+  static Future<bool> sendAdminDemotedNotification({
+    required String toEmail,
+    required String orgName,
+    required String memberName,
+  }) async {
+    final year = DateTime.now().year;
+    final htmlBody = '''
+<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #0B3C5D; margin: 0;">Me2Leads</h1>
+    <p style="color: #666; font-size: 14px;">Votre assistant de prospection intelligent</p>
+  </div>
+  <div style="background-color: #f9f9f9; border-radius: 8px; padding: 30px; border: 1px solid #eee;">
+    <h2 style="margin-top: 0; color: #333; font-size: 20px;">Votre rôle d'administrateur a été révoqué</h2>
+    <p>Bonjour $memberName,</p>
+    <p>Votre rôle d'<strong>administrateur</strong> dans l'organisation <strong>$orgName</strong> sur Me2Leads a été révoqué par le propriétaire.</p>
+    <p>Vous êtes désormais membre standard et disposez des droits qui vous ont été attribués par l'administration.</p>
+    <p style="font-size: 14px; color: #666;">Si vous avez des questions, veuillez contacter le propriétaire de votre organisation.</p>
+  </div>
+  <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
+    <p>&copy; $year Me2Leads. Tous droits réservés.</p>
+  </div>
+</div>
+''';
+    return _sendEmail(
+      to: toEmail,
+      subject:
+          'Me2Leads — Votre rôle d\'administrateur dans $orgName a été révoqué',
+      body:
+          'Bonjour $memberName,\n\nVotre rôle d\'administrateur dans l\'organisation "$orgName" sur Me2Leads a été révoqué par le propriétaire.\n\nVous êtes désormais membre standard.\n\n© $year Me2Leads.',
+      htmlBody: htmlBody,
+    );
+  }
+
   // ── Internal ────────────────────────────────────────────────────────────
 
   static Future<bool> _sendEmail({

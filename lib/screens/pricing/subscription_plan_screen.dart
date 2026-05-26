@@ -1,6 +1,8 @@
 import 'dart:io';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../config/app_config.dart';
@@ -61,13 +63,9 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
   @override
   void initState() {
     super.initState();
-    // Default to the user's current billing cycle so the toggle matches
-    // what they last paid for (convenient for renewal).
     final savedCycle = StorageService.currentUser?.subscriptionBillingCycle;
     if (savedCycle != null) _billingCycle = savedCycle;
     WidgetsBinding.instance.addObserver(this);
-    // Check for a payment that completed while the app was backgrounded
-    // during a previous Link/redirect session (e.g. cold-start recovery).
     WidgetsBinding.instance
         .addPostFrameCallback((_) => _recoverPendingPayment());
   }
@@ -81,32 +79,20 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Fired when the user returns from the external browser after a Link
-      // payment. presentPaymentSheet() may have been dismissed already; this
-      // is the safety-net that checks the real outcome server-side.
       _recoverPendingPayment();
     }
   }
 
   Future<void> _recoverPendingPayment() async {
-    // Skip while _selectPlan() is running to avoid a duplicate payment_history
-    // row for the same Stripe payment intent.
     if (_recoveringPayment || _loadingPlan != null) return;
     _recoveringPayment = true;
     try {
-      // Cold-start path: main.dart called checkAtStartup() and cached the result
-      // before the Riverpod tree was built. Consume that result first (no extra
-      // network call). Falls back to a live check for the warm-resume path where
-      // the process survived but the PaymentSheet was dismissed mid-redirect.
       final recovery = StripeService.consumeStartupRecovery() ??
           await StripeService.checkPendingPayment();
       if (!mounted || recovery == null || !recovery.result.success) return;
 
       final l10n = ref.read(l10nProvider);
       final amount = _priceAmount(recovery.plan, recovery.billingCycle);
-      // Use the paymentIntentId as the record primary key so that
-      // ConflictAlgorithm.ignore in insertPaymentRecord silently skips a
-      // duplicate when main.dart already inserted the same record on cold-start.
       final piId = recovery.result.paymentIntentId ?? '';
       final record = PaymentRecord(
         id: piId.isNotEmpty ? piId : _uuid.v4(),
@@ -140,14 +126,12 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
     final isInRenewalWindow = currentPlan != 'free' &&
         SubscriptionService.isInRenewalWindow(planExpiresAt, billingCycle);
 
-    // Check if user is in an organization
     final orgState = ref.read(organizationProvider);
     if (orgState.organization != null) {
       _showSnack(l10n.planChangeDisabledInOrg, AppColors.warning);
       return;
     }
 
-    // Check if downgrade and not in renewal window
     if (_planLevel(planId) < _planLevel(currentPlan) && planId != 'free') {
       if (!isInRenewalWindow) {
         final renewalStart = _renewalWindowStart(planExpiresAt, billingCycle);
@@ -163,7 +147,6 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
       }
     }
 
-    // Confirmation for switching to free (cancellation)
     if (planId == 'free' && currentPlan != 'free') {
       final confirmed = await showDialog<bool>(
         context: context,
@@ -185,7 +168,6 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
       if (confirmed != true) return;
     }
 
-    // Free plan — no payment required.
     if (planId == 'free') {
       setState(() => _loadingPlan = planId);
       final err = await ref.read(authProvider.notifier).changePlan(planId);
@@ -201,13 +183,16 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
       return;
     }
 
-    // Paid plan — Stripe PaymentSheet or RevenueCat.
     if (Platform.isAndroid && !_stripeReady) {
       _showSnack(
           'Stripe not configured (set stripePublishableKey in AppConfig)',
           AppColors.warning);
       return;
     }
+
+    // Ask to accept Terms & EULA for paid plans
+    final termsAccepted = await _showTermsDialog();
+    if (termsAccepted != true) return;
 
     final currentUser = ref.read(authProvider);
     setState(() => _loadingPlan = planId);
@@ -217,14 +202,12 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
     String? errorCode;
 
     if (Platform.isIOS) {
-      // Use RevenueCat on iOS for App Store compliance.
       final rcResult =
           await RevenueCatService.purchasePlan(planId, _billingCycle);
       success = rcResult.success;
       transactionId = rcResult.customerId;
       errorCode = rcResult.errorCode;
     } else {
-      // Use Stripe on Android.
       final result = await StripeService.startCheckout(
         plan: planId,
         billingCycle: _billingCycle,
@@ -239,7 +222,6 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
     setState(() => _loadingPlan = null);
 
     if (success) {
-      // Persist payment record locally (live-write fires PostgreSQL upsert).
       final amount = _priceAmount(planId);
       final record = PaymentRecord(
         id: _uuid.v4(),
@@ -256,7 +238,6 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
       );
       await DatabaseService.insertPaymentRecord(record);
 
-      // Update subscription plan in DB + state (sets expiry + schedules notifs).
       await ref
           .read(authProvider.notifier)
           .changePlan(planId, billingCycle: _billingCycle);
@@ -285,6 +266,89 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
     );
   }
 
+  Future<bool?> _showTermsDialog() async {
+    final l10n = ref.read(l10nProvider);
+    bool privacyAccepted = false;
+    bool eulaAccepted = false;
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return AlertDialog(
+            backgroundColor: AppColors.surfaceColor(context),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Text(
+              l10n.acceptTermsTitle,
+              style: TextStyle(
+                color: AppColors.onSurface(context),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  l10n.acceptTermsSubtitle,
+                  style: TextStyle(
+                    color: AppColors.secondary(context),
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                _CheckboxTile(
+                  value: privacyAccepted,
+                  label: l10n.acceptPrivacyPolicy,
+                  linkLabel: l10n.privacyPolicyLink,
+                  url: 'https://me2leads.com/privacy',
+                  onChanged: (v) => setModalState(() => privacyAccepted = v!),
+                ),
+                const SizedBox(height: 8),
+                _CheckboxTile(
+                  value: eulaAccepted,
+                  label: l10n.acceptEula,
+                  linkLabel: l10n.eulaLink,
+                  url: 'https://me2leads.com/terms',
+                  onChanged: (v) => setModalState(() => eulaAccepted = v!),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text(
+                  l10n.cancel.toUpperCase(),
+                  style: TextStyle(
+                    color: AppColors.hint(context),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: (privacyAccepted && eulaAccepted)
+                    ? () => Navigator.of(context).pop(true)
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: Text(
+                  l10n.confirm.toUpperCase(),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = ref.watch(l10nProvider);
@@ -301,14 +365,11 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
     final billingCycle = authState.subscriptionBillingCycle;
     final isYearly = _billingCycle == 'yearly';
 
-    // Renewal window: 5 days for monthly, 7 days for yearly.
     final isInRenewalWindow = currentPlan != 'free' &&
         SubscriptionService.isInRenewalWindow(planExpiresAt, billingCycle);
 
-    // Check if user is in an organization
     final isInOrganization = orgState.organization != null;
 
-    // Format expiry date for display.
     String? expiryText;
     if (planExpiresAt != null && currentPlan != 'free') {
       final d = planExpiresAt;
@@ -321,7 +382,6 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
       backgroundColor: AppColors.bg(context),
       body: Column(
         children: [
-          // Header
           Container(
             padding: EdgeInsets.only(
               top: MediaQuery.of(context).padding.top + 10,
@@ -375,14 +435,11 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
               ],
             ),
           ),
-
-          // Plans list
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  // Billing cycle toggle
                   _BillingToggle(
                     cycle: _billingCycle,
                     yearlySavingsLabel: l10n.yearlySavings,
@@ -391,8 +448,6 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
                     onChanged: (c) => setState(() => _billingCycle = c),
                   ),
                   const SizedBox(height: 20),
-
-                  // Free
                   _PlanCard(
                     title: l10n.freePlanName,
                     price: l10n.freeLabel,
@@ -407,8 +462,6 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
                     l10n: l10n,
                   ),
                   const SizedBox(height: 16),
-
-                  // Premium
                   _PlanCard(
                     title: l10n.premiumPlanName,
                     price: isYearly
@@ -432,8 +485,6 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
                     l10n: l10n,
                   ),
                   const SizedBox(height: 16),
-
-                  // Business
                   _PlanCard(
                     title: l10n.businessPlanName,
                     price: isYearly
@@ -456,59 +507,38 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
                     renewLabel: l10n.renewAction,
                     l10n: l10n,
                   ),
-
+                  const SizedBox(height: 32),
+                  _buildLegalFooter(l10n),
                   const SizedBox(height: 24),
-
-                  // Payment methods
-                  // Container(
-                  //   padding: const EdgeInsets.all(20),
-                  //   decoration: BoxDecoration(
-                  //     color: AppColors.surfaceColor(context),
-                  //     borderRadius: BorderRadius.circular(16),
-                  //     border: Border.all(color: AppColors.borderColor(context)),
-                  //   ),
-                  //   child: Column(
-                  //     crossAxisAlignment: CrossAxisAlignment.start,
-                  //     children: [
-                  //       Text(
-                  //         l10n.paymentMethodsTitle,
-                  //         style: TextStyle(
-                  //           fontSize: 11,
-                  //           fontWeight: FontWeight.w700,
-                  //           color: AppColors.hint(context),
-                  //           letterSpacing: 1,
-                  //         ),
-                  //       ),
-                  //       const SizedBox(height: 12),
-                  //       Wrap(
-                  //         spacing: 8,
-                  //         runSpacing: 8,
-                  //         children: [
-                  //           _paymentChip(context, l10n.bankCard),
-                  //           _paymentChip(context, 'PayPal'),
-                  //           _paymentChip(context, 'Apple Pay'),
-                  //           _paymentChip(context, 'Google Pay'),
-                  //           _paymentChip(context, 'Amazon Pay'),
-                  //         ],
-                  //       ),
-                  //       const SizedBox(height: 12),
-                  //       Text(
-                  //         l10n.securePayment,
-                  //         style: TextStyle(
-                  //           fontSize: 11,
-                  //           color: AppColors.hint(context),
-                  //         ),
-                  //       ),
-                  //     ],
-                  //   ),
-                  // ),
-                  // const SizedBox(height: 40),
                 ],
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildLegalFooter(AppL10n l10n) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _LegalLink(
+          label: l10n.privacyPolicyLink,
+          url: 'https://me2leads.com/privacy',
+        ),
+        const SizedBox(width: 16),
+        Container(
+          width: 1,
+          height: 12,
+          color: AppColors.hint(context).withOpacity(0.3),
+        ),
+        const SizedBox(width: 16),
+        _LegalLink(
+          label: l10n.isEnglish ? 'Terms of Use / EULA' : 'Conditions / EULA',
+          url: 'https://me2leads.com/terms',
+        ),
+      ],
     );
   }
 
@@ -547,8 +577,6 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
           'All Premium included',
           'Multi-user management',
           'Shared team space',
-          // 'Analytics & reports',
-          // 'AI lead scoring',
           'Auto cloud sync',
           'Dedicated onboarding',
         ]
@@ -556,32 +584,10 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
           'Tout Premium inclus',
           'Gestion multi-utilisateurs',
           'Espace équipe partagé',
-          // 'Analytics & rapports',
-          // 'Notation des leads par l\'IA',
           'Synchronisation cloud automatique',
           'Onboarding dédié',
         ];
-
-  Widget _paymentChip(BuildContext context, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: AppColors.primary,
-        ),
-      ),
-    );
-  }
 }
-
-// ─── Billing cycle toggle ─────────────────────────────────────────────────────
 
 class _BillingToggle extends StatelessWidget {
   final String cycle;
@@ -669,8 +675,6 @@ class _BillingToggle extends StatelessWidget {
   }
 }
 
-// ─── Plan card ────────────────────────────────────────────────────────────────
-
 class _PlanCard extends StatelessWidget {
   final String title;
   final String price;
@@ -725,7 +729,6 @@ class _PlanCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title row
           Row(
             children: [
               Text(
@@ -800,8 +803,6 @@ class _PlanCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-
-          // Price
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -831,7 +832,6 @@ class _PlanCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-
           Text(
             description,
             style: TextStyle(
@@ -871,8 +871,6 @@ class _PlanCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 16),
-
-          // Features
           ...features.map((f) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
@@ -897,7 +895,6 @@ class _PlanCard extends StatelessWidget {
                   ],
                 ),
               )),
-
           if (!isCurrent || isRenewable) ...[
             const SizedBox(height: 16),
             SizedBox(
@@ -940,6 +937,91 @@ class _PlanCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _CheckboxTile extends StatelessWidget {
+  final bool value;
+  final String label;
+  final String linkLabel;
+  final String url;
+  final ValueChanged<bool?> onChanged;
+
+  const _CheckboxTile({
+    required this.value,
+    required this.label,
+    required this.linkLabel,
+    required this.url,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 24,
+          height: 24,
+          child: Checkbox(
+            value: value,
+            onChanged: onChanged,
+            activeColor: AppColors.primary,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: TextStyle(
+                color: AppColors.onSurface(context),
+                fontSize: 13,
+                fontFamily: 'PlusJakartaSans',
+              ),
+              children: [
+                TextSpan(text: label.replaceAll(linkLabel, '')),
+                TextSpan(
+                  text: linkLabel,
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.underline,
+                  ),
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () => launchUrl(Uri.parse(url),
+                        mode: LaunchMode.externalApplication),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LegalLink extends StatelessWidget {
+  final String label;
+  final String url;
+
+  const _LegalLink({required this.label, required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () =>
+          launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: AppColors.primary,
+          decoration: TextDecoration.underline,
+        ),
       ),
     );
   }

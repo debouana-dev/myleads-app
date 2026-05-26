@@ -210,7 +210,8 @@ class AppL10n {
       _en ? 'Already have an account?' : 'Déjà un compte ?';
   String get privacyPolicyAccept => _en ? 'I accept the ' : "J'accepte la ";
   String get privacyPolicyLink =>
-      _en ? 'privacy Policy' : 'politique de confidentialité';
+      _en ? 'Privacy Policy' : 'politique de confidentialité';
+  String get eulaLink => 'EULA';
   String get privacyPolicyDesc => _en
       ? 'Read our privacy policy'
       : 'Lire notre politique de confidentialité';
@@ -304,6 +305,7 @@ class AppL10n {
       ? 'Are you sure you want to permanently delete $name? This action is irreversible.'
       : 'Êtes-vous sûr de vouloir supprimer définitivement $name ? Cette action est irréversible.';
   String get cancel => _en ? 'Cancel' : 'Annuler';
+  String get ok => 'OK';
   String get delete => _en ? 'Delete' : 'Supprimer';
   String get reminderSection => _en ? 'Reminders' : 'Rappels';
   String get modificationBadge => _en ? 'EDIT' : 'MODIFICATION';
@@ -616,6 +618,19 @@ class AppL10n {
       _en ? 'Plan updated successfully' : 'Forfait mis à jour avec succès';
   String get planChangeError =>
       _en ? 'Error changing plan' : 'Erreur lors du changement de forfait';
+  String get acceptTermsTitle =>
+      _en ? 'Accept Terms' : 'Accepter les conditions';
+  String get acceptTermsSubtitle => _en
+      ? 'Please review and accept our policies before subscribing.'
+      : 'Veuillez consulter et accepter nos politiques avant de vous abonner.';
+  String get acceptPrivacyPolicy => _en
+      ? 'I accept the Privacy Policy'
+      : 'J\'accepte la politique de confidentialité';
+  String get acceptEula =>
+      _en ? 'I accept the EULA' : 'J\'accepte le CLUF (EULA)';
+  String get mustAcceptTerms => _en
+      ? 'You must accept the terms to continue'
+      : 'Vous devez accepter les conditions pour continuer';
   String downgradeNotAllowed(String date) => _en
       ? 'You can downgrade your plan starting from $date'
       : 'Vous pouvez rétrograder votre forfait à partir du $date';
@@ -918,6 +933,9 @@ class AppL10n {
   String get orgJoinNoInternet => _en
       ? 'Your device is not connected to the internet. Please try again when online.'
       : "Votre appareil n'est pas connecté à internet. Veuillez réessayer lorsque vous êtes en ligne.";
+  String get orgScreenRequiresInternet => _en
+      ? 'An internet connection is required to access your organization'
+      : 'Une connexion internet est requise pour accéder à votre organisation';
   String get orgJoinServerError => _en
       ? 'Unable to reach the cloud server. Please try again.'
       : 'Impossible de contacter le serveur cloud. Veuillez réessayer.';
@@ -947,6 +965,74 @@ class AppL10n {
   String get orgRenewalWindowNotOpenGeneric => _en
       ? 'Organization license renewal is only available during the renewal window.'
       : 'Le renouvellement des licences d\'organisation est uniquement disponible pendant la fenêtre de renouvellement.';
+  String get iosMultiLicenseTitle => _en ? 'Action required' : 'Action requise';
+  String get iosMultiLicenseBody => _en
+      ? 'Apple does not support multi-license subscriptions in this app. To manage or renew your organization\'s licenses, please use our Android app or visit our website.'
+      : 'Apple ne supporte pas les abonnements multi-licences dans cette application. Pour gérer ou renouveler les licences de votre organisation, veuillez utiliser notre application Android ou vous rendre sur notre site web.';
+
+  // ─── Owner role & admin management ──────────────────────────────────────
+  String get orgOwnerBadge => _en ? 'Owner' : 'Propriétaire';
+  String get orgOwnerOnlyAction => _en
+      ? 'This action is reserved for the organization owner'
+      : "Cette action est réservée au propriétaire de l'organisation";
+  String get ownerCannotLeaveOrg => _en
+      ? 'The owner cannot leave. Delete the organization instead.'
+      : "Le propriétaire ne peut pas quitter l'organisation. Supprimez-la.";
+  String get cannotSuspendOwner => _en
+      ? 'The owner cannot be suspended'
+      : 'Le propriétaire ne peut pas être suspendu';
+  String get adminCannotManageAdmins => _en
+      ? 'Admins cannot manage other admin-level accounts'
+      : "Les admins ne peuvent pas gérer d'autres comptes admin";
+  String get assignAdminRole => _en ? 'Make admin' : 'Nommer admin';
+  String get revokeAdminRole =>
+      _en ? 'Revoke admin role' : 'Révoquer le rôle admin';
+  String get assignAdminTitle =>
+      _en ? 'Assign admin role' : 'Attribuer le rôle admin';
+  String assignAdminConfirm(String name) => _en
+      ? 'Grant admin privileges to $name?'
+      : 'Accorder les droits admin à $name ?';
+  String get revokeAdminTitle =>
+      _en ? 'Revoke admin role' : 'Révoquer le rôle admin';
+  String revokeAdminConfirm(String name) => _en
+      ? 'Revoke admin privileges from $name?'
+      : 'Retirer les droits admin à $name ?';
+  String get cannotAssignAdminToSuspended => _en
+      ? 'Reactivate this member before assigning admin role'
+      : 'Réactivez ce membre avant de lui attribuer le rôle admin';
+  String get adminAssignedSuccess =>
+      _en ? 'Admin role assigned' : 'Rôle admin attribué';
+  String get adminRevokedSuccess =>
+      _en ? 'Admin role revoked' : 'Rôle admin révoqué';
+  String get adminPrivilegesNote => _en
+      ? 'Admins always have full privileges'
+      : 'Les admins ont toujours tous les droits';
+
+  // ─── Ownership transfer ──────────────────────────────────────────────────
+  String get transferOwnershipAndLeave =>
+      _en ? 'Transfer ownership & leave' : 'Transférer la propriété et quitter';
+  String get transferOwnershipNoAdmins => _en
+      ? 'No active admin found. Promote a member to admin before leaving.'
+      : "Aucun admin actif trouvé. Promouvez un membre en admin avant de quitter.";
+  String get transferOwnershipPickTitle =>
+      _en ? 'Choose new owner' : 'Choisir le nouveau propriétaire';
+  String get transferOwnershipPickSubtitle => _en
+      ? 'Select the admin who will inherit the owner role and receive your contacts.'
+      : "Sélectionnez l'admin qui héritera du rôle propriétaire et recevra vos contacts.";
+  String get transferOwnershipConfirmTitle => _en
+      ? 'Confirm ownership transfer'
+      : 'Confirmer le transfert de propriété';
+  String transferOwnershipConfirmBody(String name) => _en
+      ? '$name will become the new owner. Contacts you brought into the organization will be duplicated to your personal account. Contacts you added while in the organization will stay with the organization. This cannot be undone.'
+      : '$name deviendra le nouveau propriétaire. Les contacts que vous avez apportés seront dupliqués dans votre compte personnel. Les contacts ajoutés au sein de l\'organisation resteront avec l\'organisation. Cette action est irréversible.';
+  String get transferOwnershipConfirm =>
+      _en ? 'Transfer & leave' : 'Transférer et quitter';
+  String get transferOwnershipSuccess => _en
+      ? 'Ownership transferred. You have left the organization.'
+      : "Propriété transférée. Vous avez quitté l'organisation.";
+  String get transferOwnershipAdminOnly => _en
+      ? 'Ownership can only be transferred to an active admin.'
+      : "La propriété ne peut être transférée qu'à un admin actif.";
 
   // ─── Import / Export ─────────────────────────────────────────────────────
   String get importExportTitle => _en ? 'Import / Export' : 'Import / Export';
