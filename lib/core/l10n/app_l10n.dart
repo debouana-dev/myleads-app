@@ -948,6 +948,34 @@ class AppL10n {
       ? 'Organization license renewal is only available during the renewal window.'
       : 'Le renouvellement des licences d\'organisation est uniquement disponible pendant la fenêtre de renouvellement.';
 
+  // ─── Owner role & admin management ──────────────────────────────────────
+  String get orgOwnerBadge => _en ? 'Owner' : 'Propriétaire';
+  String get orgOwnerOnlyAction => _en
+      ? 'This action is reserved for the organization owner'
+      : "Cette action est réservée au propriétaire de l'organisation";
+  String get ownerCannotLeaveOrg => _en
+      ? 'The owner cannot leave. Delete the organization instead.'
+      : "Le propriétaire ne peut pas quitter l'organisation. Supprimez-la.";
+  String get cannotSuspendOwner =>
+      _en ? 'The owner cannot be suspended' : 'Le propriétaire ne peut pas être suspendu';
+  String get adminCannotManageAdmins => _en
+      ? 'Admins cannot manage other admin-level accounts'
+      : "Les admins ne peuvent pas gérer d'autres comptes admin";
+  String get assignAdminRole => _en ? 'Make admin' : 'Nommer admin';
+  String get revokeAdminRole => _en ? 'Revoke admin role' : 'Révoquer le rôle admin';
+  String get assignAdminTitle => _en ? 'Assign admin role' : 'Attribuer le rôle admin';
+  String assignAdminConfirm(String name) => _en
+      ? 'Grant admin privileges to $name?'
+      : 'Accorder les droits admin à $name ?';
+  String get revokeAdminTitle => _en ? 'Revoke admin role' : 'Révoquer le rôle admin';
+  String revokeAdminConfirm(String name) => _en
+      ? 'Revoke admin privileges from $name?'
+      : 'Retirer les droits admin à $name ?';
+  String get adminAssignedSuccess => _en ? 'Admin role assigned' : 'Rôle admin attribué';
+  String get adminRevokedSuccess => _en ? 'Admin role revoked' : 'Rôle admin révoqué';
+  String get adminPrivilegesNote =>
+      _en ? 'Admins always have full privileges' : 'Les admins ont toujours tous les droits';
+
   // ─── Import / Export ─────────────────────────────────────────────────────
   String get importExportTitle => _en ? 'Import / Export' : 'Import / Export';
   String get importExportSubtitle =>

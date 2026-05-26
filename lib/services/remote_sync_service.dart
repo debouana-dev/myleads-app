@@ -300,7 +300,7 @@ class RemoteSyncService {
         "id"                 VARCHAR(36) NOT NULL,
         "organization_id"    VARCHAR(36) NOT NULL,
         "user_id"            VARCHAR(36) NOT NULL,
-        "role"               VARCHAR(20) NOT NULL DEFAULT 'member',
+        "role"               VARCHAR(20) NOT NULL DEFAULT 'member', -- 'owner' | 'admin' | 'member'
         "status"             VARCHAR(20) NOT NULL DEFAULT 'active',
         "joined_at"          VARCHAR(50) NOT NULL,
         "first_name"         VARCHAR(255) NOT NULL,

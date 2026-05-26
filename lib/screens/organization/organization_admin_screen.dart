@@ -199,7 +199,7 @@ class _OrganizationAdminScreenState
 
   // ─── Member management sheet ──────────────────────────────────────────────
 
-  void _openMemberSheet(OrgMember member) {
+  void _openMemberSheet(OrgMember member, {required bool isOwner}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -209,6 +209,7 @@ class _OrganizationAdminScreenState
       ),
       builder: (_) => _MemberManagementSheet(
         member: member,
+        isCurrentUserOwner: isOwner,
         onUpdatePrivileges: (canEdit, canCreate, canViewReminders,
                 canViewHistory, canExportContacts) =>
             _updatePrivileges(member,
@@ -221,8 +222,52 @@ class _OrganizationAdminScreenState
             ? () => _doSuspend(member)
             : () => _doReactivate(member),
         onRemove: () => _doRemove(member),
+        onAssignAdmin:
+            isOwner && member.role == 'member' ? () => _doAssignAdmin(member) : null,
+        onRevokeAdmin:
+            isOwner && member.role == 'admin' ? () => _doRevokeAdmin(member) : null,
       ),
     );
+  }
+
+  Future<void> _doAssignAdmin(OrgMember member) async {
+    Navigator.of(context).pop();
+    final l10n = ref.read(l10nProvider);
+    final ok = await _confirm(
+      title: l10n.assignAdminTitle,
+      body: l10n.assignAdminConfirm(member.fullName),
+      confirmLabel: l10n.assignAdminRole,
+      confirmColor: AppColors.primary,
+    );
+    if (ok != true || !mounted) return;
+    final err =
+        await ref.read(organizationProvider.notifier).assignAdminRole(member.userId);
+    if (!mounted) return;
+    if (err != null) {
+      _showSnack(err, error: true);
+    } else {
+      _showSnack(l10n.adminAssignedSuccess);
+    }
+  }
+
+  Future<void> _doRevokeAdmin(OrgMember member) async {
+    Navigator.of(context).pop();
+    final l10n = ref.read(l10nProvider);
+    final ok = await _confirm(
+      title: l10n.revokeAdminTitle,
+      body: l10n.revokeAdminConfirm(member.fullName),
+      confirmLabel: l10n.revokeAdminRole,
+      confirmColor: AppColors.warm,
+    );
+    if (ok != true || !mounted) return;
+    final err =
+        await ref.read(organizationProvider.notifier).revokeAdminRole(member.userId);
+    if (!mounted) return;
+    if (err != null) {
+      _showSnack(err, error: true);
+    } else {
+      _showSnack(l10n.adminRevokedSuccess);
+    }
   }
 
   Future<void> _updatePrivileges(OrgMember member,
@@ -510,12 +555,13 @@ class _OrganizationAdminScreenState
     final orgState = ref.watch(organizationProvider);
     final currentUserId = StorageService.currentUser?.id ?? '';
     final currentUserRole = StorageService.currentUser?.orgRole ?? 'member';
-    final isAdmin = currentUserRole == 'admin';
+    final isOwner = currentUserRole == 'owner';
+    final isAdmin = isOwner || currentUserRole == 'admin';
 
     if (orgState.isLoading) {
       return Scaffold(
         backgroundColor: AppColors.bg(context),
-        appBar: _appBar(l10n, null, isAdmin: false),
+        appBar: _appBar(l10n, null, isAdmin: false, isOwner: false),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -524,7 +570,7 @@ class _OrganizationAdminScreenState
     if (org == null) {
       return Scaffold(
         backgroundColor: AppColors.bg(context),
-        appBar: _appBar(l10n, null, isAdmin: false),
+        appBar: _appBar(l10n, null, isAdmin: false, isOwner: false),
         body: Center(
           child: Text(l10n.noOrgMembers,
               style: TextStyle(color: AppColors.secondary(context))),
@@ -540,7 +586,7 @@ class _OrganizationAdminScreenState
 
     return Scaffold(
       backgroundColor: AppColors.bg(context),
-      appBar: _appBar(l10n, org, isAdmin: isAdmin),
+      appBar: _appBar(l10n, org, isAdmin: isAdmin, isOwner: isOwner),
       body: RefreshIndicator(
         onRefresh: () => ref.read(organizationProvider.notifier).refreshFromCloud(),
         color: AppColors.primary,
@@ -569,14 +615,16 @@ class _OrganizationAdminScreenState
             ),
             const SizedBox(height: 16),
 
-            // ── License info card (admin only) ────────────────────────────────
+            // ── License info card (admin + owner) ────────────────────────────
+            // Owners see the full card with renewal button.
+            // Admins see read-only (seat count + expiry, no renew button).
             if (isAdmin) ...[
               _LicenseInfoCard(
                 licenseCount: org.licenseCount,
                 usedSeats: members.length,
                 expiresAt: expiresAt,
                 isSuspended: isSuspended,
-                onRenew: _doRenewLicenses,
+                onRenew: isOwner ? _doRenewLicenses : null,
                 l10n: l10n,
               ),
               const SizedBox(height: 16),
@@ -614,8 +662,10 @@ class _OrganizationAdminScreenState
                   isCurrentUser: m.userId == currentUserId,
                   isAdmin: isAdmin,
                   l10n: l10n,
-                  onTap: isAdmin && m.userId != currentUserId && m.role != 'admin'
-                      ? () => _openMemberSheet(m)
+                  onTap: isAdmin &&
+                          m.userId != currentUserId &&
+                          (isOwner || m.role == 'member')
+                      ? () => _openMemberSheet(m, isOwner: isOwner)
                       : null,
                 ),
               ),
@@ -623,28 +673,31 @@ class _OrganizationAdminScreenState
             const SizedBox(height: 24),
 
             // ── Leave / danger zone ───────────────────────────────────────────
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.hot,
-                  side: const BorderSide(color: AppColors.hot),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+            // Owner cannot leave — they must delete the org via the menu.
+            if (!isOwner)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.hot,
+                    side: const BorderSide(color: AppColors.hot),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: _doLeaveOrg,
+                  icon: const Icon(Icons.logout_rounded, size: 18),
+                  label: Text(l10n.leaveOrg),
                 ),
-                onPressed: _doLeaveOrg,
-                icon: const Icon(Icons.logout_rounded, size: 18),
-                label: Text(l10n.leaveOrg),
               ),
-            ),
           ],
         ),
       ),
     );
   }
 
-  AppBar _appBar(AppL10n l10n, Organization? org, {required bool isAdmin}) {
+  AppBar _appBar(AppL10n l10n, Organization? org,
+      {required bool isAdmin, bool isOwner = false}) {
     return AppBar(
       backgroundColor: AppColors.primary,
       foregroundColor: Colors.white,
@@ -675,14 +728,15 @@ class _OrganizationAdminScreenState
                     if (v == 'delete') _doDeleteOrg();
                   },
                   itemBuilder: (_) => [
-                    PopupMenuItem(
-                      value: 'rename',
-                      child: Row(children: [
-                        const Icon(Icons.edit_rounded, size: 18),
-                        const SizedBox(width: 10),
-                        Text(l10n.orgSettingsTitle),
-                      ]),
-                    ),
+                    if (isOwner)
+                      PopupMenuItem(
+                        value: 'rename',
+                        child: Row(children: [
+                          const Icon(Icons.edit_rounded, size: 18),
+                          const SizedBox(width: 10),
+                          Text(l10n.orgSettingsTitle),
+                        ]),
+                      ),
                     PopupMenuItem(
                       value: 'regen',
                       child: Row(children: [
@@ -693,17 +747,19 @@ class _OrganizationAdminScreenState
                             style: const TextStyle(color: AppColors.warm)),
                       ]),
                     ),
-                    const PopupMenuDivider(),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Row(children: [
-                        const Icon(Icons.delete_outline_rounded,
-                            size: 18, color: AppColors.hot),
-                        const SizedBox(width: 10),
-                        Text(l10n.deleteOrg,
-                            style: const TextStyle(color: AppColors.hot)),
-                      ]),
-                    ),
+                    if (isOwner) ...[
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Row(children: [
+                          const Icon(Icons.delete_outline_rounded,
+                              size: 18, color: AppColors.hot),
+                          const SizedBox(width: 10),
+                          Text(l10n.deleteOrg,
+                              style: const TextStyle(color: AppColors.hot)),
+                        ]),
+                      ),
+                    ],
                   ],
                 ),
             ],
@@ -963,7 +1019,8 @@ class _MemberCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isAdminMember = member.role == 'admin';
+    final isOwnerMember = member.role == 'owner';
+    final isAdminMember = member.role == 'admin' || member.role == 'owner';
     final isSuspended = member.status == 'suspended';
 
     return Padding(
@@ -1038,6 +1095,10 @@ class _MemberCard extends StatelessWidget {
                             _Badge(
                                 label: l10n.suspendedBadge,
                                 color: AppColors.cold)
+                          else if (isOwnerMember)
+                            _Badge(
+                                label: l10n.orgOwnerBadge,
+                                color: AppColors.accent)
                           else
                             _Badge(
                               label: isAdminMember
@@ -1091,16 +1152,22 @@ class _MemberCard extends StatelessWidget {
 class _MemberManagementSheet extends ConsumerWidget {
   const _MemberManagementSheet({
     required this.member,
+    required this.isCurrentUserOwner,
     required this.onUpdatePrivileges,
     required this.onSuspend,
     required this.onRemove,
+    this.onAssignAdmin,
+    this.onRevokeAdmin,
   });
 
   final OrgMember member;
+  final bool isCurrentUserOwner;
   final void Function(bool canEdit, bool canCreate, bool canViewReminders,
       bool canViewHistory, bool canExportContacts) onUpdatePrivileges;
   final VoidCallback onSuspend;
   final VoidCallback onRemove;
+  final VoidCallback? onAssignAdmin;
+  final VoidCallback? onRevokeAdmin;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1181,6 +1248,10 @@ class _MemberManagementSheet extends ConsumerWidget {
                 ),
                 if (isSuspended)
                   _Badge(label: l10n.suspendedBadge, color: AppColors.cold)
+                else if (member.role == 'owner')
+                  _Badge(label: l10n.orgOwnerBadge, color: AppColors.accent)
+                else if (member.role == 'admin')
+                  _Badge(label: l10n.orgAdminBadge, color: AppColors.primary)
                 else
                   _Badge(label: l10n.orgMemberBadge, color: AppColors.warm),
               ],
@@ -1190,63 +1261,90 @@ class _MemberManagementSheet extends ConsumerWidget {
             Divider(color: AppColors.borderColor(context)),
             const SizedBox(height: 8),
 
-            // Privilege toggles
+            // Privilege toggles — hidden for admin/owner (always full access)
             _SheetLabel(l10n.privileges, context),
             const SizedBox(height: 8),
-            _PrivilegeRow(
-              label: l10n.editPrivilege,
-              value: live.canEdit,
-              onChanged: (val) => onUpdatePrivileges(
-                  val,
-                  live.canCreate,
-                  live.canViewReminders,
-                  live.canViewHistory,
-                  live.canExportContacts),
-            ),
-            _PrivilegeRow(
-              label: l10n.createPrivilege,
-              value: live.canCreate,
-              onChanged: (val) => onUpdatePrivileges(
-                  live.canEdit,
-                  val,
-                  live.canViewReminders,
-                  live.canViewHistory,
-                  live.canExportContacts),
-            ),
-            _PrivilegeRow(
-              label: l10n.viewRemindersPrivilege,
-              value: live.canViewReminders,
-              onChanged: (val) => onUpdatePrivileges(
-                  live.canEdit,
-                  live.canCreate,
-                  val,
-                  live.canViewHistory,
-                  live.canExportContacts),
-            ),
-            _PrivilegeRow(
-              label: l10n.viewHistoryPrivilege,
-              value: live.canViewHistory,
-              onChanged: (val) => onUpdatePrivileges(
-                  live.canEdit,
-                  live.canCreate,
-                  live.canViewReminders,
-                  val,
-                  live.canExportContacts),
-            ),
-            _PrivilegeRow(
-              label: l10n.exportPrivilege,
-              value: live.canExportContacts,
-              onChanged: (val) => onUpdatePrivileges(
-                  live.canEdit,
-                  live.canCreate,
-                  live.canViewReminders,
-                  live.canViewHistory,
-                  val),
-            ),
+            if (live.isAdminOrAbove) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  l10n.adminPrivilegesNote,
+                  style: TextStyle(
+                      fontSize: 13, color: AppColors.secondary(context)),
+                ),
+              ),
+            ] else ...[
+              _PrivilegeRow(
+                label: l10n.editPrivilege,
+                value: live.canEdit,
+                onChanged: (val) => onUpdatePrivileges(
+                    val,
+                    live.canCreate,
+                    live.canViewReminders,
+                    live.canViewHistory,
+                    live.canExportContacts),
+              ),
+              _PrivilegeRow(
+                label: l10n.createPrivilege,
+                value: live.canCreate,
+                onChanged: (val) => onUpdatePrivileges(
+                    live.canEdit,
+                    val,
+                    live.canViewReminders,
+                    live.canViewHistory,
+                    live.canExportContacts),
+              ),
+              _PrivilegeRow(
+                label: l10n.viewRemindersPrivilege,
+                value: live.canViewReminders,
+                onChanged: (val) => onUpdatePrivileges(
+                    live.canEdit,
+                    live.canCreate,
+                    val,
+                    live.canViewHistory,
+                    live.canExportContacts),
+              ),
+              _PrivilegeRow(
+                label: l10n.viewHistoryPrivilege,
+                value: live.canViewHistory,
+                onChanged: (val) => onUpdatePrivileges(
+                    live.canEdit,
+                    live.canCreate,
+                    live.canViewReminders,
+                    val,
+                    live.canExportContacts),
+              ),
+              _PrivilegeRow(
+                label: l10n.exportPrivilege,
+                value: live.canExportContacts,
+                onChanged: (val) => onUpdatePrivileges(
+                    live.canEdit,
+                    live.canCreate,
+                    live.canViewReminders,
+                    live.canViewHistory,
+                    val),
+              ),
+            ],
 
             const SizedBox(height: 12),
             Divider(color: AppColors.borderColor(context)),
             const SizedBox(height: 8),
+
+            // Assign / Revoke admin role (owner only)
+            if (onAssignAdmin != null)
+              _SheetAction(
+                icon: Icons.admin_panel_settings_rounded,
+                label: l10n.assignAdminRole,
+                color: AppColors.primary,
+                onTap: onAssignAdmin!,
+              ),
+            if (onRevokeAdmin != null)
+              _SheetAction(
+                icon: Icons.remove_moderator_rounded,
+                label: l10n.revokeAdminRole,
+                color: AppColors.warm,
+                onTap: onRevokeAdmin!,
+              ),
 
             // Suspend / Reactivate
             _SheetAction(
@@ -1412,7 +1510,7 @@ class _SuspensionBanner extends StatelessWidget {
 
   final Organization org;
   final bool isAdmin;
-  final VoidCallback onRenew;
+  final VoidCallback? onRenew;
   final AppL10n l10n;
 
   @override
@@ -1464,7 +1562,7 @@ class _SuspensionBanner extends StatelessWidget {
                   fontWeight: FontWeight.w600),
             ),
           ],
-          if (isAdmin) ...[
+          if (isAdmin && onRenew != null) ...[
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
@@ -1504,7 +1602,7 @@ class _LicenseInfoCard extends StatelessWidget {
   final int usedSeats;
   final DateTime? expiresAt;
   final bool isSuspended;
-  final VoidCallback onRenew;
+  final VoidCallback? onRenew;
   final AppL10n l10n;
 
   @override
@@ -1556,7 +1654,7 @@ class _LicenseInfoCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (!isSuspended)
+              if (!isSuspended && onRenew != null)
                 GestureDetector(
                   onTap: onRenew,
                   child: Container(

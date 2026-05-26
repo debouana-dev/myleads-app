@@ -28,6 +28,8 @@ class OrgState {
       currentUserCanExportContacts; // can export shared org contacts
   // Deduplicated total contact count for the org (excludes hidden duplicates).
   final int uniqueContactCount;
+  // True when the current user is the org creator (role = 'owner').
+  final bool currentUserIsOwner;
 
   const OrgState({
     this.organization,
@@ -40,6 +42,7 @@ class OrgState {
     this.currentUserCanViewHistory = true,
     this.currentUserCanExportContacts = false,
     this.uniqueContactCount = 0,
+    this.currentUserIsOwner = false,
   });
 
   // ── Derived from organization ──────────────────────────────────────────────
@@ -67,6 +70,7 @@ class OrgState {
     bool? currentUserCanViewHistory,
     bool? currentUserCanExportContacts,
     int? uniqueContactCount,
+    bool? currentUserIsOwner,
     bool clearError = false,
     bool clearOrg = false,
   }) {
@@ -84,6 +88,7 @@ class OrgState {
       currentUserCanExportContacts:
           currentUserCanExportContacts ?? this.currentUserCanExportContacts,
       uniqueContactCount: uniqueContactCount ?? this.uniqueContactCount,
+      currentUserIsOwner: currentUserIsOwner ?? this.currentUserIsOwner,
     );
   }
 }
@@ -140,6 +145,19 @@ class OrgNotifier extends StateNotifier<OrgState> {
       final uniqueCount =
           await DatabaseService.getOrgDeduplicatedContactCount(org.id);
 
+      // Guard against stale cached orgRole after v25 migration: if the member
+      // row says 'owner' but the user session still says 'admin', correct it.
+      final currentMemberMatches = members.where((m) => m.userId == user.id);
+      final currentMember =
+          currentMemberMatches.isNotEmpty ? currentMemberMatches.first : null;
+      if (currentMember != null && currentMember.role != user.orgRole) {
+        final corrected = user.copyWith(orgRole: currentMember.role);
+        await DatabaseService.updateUser(corrected);
+        await StorageService.setCurrentSession(
+            corrected, user.sessionToken ?? '');
+      }
+      final isOwner = currentMember?.isOwner ?? false;
+
       // Migration: re-encrypt any personal-key contacts to the org key for
       // active members. Idempotent — already org-encrypted contacts are skipped.
       final memberStatus = await DatabaseService.getMemberStatus(
@@ -164,6 +182,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
         currentUserCanViewHistory: privs.canViewHistory,
         currentUserCanExportContacts: privs.canExportContacts,
         uniqueContactCount: uniqueCount,
+        currentUserIsOwner: isOwner,
       );
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
@@ -184,6 +203,10 @@ class OrgNotifier extends StateNotifier<OrgState> {
           userId: user.id,
           orgId: org.id,
         );
+        final currentMemberMatches = members.where((m) => m.userId == user.id);
+        final currentMember =
+            currentMemberMatches.isNotEmpty ? currentMemberMatches.first : null;
+        final isOwner = currentMember?.isOwner ?? false;
         state = state.copyWith(
           members: members,
           uniqueContactCount: uniqueCount,
@@ -192,6 +215,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
           currentUserCanViewReminders: privs.canViewReminders,
           currentUserCanViewHistory: privs.canViewHistory,
           currentUserCanExportContacts: privs.canExportContacts,
+          currentUserIsOwner: isOwner,
         );
       } else {
         state =
@@ -211,15 +235,17 @@ class OrgNotifier extends StateNotifier<OrgState> {
   }) async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
-    if (user.orgRole != 'admin') return "Action réservée à l'administrateur";
+    if (user.orgRole != 'owner' && user.orgRole != 'admin') {
+      return "Action réservée à l'administrateur";
+    }
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
-    // Cannot change admin privileges.
+    // Cannot change owner or admin privileges (always full).
     final target = state.members.firstWhere(
       (m) => m.userId == userId,
       orElse: () => throw Exception('Membre introuvable'),
     );
-    if (target.role == 'admin') {
+    if (target.role == 'admin' || target.role == 'owner') {
       return "Les droits de l'administrateur ne peuvent pas être modifiés";
     }
 
@@ -280,10 +306,10 @@ class OrgNotifier extends StateNotifier<OrgState> {
         id: _uuid.v4(),
         orgId: orgId,
         userId: user.id,
-        role: 'admin',
+        role: 'owner',
       );
 
-      final updated = user.copyWith(organizationId: orgId, orgRole: 'admin');
+      final updated = user.copyWith(organizationId: orgId, orgRole: 'owner');
       await DatabaseService.updateUser(updated);
       await StorageService.setCurrentSession(updated, user.sessionToken ?? '');
 
@@ -323,7 +349,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
   }) async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
-    if (user.orgRole != 'admin') return "Action réservée à l'administrateur";
+    if (user.orgRole != 'owner') return _l10n.orgOwnerOnlyAction;
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
 
@@ -521,17 +547,25 @@ class OrgNotifier extends StateNotifier<OrgState> {
   Future<String?> removeMember(String targetUserId) async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
-    if (user.orgRole != 'admin') return "Action réservée à l'administrateur";
+    if (user.orgRole != 'owner' && user.orgRole != 'admin') {
+      return "Action réservée à l'administrateur";
+    }
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
-    if (targetUserId == user.id)
+    if (targetUserId == user.id) {
       return "Utilisez \"Quitter l'organisation\" pour vous retirer";
+    }
 
     try {
       final target = state.members.firstWhere(
         (m) => m.userId == targetUserId,
         orElse: () => throw Exception('Membre introuvable'),
       );
+      // Admin cannot remove owner or other admins.
+      if (user.orgRole == 'admin' &&
+          (target.role == 'admin' || target.role == 'owner')) {
+        return _l10n.adminCannotManageAdmins;
+      }
 
       // Get member info before deletion to sync it if needed
       final memberRow = await DatabaseService.getRawOrgMemberRowByOrgAndUser(org.id, targetUserId);
@@ -590,8 +624,14 @@ class OrgNotifier extends StateNotifier<OrgState> {
     if (org == null) return 'Aucune organisation';
 
     try {
+      // Owner must delete the org instead of leaving.
+      if (user.orgRole == 'owner') return _l10n.ownerCannotLeaveOrg;
+
       final isLastAdmin = user.orgRole == 'admin' &&
-          state.members.where((m) => m.role == 'admin').length == 1;
+          state.members
+                  .where((m) => m.role == 'admin' || m.role == 'owner')
+                  .length ==
+              1;
 
       if (isLastAdmin && state.members.length > 1) {
         return "Transférez l'administration avant de quitter, ou supprimez l'organisation.";
@@ -678,7 +718,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
   Future<String?> deleteOrganization() async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
-    if (user.orgRole != 'admin') return "Action réservée à l'administrateur";
+    if (user.orgRole != 'owner') return _l10n.orgOwnerOnlyAction;
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
 
@@ -755,17 +795,23 @@ class OrgNotifier extends StateNotifier<OrgState> {
   Future<String?> suspendMember(String targetUserId) async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
-    if (user.orgRole != 'admin') return "Action réservée à l'administrateur";
+    if (user.orgRole != 'owner' && user.orgRole != 'admin') {
+      return "Action réservée à l'administrateur";
+    }
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
-    if (targetUserId == user.id)
+    if (targetUserId == user.id) {
       return 'Vous ne pouvez pas vous suspendre vous-même';
+    }
     final target = state.members.firstWhere(
       (m) => m.userId == targetUserId,
       orElse: () => throw Exception('Membre introuvable'),
     );
-    if (target.role == 'admin') {
-      return "Impossible de suspendre un administrateur";
+    // Nobody can suspend the owner.
+    if (target.role == 'owner') return _l10n.cannotSuspendOwner;
+    // Admin cannot suspend other admins.
+    if (user.orgRole == 'admin' && target.role == 'admin') {
+      return _l10n.adminCannotManageAdmins;
     }
     try {
       await DatabaseService.transferNonDuplicateContactsToAdmin(
@@ -802,7 +848,9 @@ class OrgNotifier extends StateNotifier<OrgState> {
   Future<String?> reactivateMember(String targetUserId) async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
-    if (user.orgRole != 'admin') return "Action réservée à l'administrateur";
+    if (user.orgRole != 'owner' && user.orgRole != 'admin') {
+      return "Action réservée à l'administrateur";
+    }
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
     try {
@@ -810,6 +858,10 @@ class OrgNotifier extends StateNotifier<OrgState> {
         (m) => m.userId == targetUserId,
         orElse: () => throw Exception('Membre introuvable'),
       );
+      // Admin cannot reactivate a suspended admin — only owner can.
+      if (user.orgRole == 'admin' && target.role == 'admin') {
+        return _l10n.adminCannotManageAdmins;
+      }
       await DatabaseService.updateMemberStatus(
           orgId: org.id, userId: targetUserId, status: 'active');
       // Re-encrypt the reactivated member's contacts back to the org key.
@@ -835,7 +887,9 @@ class OrgNotifier extends StateNotifier<OrgState> {
   Future<String?> regenerateInviteCode() async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
-    if (user.orgRole != 'admin') return "Action réservée à l'administrateur";
+    if (user.orgRole != 'owner' && user.orgRole != 'admin') {
+      return "Action réservée à l'administrateur";
+    }
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
     try {
@@ -857,7 +911,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
   Future<String?> updateOrgName(String newName) async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
-    if (user.orgRole != 'admin') return "Action réservée à l'administrateur";
+    if (user.orgRole != 'owner') return _l10n.orgOwnerOnlyAction;
     if (newName.trim().isEmpty) return 'Le nom est obligatoire';
     final org = state.organization;
     if (org == null) return 'Aucune organisation';
@@ -870,6 +924,52 @@ class OrgNotifier extends StateNotifier<OrgState> {
       // Sync updated name to the cloud
       _syncOrgToCloud(org.id);
 
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  /// Owner promotes a member to admin role.
+  Future<String?> assignAdminRole(String targetUserId) async {
+    final user = StorageService.currentUser;
+    if (user == null) return 'Aucun utilisateur connecté';
+    if (user.orgRole != 'owner') return _l10n.orgOwnerOnlyAction;
+    final org = state.organization;
+    if (org == null) return 'Aucune organisation';
+    final target = state.members.firstWhere(
+      (m) => m.userId == targetUserId,
+      orElse: () => throw Exception('Membre introuvable'),
+    );
+    if (target.role != 'member') return 'Ce membre est déjà administrateur';
+    try {
+      await DatabaseService.updateOrgMemberRole(
+          orgId: org.id, userId: targetUserId, newRole: 'admin');
+      await refreshMembers();
+      _syncMemberToCloud(org.id, targetUserId);
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  /// Owner demotes an admin back to member.
+  Future<String?> revokeAdminRole(String targetUserId) async {
+    final user = StorageService.currentUser;
+    if (user == null) return 'Aucun utilisateur connecté';
+    if (user.orgRole != 'owner') return _l10n.orgOwnerOnlyAction;
+    final org = state.organization;
+    if (org == null) return 'Aucune organisation';
+    final target = state.members.firstWhere(
+      (m) => m.userId == targetUserId,
+      orElse: () => throw Exception('Membre introuvable'),
+    );
+    if (target.role != 'admin') return "Ce membre n'est pas administrateur";
+    try {
+      await DatabaseService.updateOrgMemberRole(
+          orgId: org.id, userId: targetUserId, newRole: 'member');
+      await refreshMembers();
+      _syncMemberToCloud(org.id, targetUserId);
       return null;
     } catch (e) {
       return e.toString();
@@ -949,4 +1049,9 @@ final orgCanExportContactsProvider = Provider<bool>((ref) {
   if (user?.organizationId == null)
     return true; // solo: always can export own contacts
   return ref.watch(organizationProvider).currentUserCanExportContacts;
+});
+
+/// True when the current user is the org creator (role = 'owner').
+final orgIsOwnerProvider = Provider<bool>((ref) {
+  return StorageService.currentUser?.orgRole == 'owner';
 });

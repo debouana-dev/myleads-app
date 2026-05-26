@@ -68,7 +68,7 @@ class OrgMember {
   final String id; // organization_members row id
   final String organizationId;
   final String userId;
-  final String role; // 'admin' | 'member'
+  final String role; // 'owner' | 'admin' | 'member'
   final String status; // 'active' | 'suspended'
   final DateTime joinedAt;
   // Denormalized user info (populated at load time).
@@ -114,6 +114,9 @@ class OrgMember {
   }) : joinedAt = joinedAt ?? DateTime.now();
 
   String get fullName => '$firstName $lastName'.trim();
+
+  bool get isOwner => role == 'owner';
+  bool get isAdminOrAbove => role == 'owner' || role == 'admin';
 
   OrgMember copyWith({
     String? id,

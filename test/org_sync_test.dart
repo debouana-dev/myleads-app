@@ -17,6 +17,7 @@
 /// without an FTP connection.
 library;
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -69,7 +70,10 @@ Future<void> _createSchema(Database db, int version) async {
       organization_id TEXT,
       org_role TEXT,
       plan TEXT NOT NULL DEFAULT 'free',
-      last_sync_at TEXT
+      last_sync_at TEXT,
+      plan_expires_at TEXT,
+      subscription_billing_cycle TEXT,
+      apple_user_identifier TEXT
     )
   ''');
 
@@ -185,7 +189,11 @@ Future<void> _createSchema(Database db, int version) async {
       name TEXT NOT NULL,
       owner_id TEXT NOT NULL,
       invite_code TEXT NOT NULL UNIQUE,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      license_count INTEGER NOT NULL DEFAULT 1,
+      org_plan_expires_at TEXT,
+      org_status TEXT NOT NULL DEFAULT 'active',
+      org_suspended_at TEXT
     )
   ''');
 
@@ -200,6 +208,7 @@ Future<void> _createSchema(Database db, int version) async {
       first_name TEXT NOT NULL,
       last_name TEXT NOT NULL,
       email TEXT,
+      phone TEXT,
       nickname TEXT,
       company TEXT,
       biography TEXT,
@@ -208,6 +217,7 @@ Future<void> _createSchema(Database db, int version) async {
       can_create INTEGER NOT NULL DEFAULT 1,
       can_view_reminders INTEGER NOT NULL DEFAULT 0,
       can_view_history INTEGER NOT NULL DEFAULT 0,
+      can_export_contacts INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       UNIQUE (organization_id, user_id)
@@ -217,6 +227,25 @@ Future<void> _createSchema(Database db, int version) async {
       'CREATE INDEX idx_org_members_org ON organization_members(organization_id)');
   await db.execute(
       'CREATE INDEX idx_org_members_user ON organization_members(user_id)');
+
+  await db.execute('''
+    CREATE TABLE payment_history (
+      id TEXT PRIMARY KEY,
+      transaction_id TEXT NOT NULL DEFAULT '',
+      user_id TEXT NOT NULL,
+      plan TEXT NOT NULL,
+      billing_cycle TEXT NOT NULL,
+      amount REAL NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'EUR',
+      status TEXT NOT NULL DEFAULT 'succeeded',
+      stripe_payment_intent_id TEXT NOT NULL,
+      payment_method TEXT NOT NULL DEFAULT 'card',
+      account_type TEXT NOT NULL DEFAULT 'individual',
+      created_at TEXT NOT NULL
+    )
+  ''');
+  await db.execute(
+      'CREATE INDEX idx_payment_history_user ON payment_history(user_id)');
 }
 
 // ─── Test-data helpers ────────────────────────────────────────────────────────
@@ -231,7 +260,7 @@ Future<void> _seedUsers() async {
     passwordHash: 'hash:admin',
     plan: 'business',
     organizationId: _orgId,
-    orgRole: 'admin',
+    orgRole: 'owner',
     emailVerified: true,
     createdAt: now,
     passwordChangedAt: now,
@@ -323,6 +352,8 @@ void main() {
   late Database db;
 
   setUpAll(() async {
+    dotenv.loadFromString(
+        isOptional: true, mergeWith: {'SECRET_KEY': 'test-secret-key'});
     EncryptionService.initForTest(keyB64: _kTestKeyB64, ivB64: _kTestIvB64);
 
     db = await databaseFactoryFfi.openDatabase(
@@ -399,7 +430,7 @@ void main() {
         id: 'mem-admin',
         orgId: _orgId,
         userId: _adminId,
-        role: 'admin',
+        role: 'owner',
       );
 
       await DatabaseService.deleteOrganization(_orgId);
@@ -426,17 +457,17 @@ void main() {
       await DatabaseService.insertOrganization(_makeOrg());
     });
 
-    test('admin member gets all privileges', () async {
+    test('owner member gets all privileges', () async {
       await DatabaseService.insertOrgMember(
         id: 'mem-admin',
         orgId: _orgId,
         userId: _adminId,
-        role: 'admin',
+        role: 'owner',
       );
 
       final members = await DatabaseService.getMembersForOrganization(_orgId);
       final admin = members.firstWhere((m) => m.userId == _adminId);
-      expect(admin.role, equals('admin'));
+      expect(admin.role, equals('owner'));
       expect(admin.canEdit, isTrue);
       expect(admin.canCreate, isTrue);
       expect(admin.canViewReminders, isTrue);
@@ -603,7 +634,8 @@ void main() {
       final bobRow = rows.firstWhere((r) => r['user_id'] == _member1Id);
       expect(bobRow['first_name'], equals('Robert'));
       expect(bobRow['last_name'], equals('Memberson'));
-      expect(bobRow['email'], equals('robert@acme.com'));
+      // email is stored AES-encrypted in organization_members; non-null check only.
+      expect(bobRow['email'], isNotNull);
       expect(bobRow['nickname'], equals('Rob'));
       expect(bobRow['company'], equals('Acme Subsidiary'));
       expect(bobRow['biography'], equals('Updated member bio'));
@@ -631,7 +663,7 @@ void main() {
       await _seedUsers();
       await DatabaseService.insertOrganization(_makeOrg());
       await DatabaseService.insertOrgMember(
-          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'admin');
+          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'owner');
       await DatabaseService.insertOrgMember(
           id: 'mem-bob', orgId: _orgId, userId: _member1Id, role: 'member');
     });
@@ -738,7 +770,7 @@ void main() {
       await _seedUsers();
       await DatabaseService.insertOrganization(_makeOrg());
       await DatabaseService.insertOrgMember(
-          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'admin');
+          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'owner');
       await DatabaseService.insertOrgMember(
           id: 'mem-bob', orgId: _orgId, userId: _member1Id, role: 'member');
       await DatabaseService.insertOrgMember(
@@ -847,7 +879,7 @@ void main() {
       await _seedUsers();
       await DatabaseService.insertOrganization(_makeOrg());
       await DatabaseService.insertOrgMember(
-          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'admin');
+          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'owner');
       await DatabaseService.insertOrgMember(
           id: 'mem-bob', orgId: _orgId, userId: _member1Id, role: 'member');
 
@@ -888,7 +920,7 @@ void main() {
       await _seedUsers();
       await DatabaseService.insertOrganization(_makeOrg());
       await DatabaseService.insertOrgMember(
-          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'admin');
+          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'owner');
       await DatabaseService.insertOrgMember(
           id: 'mem-bob', orgId: _orgId, userId: _member1Id, role: 'member');
       await DatabaseService.insertOrgMember(
@@ -997,7 +1029,7 @@ void main() {
       await _seedUsers();
       await DatabaseService.insertOrganization(_makeOrg());
       await DatabaseService.insertOrgMember(
-          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'admin');
+          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'owner');
       await DatabaseService.insertOrgMember(
           id: 'mem-bob', orgId: _orgId, userId: _member1Id, role: 'member');
 
@@ -1127,7 +1159,7 @@ void main() {
       await _seedUsers();
       await DatabaseService.insertOrganization(_makeOrg());
       await DatabaseService.insertOrgMember(
-          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'admin');
+          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'owner');
       await DatabaseService.insertOrgMember(
           id: 'mem-bob', orgId: _orgId, userId: _member1Id, role: 'member');
     });
@@ -1319,6 +1351,91 @@ void main() {
           await DatabaseService.findOrganizationByInviteCode('xyzxyz12');
       expect(found, isNotNull);
       expect(found!.id, equals(_orgId));
+    });
+  });
+
+  // ===========================================================================
+  // 11 — OWNER ROLE AND ADMIN MANAGEMENT
+  // ===========================================================================
+
+  group('Owner role and admin management', () {
+    setUp(() async {
+      await _seedUsers();
+      await DatabaseService.insertOrganization(_makeOrg());
+      await DatabaseService.insertOrgMember(
+          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'owner');
+      await DatabaseService.insertOrgMember(
+          id: 'mem-bob', orgId: _orgId, userId: _member1Id, role: 'member');
+    });
+
+    test('owner gets all privileges', () async {
+      final privs = await DatabaseService.getMemberPrivileges(
+          userId: _adminId, orgId: _orgId);
+      expect(privs.canEdit, isTrue);
+      expect(privs.canCreate, isTrue);
+      expect(privs.canViewReminders, isTrue);
+      expect(privs.canViewHistory, isTrue);
+      expect(privs.canExportContacts, isTrue);
+    });
+
+    test('updateOrgMemberRole promotes member to admin with elevated privileges',
+        () async {
+      await DatabaseService.updateOrgMemberRole(
+          orgId: _orgId, userId: _member1Id, newRole: 'admin');
+
+      final members = await DatabaseService.getMembersForOrganization(_orgId);
+      final promoted = members.firstWhere((m) => m.userId == _member1Id);
+      expect(promoted.role, equals('admin'));
+      expect(promoted.canEdit, isTrue);
+      expect(promoted.canCreate, isTrue);
+      expect(promoted.canViewReminders, isTrue);
+      expect(promoted.canViewHistory, isTrue);
+      expect(promoted.canExportContacts, isTrue);
+
+      final user = await DatabaseService.findUserById(_member1Id);
+      expect(user!.orgRole, equals('admin'));
+    });
+
+    test('updateOrgMemberRole demotes admin to member with reset privileges',
+        () async {
+      // First promote to admin.
+      await DatabaseService.updateOrgMemberRole(
+          orgId: _orgId, userId: _member1Id, newRole: 'admin');
+      // Then demote back.
+      await DatabaseService.updateOrgMemberRole(
+          orgId: _orgId, userId: _member1Id, newRole: 'member');
+
+      final members = await DatabaseService.getMembersForOrganization(_orgId);
+      final demoted = members.firstWhere((m) => m.userId == _member1Id);
+      expect(demoted.role, equals('member'));
+      expect(demoted.canEdit, isFalse);
+      expect(demoted.canCreate, isTrue);
+      expect(demoted.canViewReminders, isFalse);
+      expect(demoted.canViewHistory, isFalse);
+      expect(demoted.canExportContacts, isFalse);
+
+      final user = await DatabaseService.findUserById(_member1Id);
+      expect(user!.orgRole, equals('member'));
+    });
+
+    test('getMemberPrivileges returns full access for owner role', () async {
+      final privs = await DatabaseService.getMemberPrivileges(
+          userId: _adminId, orgId: _orgId);
+      expect(privs.canEdit, isTrue);
+      expect(privs.canCreate, isTrue);
+      expect(privs.canViewReminders, isTrue);
+      expect(privs.canViewHistory, isTrue);
+      expect(privs.canExportContacts, isTrue);
+    });
+
+    test('OrgMember.isOwner is true only for owner role', () async {
+      final members = await DatabaseService.getMembersForOrganization(_orgId);
+      final owner = members.firstWhere((m) => m.userId == _adminId);
+      final member = members.firstWhere((m) => m.userId == _member1Id);
+      expect(owner.isOwner, isTrue);
+      expect(owner.isAdminOrAbove, isTrue);
+      expect(member.isOwner, isFalse);
+      expect(member.isAdminOrAbove, isFalse);
     });
   });
 }

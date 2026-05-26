@@ -168,8 +168,8 @@ CREATE TABLE IF NOT EXISTS "organizations" (
 
 
 -- ============================================================
--- TABLE: organization_members  (v7 + v8 privileges + v10 reminder access + v12 history access + v18 member profile denormalization + v20 export access + v21 email encryption + v24 phone)
--- role: admin | member
+-- TABLE: organization_members  (v7 + v8 privileges + v10 reminder access + v12 history access + v18 member profile denormalization + v20 export access + v21 email encryption + v24 phone + v25 owner role)
+-- role: owner | admin | member
 -- status: active | suspended
 -- Denormalized member profile fields are stored here for fast local display.
 -- can_edit / can_create / can_view_reminders / can_view_history / can_export_contacts: per-member flags.
@@ -376,6 +376,8 @@ ALTER TABLE "organization_members"
 -- v23   : users.apple_user_identifier — Apple Sign-In unique identifier for
 --         multi-device authentication when Apple returns userIdentifier only
 -- v24   : organization_members.phone — AES-256-CBC ciphertext, key = SHA256(SECRET_KEY:org_id)
+-- v25   : organization_members.role gains 'owner' value — org creator promoted from
+--         'admin' to 'owner'; users.org_role updated to match
 -- ============================================================
 
 
@@ -386,3 +388,26 @@ ALTER TABLE "organization_members"
 
 ALTER TABLE "users"
 ADD COLUMN IF NOT EXISTS "apple_user_identifier" VARCHAR(255) DEFAULT NULL;
+
+-- ============================================================
+-- UPGRADE SCRIPT (v24 → v25)
+-- Introduce 'owner' role: promote org creator member rows from
+-- 'admin' to 'owner' and sync users.org_role accordingly.
+-- ============================================================
+
+UPDATE "organization_members"
+  SET "role" = 'owner'
+  WHERE "role" = 'admin'
+    AND "user_id" IN (
+      SELECT "owner_id" FROM "organizations"
+      WHERE "organizations"."id" = "organization_members"."organization_id"
+    );
+
+UPDATE "users"
+  SET "org_role" = 'owner'
+  WHERE "organization_id" IS NOT NULL
+    AND "org_role" = 'admin'
+    AND "id" IN (
+      SELECT "owner_id" FROM "organizations"
+      WHERE "organizations"."id" = "users"."organization_id"
+    );

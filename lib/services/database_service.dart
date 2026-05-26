@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:uuid/uuid.dart';
 
 import '../models/app_notification.dart';
 import '../models/contact.dart';
@@ -27,7 +28,8 @@ import 'web_db_factory_stub.dart'
 class DatabaseService {
   static Database? _db;
   static const _dbName = 'myleads.db';
-  static const _dbVersion = 24;
+  static const _dbVersion = 25;
+  static const _uuid = Uuid();
 
   // ── Remote sync callbacks ──────────────────────────────────────────────────
   static void Function(String table, Map<String, dynamic> row)? _onRemoteUpsert;
@@ -402,6 +404,34 @@ class DatabaseService {
       try {
         await db.execute(
             'ALTER TABLE organization_members ADD COLUMN phone TEXT');
+      } catch (_) {}
+    }
+    if (oldVersion < 25) {
+      // v24 → v25: introduce 'owner' role — promote org creator's member row
+      // from 'admin' to 'owner'. Also syncs users.org_role so
+      // StorageService.currentUser is consistent without requiring a fresh login.
+      try {
+        await db.rawUpdate('''
+          UPDATE organization_members
+          SET role = 'owner'
+          WHERE role = 'admin'
+            AND user_id IN (
+              SELECT owner_id FROM organizations
+              WHERE organizations.id = organization_members.organization_id
+            )
+        ''');
+      } catch (_) {}
+      try {
+        await db.rawUpdate('''
+          UPDATE users
+          SET org_role = 'owner'
+          WHERE organization_id IS NOT NULL
+            AND org_role = 'admin'
+            AND id IN (
+              SELECT owner_id FROM organizations
+              WHERE organizations.id = users.organization_id
+            )
+        ''');
       } catch (_) {}
     }
   }
@@ -1560,7 +1590,7 @@ class DatabaseService {
       final contactCount = (contactRows.first['cnt'] as int?) ?? 0;
 
       final role = row['role'] as String? ?? 'member';
-      final isAdmin = role == 'admin';
+      final isAdmin = role == 'owner' || role == 'admin';
       members.add(OrgMember(
         id: row['id'] as String,
         organizationId: orgId,
@@ -1596,7 +1626,7 @@ class DatabaseService {
     required String role,
   }) async {
     final db = await database;
-    final isAdmin = role == 'admin';
+    final isAdmin = role == 'owner' || role == 'admin';
     final user = await findUserById(userId);
     final row = {
       'id': id,
@@ -1901,7 +1931,7 @@ class DatabaseService {
         limit: 1);
     if (rows.isEmpty) return false;
     final role = rows.first['role'] as String? ?? 'member';
-    if (role == 'admin') return true;
+    if (role == 'owner' || role == 'admin') return true;
     return (rows.first['can_edit'] as int? ?? 0) == 1;
   }
 
@@ -1918,7 +1948,7 @@ class DatabaseService {
         limit: 1);
     if (rows.isEmpty) return true;
     final role = rows.first['role'] as String? ?? 'member';
-    if (role == 'admin') return true;
+    if (role == 'owner' || role == 'admin') return true;
     return (rows.first['can_create'] as int? ?? 1) == 1;
   }
 
@@ -1964,7 +1994,8 @@ class DatabaseService {
         canExportContacts: true
       );
     }
-    final isAdmin = (rows.first['role'] as String?) == 'admin';
+    final isAdmin = (rows.first['role'] as String?) == 'owner' ||
+        (rows.first['role'] as String?) == 'admin';
     return (
       canEdit: isAdmin || (rows.first['can_edit'] as int? ?? 0) == 1,
       canCreate: isAdmin || (rows.first['can_create'] as int? ?? 1) == 1,
@@ -2018,6 +2049,47 @@ class DatabaseService {
     if (rows.isNotEmpty) {
       _onRemoteUpsert?.call(
           'organization_members', Map<String, dynamic>.from(rows.first));
+    }
+  }
+
+  /// Promotes a member to 'admin' or demotes an admin back to 'member'.
+  /// Resets all 5 privilege flags to match the new role.
+  /// The 'owner' role is never assignable via this method.
+  static Future<void> updateOrgMemberRole({
+    required String orgId,
+    required String userId,
+    required String newRole,
+  }) async {
+    assert(newRole == 'admin' || newRole == 'member');
+    final db = await database;
+    final isElevated = newRole == 'admin';
+    await db.update(
+      'organization_members',
+      {
+        'role': newRole,
+        'can_edit': isElevated ? 1 : 0,
+        'can_create': 1,
+        'can_view_reminders': isElevated ? 1 : 0,
+        'can_view_history': isElevated ? 1 : 0,
+        'can_export_contacts': isElevated ? 1 : 0,
+      },
+      where: 'organization_id = ? AND user_id = ?',
+      whereArgs: [orgId, userId],
+    );
+    await db.update('users', {'org_role': newRole},
+        where: 'id = ?', whereArgs: [userId]);
+    final rows = await db.query('organization_members',
+        where: 'organization_id = ? AND user_id = ?',
+        whereArgs: [orgId, userId],
+        limit: 1);
+    if (rows.isNotEmpty) {
+      _onRemoteUpsert?.call(
+          'organization_members', Map<String, dynamic>.from(rows.first));
+    }
+    final userRow =
+        await db.query('users', where: 'id = ?', whereArgs: [userId], limit: 1);
+    if (userRow.isNotEmpty) {
+      _onRemoteUpsert?.call('users', Map<String, dynamic>.from(userRow.first));
     }
   }
 
