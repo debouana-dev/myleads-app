@@ -311,7 +311,7 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
                   label: l10n.acceptEula,
                   linkLabel: l10n.eulaLink,
                   url:
-                      'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/?utm_source=chatgpt.com',
+                      'https://me2leads.com/terms',
                   onChanged: (v) => setModalState(() => eulaAccepted = v!),
                 ),
               ],

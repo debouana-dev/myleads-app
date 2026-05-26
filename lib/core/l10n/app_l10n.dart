@@ -211,13 +211,16 @@ class AppL10n {
   String get privacyPolicyAccept => _en ? 'I accept the ' : "J'accepte la ";
   String get privacyPolicyLink =>
       _en ? 'privacy Policy' : 'politique de confidentialité';
+  String get termsOfUseLink =>
+      _en ? 'terms of use' : 'conditions d\'utilisation';
+  String get and => _en ? ' and ' : ' et les ';
   String get eulaLink => 'EULA';
   String get privacyPolicyDesc => _en
       ? 'Read our privacy policy'
       : 'Lire notre politique de confidentialité';
   String get privacyPolicyRequired => _en
-      ? 'Please accept the privacy policy'
-      : 'Veuillez accepter la politique de confidentialité';
+      ? 'Please accept the privacy policy and terms of use'
+      : 'Veuillez accepter la politique de confidentialité et les conditions d\'utilisation';
 
   // ─── Auth – Forgot Password ───────────────────────────────────────────────
   String get forgotPasswordTitle =>
