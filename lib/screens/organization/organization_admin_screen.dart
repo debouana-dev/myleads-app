@@ -739,6 +739,7 @@ class _OrganizationAdminScreenState
                 isSuspended: isSuspended,
                 onRenew: isOwner ? _doRenewLicenses : null,
                 l10n: l10n,
+                showExpiry: isOwner,
               ),
               const SizedBox(height: 16),
             ],
@@ -1724,6 +1725,7 @@ class _LicenseInfoCard extends StatelessWidget {
     required this.isSuspended,
     required this.onRenew,
     required this.l10n,
+    required this.showExpiry,
   });
 
   final int licenseCount;
@@ -1732,6 +1734,7 @@ class _LicenseInfoCard extends StatelessWidget {
   final bool isSuspended;
   final VoidCallback? onRenew;
   final AppL10n l10n;
+  final bool showExpiry;
 
   @override
   Widget build(BuildContext context) {
@@ -1813,7 +1816,7 @@ class _LicenseInfoCard extends StatelessWidget {
                   color: seatColor,
                 ),
               ),
-              if (expiryText != null) ...[
+              if (showExpiry && expiryText != null) ...[
                 const SizedBox(width: 8),
                 Expanded(
                   child: _InfoChip(
