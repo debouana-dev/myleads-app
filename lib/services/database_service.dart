@@ -395,15 +395,15 @@ class DatabaseService {
     if (oldVersion < 23) {
       // v22 → v23: Apple Sign-In support — store Apple userIdentifier for reconnections
       try {
-        await db.execute(
-            'ALTER TABLE users ADD COLUMN apple_user_identifier TEXT');
+        await db
+            .execute('ALTER TABLE users ADD COLUMN apple_user_identifier TEXT');
       } catch (_) {}
     }
     if (oldVersion < 24) {
       // v23 → v24: denormalized member phone, encrypted with org key.
       try {
-        await db.execute(
-            'ALTER TABLE organization_members ADD COLUMN phone TEXT');
+        await db
+            .execute('ALTER TABLE organization_members ADD COLUMN phone TEXT');
       } catch (_) {}
     }
     if (oldVersion < 25) {
@@ -723,7 +723,8 @@ class DatabaseService {
 
     final membershipRows = await db.query('organization_members',
         columns: ['id', 'organization_id'],
-        where: 'user_id = ?', whereArgs: [user.id]);
+        where: 'user_id = ?',
+        whereArgs: [user.id]);
     for (final mr in membershipRows) {
       final orgId = mr['organization_id'] as String;
       final fields = {
@@ -1054,8 +1055,7 @@ class DatabaseService {
     return v.isNotEmpty ? v : null;
   }
 
-  static Map<String, dynamic> _contactToRow(Contact c,
-      {String? keyMaterial}) {
+  static Map<String, dynamic> _contactToRow(Contact c, {String? keyMaterial}) {
     final km = keyMaterial ?? _currentOrgKeyMaterial();
     return {
       'id': c.id,
@@ -1863,19 +1863,6 @@ class DatabaseService {
         ? null
         : memberJoinRow.first['joined_at'] as String?;
 
-    // Determine when the member joined so we can distinguish contacts they
-    // brought in (pre-join) from contacts they created inside the org (post-join).
-    final memberJoinRow = await db.query(
-      'organization_members',
-      columns: ['joined_at'],
-      where: 'organization_id = ? AND user_id = ?',
-      whereArgs: [orgId, fromUserId],
-      limit: 1,
-    );
-    final joinedAt = memberJoinRow.isEmpty
-        ? null
-        : memberJoinRow.first['joined_at'] as String?;
-
     final otherMemberRows = await db.query('organization_members',
         columns: ['user_id'],
         where: "organization_id = ? AND status = 'active' AND user_id != ?",
@@ -1950,8 +1937,8 @@ class DatabaseService {
         } else {
           if (isDuplicate) {
             // Post-join + duplicate: member loses it; org retains via other member.
-            await txn.delete('contacts',
-                where: 'id = ?', whereArgs: [contactId]);
+            await txn
+                .delete('contacts', where: 'id = ?', whereArgs: [contactId]);
             deletedIds.add(contactId);
           } else {
             // Post-join + non-duplicate: move to owner (member loses).
@@ -2022,9 +2009,8 @@ class DatabaseService {
       whereArgs: [orgId, outgoingOwnerId],
       limit: 1,
     );
-    final joinedAtStr = memberRows.isEmpty
-        ? null
-        : memberRows.first['joined_at'] as String?;
+    final joinedAtStr =
+        memberRows.isEmpty ? null : memberRows.first['joined_at'] as String?;
 
     final outgoingContacts = await db.query(
       'contacts',
@@ -2128,15 +2114,15 @@ class DatabaseService {
     // Phase C — live-write callbacks.
     if (_onRemoteUpsert != null) {
       for (final id in movedIds) {
-        final rows =
-            await db.query('contacts', where: 'id = ?', whereArgs: [id], limit: 1);
+        final rows = await db.query('contacts',
+            where: 'id = ?', whereArgs: [id], limit: 1);
         if (rows.isNotEmpty) {
           _onRemoteUpsert!('contacts', Map<String, dynamic>.from(rows.first));
         }
       }
       for (final id in personalCopyIds) {
-        final rows =
-            await db.query('contacts', where: 'id = ?', whereArgs: [id], limit: 1);
+        final rows = await db.query('contacts',
+            where: 'id = ?', whereArgs: [id], limit: 1);
         if (rows.isNotEmpty) {
           _onRemoteUpsert!('contacts', Map<String, dynamic>.from(rows.first));
         }
@@ -2149,16 +2135,17 @@ class DatabaseService {
       limit: 1,
     );
     if (newMemberRow.isNotEmpty) {
-      _onRemoteUpsert?.call(
-          'organization_members', Map<String, dynamic>.from(newMemberRow.first));
+      _onRemoteUpsert?.call('organization_members',
+          Map<String, dynamic>.from(newMemberRow.first));
     }
-    final newUserRow =
-        await db.query('users', where: 'id = ?', whereArgs: [newOwnerId], limit: 1);
+    final newUserRow = await db.query('users',
+        where: 'id = ?', whereArgs: [newOwnerId], limit: 1);
     if (newUserRow.isNotEmpty) {
-      _onRemoteUpsert?.call('users', Map<String, dynamic>.from(newUserRow.first));
+      _onRemoteUpsert?.call(
+          'users', Map<String, dynamic>.from(newUserRow.first));
     }
-    final orgRow = await db.query(
-        'organizations', where: 'id = ?', whereArgs: [orgId], limit: 1);
+    final orgRow = await db.query('organizations',
+        where: 'id = ?', whereArgs: [orgId], limit: 1);
     if (orgRow.isNotEmpty) {
       _onRemoteUpsert?.call(
           'organizations', Map<String, dynamic>.from(orgRow.first));
@@ -2478,8 +2465,8 @@ class DatabaseService {
           }
         }
         if (updates.isNotEmpty) {
-          await txn.update('contacts', updates,
-              where: 'id = ?', whereArgs: [id]);
+          await txn
+              .update('contacts', updates, where: 'id = ?', whereArgs: [id]);
           updatedIds.add(id);
         }
       }
@@ -2487,8 +2474,8 @@ class DatabaseService {
 
     if (_onRemoteUpsert != null) {
       for (final id in updatedIds) {
-        final updated = await db
-            .query('contacts', where: 'id = ?', whereArgs: [id], limit: 1);
+        final updated = await db.query('contacts',
+            where: 'id = ?', whereArgs: [id], limit: 1);
         if (updated.isNotEmpty) {
           _onRemoteUpsert!(
               'contacts', Map<String, dynamic>.from(updated.first));
@@ -2529,8 +2516,8 @@ class DatabaseService {
           }
         }
         if (updates.isNotEmpty) {
-          await txn.update('contacts', updates,
-              where: 'id = ?', whereArgs: [id]);
+          await txn
+              .update('contacts', updates, where: 'id = ?', whereArgs: [id]);
           updatedIds.add(id);
         }
       }
@@ -2538,8 +2525,8 @@ class DatabaseService {
 
     if (_onRemoteUpsert != null) {
       for (final id in updatedIds) {
-        final updated = await db
-            .query('contacts', where: 'id = ?', whereArgs: [id], limit: 1);
+        final updated = await db.query('contacts',
+            where: 'id = ?', whereArgs: [id], limit: 1);
         if (updated.isNotEmpty) {
           _onRemoteUpsert!(
               'contacts', Map<String, dynamic>.from(updated.first));
@@ -2585,8 +2572,8 @@ class DatabaseService {
           }
         }
         if (updates.isNotEmpty) {
-          await txn.update('contacts', updates,
-              where: 'id = ?', whereArgs: [id]);
+          await txn
+              .update('contacts', updates, where: 'id = ?', whereArgs: [id]);
           updatedIds.add(id);
         }
       }
@@ -2594,8 +2581,8 @@ class DatabaseService {
 
     if (_onRemoteUpsert != null) {
       for (final id in updatedIds) {
-        final updated = await db
-            .query('contacts', where: 'id = ?', whereArgs: [id], limit: 1);
+        final updated = await db.query('contacts',
+            where: 'id = ?', whereArgs: [id], limit: 1);
         if (updated.isNotEmpty) {
           _onRemoteUpsert!(
               'contacts', Map<String, dynamic>.from(updated.first));
