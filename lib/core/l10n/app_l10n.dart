@@ -211,6 +211,7 @@ class AppL10n {
   String get privacyPolicyAccept => _en ? 'I accept the ' : "J'accepte la ";
   String get privacyPolicyLink =>
       _en ? 'privacy Policy' : 'politique de confidentialité';
+  String get eulaLink => 'EULA';
   String get privacyPolicyDesc => _en
       ? 'Read our privacy policy'
       : 'Lire notre politique de confidentialité';
@@ -304,6 +305,7 @@ class AppL10n {
       ? 'Are you sure you want to permanently delete $name? This action is irreversible.'
       : 'Êtes-vous sûr de vouloir supprimer définitivement $name ? Cette action est irréversible.';
   String get cancel => _en ? 'Cancel' : 'Annuler';
+  String get ok => 'OK';
   String get delete => _en ? 'Delete' : 'Supprimer';
   String get reminderSection => _en ? 'Reminders' : 'Rappels';
   String get modificationBadge => _en ? 'EDIT' : 'MODIFICATION';
@@ -616,6 +618,16 @@ class AppL10n {
       _en ? 'Plan updated successfully' : 'Forfait mis à jour avec succès';
   String get planChangeError =>
       _en ? 'Error changing plan' : 'Erreur lors du changement de forfait';
+  String get acceptTermsTitle => _en ? 'Accept Terms' : 'Accepter les conditions';
+  String get acceptTermsSubtitle => _en
+      ? 'Please review and accept our policies before subscribing.'
+      : 'Veuillez consulter et accepter nos politiques avant de vous abonner.';
+  String get acceptPrivacyPolicy =>
+      _en ? 'I accept the Privacy Policy' : 'J\'accepte la politique de confidentialité';
+  String get acceptEula => _en ? 'I accept the EULA' : 'J\'accepte le CLUF (EULA)';
+  String get mustAcceptTerms => _en
+      ? 'You must accept the terms to continue'
+      : 'Vous devez accepter les conditions pour continuer';
   String downgradeNotAllowed(String date) => _en
       ? 'You can downgrade your plan starting from $date'
       : 'Vous pouvez rétrograder votre forfait à partir du $date';
@@ -947,6 +959,10 @@ class AppL10n {
   String get orgRenewalWindowNotOpenGeneric => _en
       ? 'Organization license renewal is only available during the renewal window.'
       : 'Le renouvellement des licences d\'organisation est uniquement disponible pendant la fenêtre de renouvellement.';
+  String get iosMultiLicenseTitle => _en ? 'Action required' : 'Action requise';
+  String get iosMultiLicenseBody => _en
+      ? 'Apple does not support multi-license subscriptions in this app. To manage or renew your organization\'s licenses, please use our Android app or visit our website.'
+      : 'Apple ne supporte pas les abonnements multi-licences dans cette application. Pour gérer ou renouveler les licences de votre organisation, veuillez utiliser notre application Android ou vous rendre sur notre site web.';
 
   // ─── Import / Export ─────────────────────────────────────────────────────
   String get importExportTitle => _en ? 'Import / Export' : 'Import / Export';
