@@ -265,6 +265,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
 
       // Sync updated privileges to the cloud
       _syncMemberToCloud(org.id, userId);
+      _backgroundRefreshFromCloud();
 
       return null;
     } catch (e) {
@@ -376,6 +377,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
 
       // Sync updated license/expiry to the cloud
       _syncOrgToCloud(org.id);
+      _backgroundRefreshFromCloud();
 
       return null;
     } catch (e) {
@@ -603,6 +605,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
          targetName: target.fullName,
          orgName: org.name,
        );
+       _backgroundRefreshFromCloud();
 
        return null;
      } catch (e) {
@@ -1040,6 +1043,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
          targetName: target.fullName,
          orgName: org.name,
        );
+       _backgroundRefreshFromCloud();
 
        return null;
      } catch (e) {
@@ -1085,6 +1089,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
 
        // Sync the member reactivation to the cloud in the background
        _syncMemberToCloud(org.id, targetUserId);
+       _backgroundRefreshFromCloud();
 
        return null;
      } catch (e) {
@@ -1109,6 +1114,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
 
       // Sync updated invite code to the cloud
       _syncOrgToCloud(org.id);
+      _backgroundRefreshFromCloud();
 
       return null;
     } catch (e) {
@@ -1132,6 +1138,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
 
       // Sync updated name to the cloud
       _syncOrgToCloud(org.id);
+      _backgroundRefreshFromCloud();
 
       return null;
     } catch (e) {
@@ -1156,6 +1163,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
           orgId: org.id, userId: targetUserId, newRole: 'admin');
       await refreshMembers();
       _syncMemberToCloud(org.id, targetUserId);
+      _backgroundRefreshFromCloud();
       return null;
     } catch (e) {
       return e.toString();
@@ -1179,6 +1187,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
           orgId: org.id, userId: targetUserId, newRole: 'member');
       await refreshMembers();
       _syncMemberToCloud(org.id, targetUserId);
+      _backgroundRefreshFromCloud();
       return null;
     } catch (e) {
       return e.toString();
@@ -1204,16 +1213,34 @@ class OrgNotifier extends StateNotifier<OrgState> {
     return List.generate(8, (_) => chars[rand.nextInt(chars.length)]).join();
   }
 
-  /// Refresh organization data from cloud (pull from MySQL), then reload locally.
-  /// Called by pull-to-refresh on the organization admin screen.
+  /// Silently pulls the latest org data from cloud and refreshes local state
+  /// after a management action. Does not set isLoading — runs transparently.
+  void _backgroundRefreshFromCloud() {
+    final orgId = state.organization?.id;
+    if (orgId == null) return;
+    unawaited(Future(() async {
+      await RemoteSyncService.pullOrganizationDataById(orgId);
+      await loadForCurrentUser();
+    }));
+  }
+
+  /// Refresh organization data from cloud, then reload locally.
+  /// Called on screen entry, pull-to-refresh, and the AppBar refresh button.
+  /// Handles first-open when state.organization is not yet populated.
   Future<void> refreshFromCloud() async {
-    final org = state.organization;
-    if (org == null) return;
+    final user = StorageService.currentUser;
+    if (user?.organizationId == null) return;
+
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      // 1. Pull organization data from cloud
-      await RemoteSyncService.pullOrganizationDataById(org.id);
-      // 2. Reload from local database
+      final orgId = state.organization?.id ??
+          (await DatabaseService.findOrganizationById(user!.organizationId!))
+              ?.id;
+      if (orgId == null) {
+        state = const OrgState();
+        return;
+      }
+      await RemoteSyncService.pullOrganizationDataById(orgId);
       await loadForCurrentUser();
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());

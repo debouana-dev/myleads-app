@@ -918,6 +918,9 @@ class AppL10n {
   String get orgJoinNoInternet => _en
       ? 'Your device is not connected to the internet. Please try again when online.'
       : "Votre appareil n'est pas connecté à internet. Veuillez réessayer lorsque vous êtes en ligne.";
+  String get orgScreenRequiresInternet => _en
+      ? 'An internet connection is required to access your organization'
+      : 'Une connexion internet est requise pour accéder à votre organisation';
   String get orgJoinServerError => _en
       ? 'Unable to reach the cloud server. Please try again.'
       : 'Impossible de contacter le serveur cloud. Veuillez réessayer.';

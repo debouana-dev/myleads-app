@@ -41,7 +41,7 @@ class _OrganizationAdminScreenState
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(organizationProvider.notifier).loadForCurrentUser();
+      ref.read(organizationProvider.notifier).refreshFromCloud();
     });
   }
 
