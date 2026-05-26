@@ -40,6 +40,10 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
   CameraController? _cardCameraController;
   bool _isCardCameraInitialized = false;
 
+  // QR debounce: prevent duplicate navigations for the same code
+  DateTime? _lastQrProcessed;
+  String? _lastQrValue;
+
   @override
   void initState() {
     super.initState();
@@ -108,7 +112,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
   Future<void> _initQrController() async {
     _qrController?.dispose();
     _qrController = MobileScannerController(
-      detectionSpeed: DetectionSpeed.normal,
+      detectionSpeed: DetectionSpeed.noDuplicates,
       facing: CameraFacing.back,
       torchEnabled: _flashOn,
     );
@@ -119,8 +123,9 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
     await _cardCameraController?.dispose();
     _cardCameraController = CameraController(
       cameraDescription,
-      ResolutionPreset.high,
+      ResolutionPreset.veryHigh,
       enableAudio: false,
+      imageFormatGroup: ImageFormatGroup.jpeg,
     );
 
     try {
@@ -136,6 +141,21 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
   }
 
   // ----------------------------------------------------------
+  // Tap-to-focus
+  // ----------------------------------------------------------
+
+  Future<void> _onTapToFocus(TapUpDetails details) async {
+    if (!_isCardCameraInitialized) return;
+    try {
+      final size = MediaQuery.sizeOf(context);
+      final x = (details.localPosition.dx / size.width).clamp(0.0, 1.0);
+      final y = (details.localPosition.dy / size.height).clamp(0.0, 1.0);
+      await _cardCameraController!.setFocusPoint(Offset(x, y));
+      await _cardCameraController!.setExposurePoint(Offset(x, y));
+    } catch (_) {}
+  }
+
+  // ----------------------------------------------------------
   // Flash toggle
   // ----------------------------------------------------------
 
@@ -148,6 +168,12 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
         _flashOn ? FlashMode.torch : FlashMode.off,
       );
     }
+  }
+
+  String _encodeConfidences(Map<String, FieldConfidence> confidences) {
+    return confidences.entries
+        .map((e) => '${e.key}:${e.value.name}')
+        .join(',');
   }
 
   // ----------------------------------------------------------
@@ -184,7 +210,12 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
     setState(() => _isCapturing = true);
 
     try {
-      // 1. Capture the photo
+      // 1. Lock focus and exposure, then capture
+      try {
+        await _cardCameraController!.setFocusMode(FocusMode.auto);
+        await _cardCameraController!.setExposureMode(ExposureMode.auto);
+      } catch (_) {}
+      await Future.delayed(const Duration(milliseconds: 300));
       final XFile photo = await _cardCameraController!.takePicture();
 
       if (!mounted) return;
@@ -199,14 +230,19 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
       );
 
       // 3. Process with OCR
-      final rawText = await ocr_service.recognizeTextFromFile(photo.path);
+      final ocrResult = await ocr_service.recognizeTextFromFile(photo.path);
 
       if (mounted) Navigator.pop(context); // Close loading indicator
 
       Map<String, String> ocrData = {};
-      if (rawText.isNotEmpty) {
-        ocrData = OcrParser.parse(rawText);
+      if (ocrResult.rawText.isNotEmpty) {
+        final parsed = OcrParser.parse(ocrResult.rawText);
+        ocrData = Map<String, String>.from(parsed.fields);
         ocrData['photoPath'] = photo.path;
+        ocrData['captureMethod'] = 'scan';
+        ocrData['mlKitConfidence'] =
+            ocrResult.mlKitConfidence.toStringAsFixed(3);
+        ocrData['fieldConfidences'] = _encodeConfidences(parsed.fieldConfidences);
         if (mounted) _showStaticDetectionToast(context, ref);
       }
 
@@ -231,12 +267,27 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
     final barcodes = capture.barcodes;
     if (barcodes.isEmpty) return;
 
+    final raw = barcodes.first.rawValue ?? '';
+    if (raw.isEmpty) return;
+
+    // Time-based debounce: skip the same value within 3 seconds
+    final now = DateTime.now();
+    if (_lastQrValue == raw &&
+        _lastQrProcessed != null &&
+        now.difference(_lastQrProcessed!) < const Duration(seconds: 3)) {
+      return;
+    }
+    _lastQrValue = raw;
+    _lastQrProcessed = now;
+
     setState(() => _isCapturing = true);
     _showStaticDetectionToast(context, ref);
 
-    final raw = barcodes.first.rawValue ?? '';
-    final ocrData = raw.isNotEmpty ? OcrParser.parse(raw) : <String, String>{};
-
+    final parsed = OcrParser.parse(raw);
+    final ocrData = Map<String, String>.from(parsed.fields);
+    ocrData['captureMethod'] = 'qr';
+    ocrData['mlKitConfidence'] = '1.000'; // QR decoding is deterministic
+    ocrData['fieldConfidences'] = _encodeConfidences(parsed.fieldConfidences);
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) {
         setState(() => _isCapturing = false);
@@ -266,8 +317,11 @@ class _ScanScreenState extends ConsumerState<ScanScreen>
               onDetect: _onQrDetect,
             )
           else if (_mode == ScanMode.card && _isCardCameraInitialized)
-            Center(
-              child: CameraPreview(_cardCameraController!),
+            GestureDetector(
+              onTapUp: _onTapToFocus,
+              child: Center(
+                child: CameraPreview(_cardCameraController!),
+              ),
             )
           else if (_mode == ScanMode.nfc)
             Container(color: Colors.black)
