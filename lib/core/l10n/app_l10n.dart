@@ -974,6 +974,9 @@ class AppL10n {
   String revokeAdminConfirm(String name) => _en
       ? 'Revoke admin privileges from $name?'
       : 'Retirer les droits admin à $name ?';
+  String get cannotAssignAdminToSuspended => _en
+      ? 'Reactivate this member before assigning admin role'
+      : 'Réactivez ce membre avant de lui attribuer le rôle admin';
   String get adminAssignedSuccess => _en ? 'Admin role assigned' : 'Rôle admin attribué';
   String get adminRevokedSuccess => _en ? 'Admin role revoked' : 'Rôle admin révoqué';
   String get adminPrivilegesNote =>

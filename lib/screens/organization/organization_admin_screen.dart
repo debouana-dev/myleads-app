@@ -336,7 +336,9 @@ class _OrganizationAdminScreenState
             : () => _doReactivate(member),
         onRemove: () => _doRemove(member),
         onAssignAdmin:
-            isOwner && member.role == 'member' ? () => _doAssignAdmin(member) : null,
+            isOwner && member.role == 'member' && member.status == 'active'
+                ? () => _doAssignAdmin(member)
+                : null,
         onRevokeAdmin:
             isOwner && member.role == 'admin' ? () => _doRevokeAdmin(member) : null,
       ),

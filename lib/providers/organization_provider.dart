@@ -1177,6 +1177,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
       orElse: () => throw Exception('Membre introuvable'),
     );
     if (target.role != 'member') return 'Ce membre est déjà administrateur';
+    if (target.status != 'active') return _l10n.cannotAssignAdminToSuspended;
     try {
       await DatabaseService.updateOrgMemberRole(
           orgId: org.id, userId: targetUserId, newRole: 'admin');
