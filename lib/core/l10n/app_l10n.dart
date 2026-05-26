@@ -210,7 +210,7 @@ class AppL10n {
       _en ? 'Already have an account?' : 'Déjà un compte ?';
   String get privacyPolicyAccept => _en ? 'I accept the ' : "J'accepte la ";
   String get privacyPolicyLink =>
-      _en ? 'privacy Policy' : 'politique de confidentialité';
+      _en ? 'Privacy Policy' : 'politique de confidentialité';
   String get eulaLink => 'EULA';
   String get privacyPolicyDesc => _en
       ? 'Read our privacy policy'
@@ -618,13 +618,16 @@ class AppL10n {
       _en ? 'Plan updated successfully' : 'Forfait mis à jour avec succès';
   String get planChangeError =>
       _en ? 'Error changing plan' : 'Erreur lors du changement de forfait';
-  String get acceptTermsTitle => _en ? 'Accept Terms' : 'Accepter les conditions';
+  String get acceptTermsTitle =>
+      _en ? 'Accept Terms' : 'Accepter les conditions';
   String get acceptTermsSubtitle => _en
       ? 'Please review and accept our policies before subscribing.'
       : 'Veuillez consulter et accepter nos politiques avant de vous abonner.';
-  String get acceptPrivacyPolicy =>
-      _en ? 'I accept the Privacy Policy' : 'J\'accepte la politique de confidentialité';
-  String get acceptEula => _en ? 'I accept the EULA' : 'J\'accepte le CLUF (EULA)';
+  String get acceptPrivacyPolicy => _en
+      ? 'I accept the Privacy Policy'
+      : 'J\'accepte la politique de confidentialité';
+  String get acceptEula =>
+      _en ? 'I accept the EULA' : 'J\'accepte le CLUF (EULA)';
   String get mustAcceptTerms => _en
       ? 'You must accept the terms to continue'
       : 'Vous devez accepter les conditions pour continuer';
@@ -975,33 +978,39 @@ class AppL10n {
   String get ownerCannotLeaveOrg => _en
       ? 'The owner cannot leave. Delete the organization instead.'
       : "Le propriétaire ne peut pas quitter l'organisation. Supprimez-la.";
-  String get cannotSuspendOwner =>
-      _en ? 'The owner cannot be suspended' : 'Le propriétaire ne peut pas être suspendu';
+  String get cannotSuspendOwner => _en
+      ? 'The owner cannot be suspended'
+      : 'Le propriétaire ne peut pas être suspendu';
   String get adminCannotManageAdmins => _en
       ? 'Admins cannot manage other admin-level accounts'
       : "Les admins ne peuvent pas gérer d'autres comptes admin";
   String get assignAdminRole => _en ? 'Make admin' : 'Nommer admin';
-  String get revokeAdminRole => _en ? 'Revoke admin role' : 'Révoquer le rôle admin';
-  String get assignAdminTitle => _en ? 'Assign admin role' : 'Attribuer le rôle admin';
+  String get revokeAdminRole =>
+      _en ? 'Revoke admin role' : 'Révoquer le rôle admin';
+  String get assignAdminTitle =>
+      _en ? 'Assign admin role' : 'Attribuer le rôle admin';
   String assignAdminConfirm(String name) => _en
       ? 'Grant admin privileges to $name?'
       : 'Accorder les droits admin à $name ?';
-  String get revokeAdminTitle => _en ? 'Revoke admin role' : 'Révoquer le rôle admin';
+  String get revokeAdminTitle =>
+      _en ? 'Revoke admin role' : 'Révoquer le rôle admin';
   String revokeAdminConfirm(String name) => _en
       ? 'Revoke admin privileges from $name?'
       : 'Retirer les droits admin à $name ?';
   String get cannotAssignAdminToSuspended => _en
       ? 'Reactivate this member before assigning admin role'
       : 'Réactivez ce membre avant de lui attribuer le rôle admin';
-  String get adminAssignedSuccess => _en ? 'Admin role assigned' : 'Rôle admin attribué';
-  String get adminRevokedSuccess => _en ? 'Admin role revoked' : 'Rôle admin révoqué';
-  String get adminPrivilegesNote =>
-      _en ? 'Admins always have full privileges' : 'Les admins ont toujours tous les droits';
+  String get adminAssignedSuccess =>
+      _en ? 'Admin role assigned' : 'Rôle admin attribué';
+  String get adminRevokedSuccess =>
+      _en ? 'Admin role revoked' : 'Rôle admin révoqué';
+  String get adminPrivilegesNote => _en
+      ? 'Admins always have full privileges'
+      : 'Les admins ont toujours tous les droits';
 
   // ─── Ownership transfer ──────────────────────────────────────────────────
-  String get transferOwnershipAndLeave => _en
-      ? 'Transfer ownership & leave'
-      : 'Transférer la propriété et quitter';
+  String get transferOwnershipAndLeave =>
+      _en ? 'Transfer ownership & leave' : 'Transférer la propriété et quitter';
   String get transferOwnershipNoAdmins => _en
       ? 'No active admin found. Promote a member to admin before leaving.'
       : "Aucun admin actif trouvé. Promouvez un membre en admin avant de quitter.";
