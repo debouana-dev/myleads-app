@@ -391,18 +391,11 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
                       _companyCtrl,
                       hint: 'Ex : GreenTech Cameroon',
                     ),
-                    // PhonePrefixInput(
-                    //   controller: _phoneCtrl,
-                    //   labelText: l10n.phoneLabel,
-                    //   showLabel: true,
-                    //   hint: '6 99 88 77 66',
-                    // ),
-                    _buildField(
-                      context,
-                      l10n.phoneLabel,
-                      _phoneCtrl,
-                      hint: 'Ex : +352 6 99 88 77 66',
-                      type: TextInputType.phone,
+                    PhonePrefixInput(
+                      controller: _phoneCtrl,
+                      labelText: l10n.phoneLabel,
+                      showLabel: true,
+                      hint: '6 99 88 77 66',
                     ),
                     const SizedBox(height: 16),
                     _buildField(

@@ -593,13 +593,29 @@ class _OrganizationAdminScreenState
     String? errorCode;
 
     if (Platform.isIOS) {
-      // Use RevenueCat on iOS. Note: Dynamic license pricing usually requires 
-      // specific setup in RevenueCat (e.g. multi-seat offerings).
-      // Here we fall back to the standard business plan purchase.
-      final rcResult = await RevenueCatService.purchasePlan('business', billingCycle!);
-      success = rcResult.success;
-      transactionId = rcResult.customerId;
-      errorCode = rcResult.errorCode;
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.surfaceColor(context),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(l10n.iosMultiLicenseTitle,
+              style: TextStyle(
+                  color: AppColors.onSurface(context),
+                  fontWeight: FontWeight.w700)),
+          content: Text(l10n.iosMultiLicenseBody,
+              style: TextStyle(color: AppColors.secondary(context))),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(l10n.ok,
+                  style: const TextStyle(
+                      color: AppColors.primary, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      );
+      return;
     } else {
       // Use Stripe on Android.
       final result = await StripeService.startCheckout(

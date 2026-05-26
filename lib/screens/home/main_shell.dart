@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/l10n/app_l10n.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/navigation_provider.dart';
 import '../home/home_screen.dart';
 import '../contacts/contacts_screen.dart';
-import '../scan/scan_screen.dart';
 import '../reminders/reminders_screen.dart';
 import '../profile/profile_screen.dart';
 
@@ -99,7 +99,7 @@ class MainShell extends ConsumerWidget {
 
   Widget _scanButton(BuildContext context, WidgetRef ref) {
     return GestureDetector(
-      onTap: () => showScanOptions(context, ref),
+      onTap: () => context.push('/scan'),
       child: Container(
         width: 64,
         height: 64,

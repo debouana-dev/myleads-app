@@ -359,7 +359,7 @@ void main() {
     db = await databaseFactoryFfi.openDatabase(
       inMemoryDatabasePath,
       options: OpenDatabaseOptions(
-        version: 12,
+        version: 23,
         onCreate: _createSchema,
       ),
     );
@@ -1171,8 +1171,19 @@ void main() {
     test('getRawOrganizationRow returns all required MySQL columns', () async {
       final row = await DatabaseService.getRawOrganizationRow(_orgId);
       expect(row, isNotNull);
-      expect(row!.keys,
-          containsAll(['id', 'name', 'owner_id', 'invite_code', 'created_at']));
+      expect(
+          row!.keys,
+          containsAll([
+            'id',
+            'name',
+            'owner_id',
+            'invite_code',
+            'created_at',
+            'license_count',
+            'org_plan_expires_at',
+            'org_status',
+            'org_suspended_at',
+          ]));
       expect(row['id'], equals(_orgId));
       expect(row['owner_id'], equals(_adminId));
     });
@@ -1194,15 +1205,18 @@ void main() {
               'can_create',
               'can_view_reminders',
               'can_view_history',
+              'can_export_contacts',
             ]));
       }
       final adminRow = rows.firstWhere((r) => r['user_id'] == _adminId);
       expect(adminRow['can_edit'], equals(1));
       expect(adminRow['can_view_reminders'], equals(1));
+      expect(adminRow['can_export_contacts'], equals(1));
 
       final memberRow = rows.firstWhere((r) => r['user_id'] == _member1Id);
       expect(memberRow['can_edit'], equals(0));
       expect(memberRow['can_view_reminders'], equals(0));
+      expect(memberRow['can_export_contacts'], equals(0));
     });
 
     test('upsertRawRow inserts and replaces on conflict', () async {

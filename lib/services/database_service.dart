@@ -1863,6 +1863,19 @@ class DatabaseService {
         ? null
         : memberJoinRow.first['joined_at'] as String?;
 
+    // Determine when the member joined so we can distinguish contacts they
+    // brought in (pre-join) from contacts they created inside the org (post-join).
+    final memberJoinRow = await db.query(
+      'organization_members',
+      columns: ['joined_at'],
+      where: 'organization_id = ? AND user_id = ?',
+      whereArgs: [orgId, fromUserId],
+      limit: 1,
+    );
+    final joinedAt = memberJoinRow.isEmpty
+        ? null
+        : memberJoinRow.first['joined_at'] as String?;
+
     final otherMemberRows = await db.query('organization_members',
         columns: ['user_id'],
         where: "organization_id = ? AND status = 'active' AND user_id != ?",
