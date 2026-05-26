@@ -197,6 +197,119 @@ class _OrganizationAdminScreenState
     }
   }
 
+  Future<void> _doTransferOwnershipAndLeave() async {
+    final l10n = ref.read(l10nProvider);
+    final orgState = ref.read(organizationProvider);
+
+    final admins = orgState.members
+        .where((m) => m.role == 'admin' && m.status == 'active')
+        .toList();
+
+    if (admins.isEmpty) {
+      _showSnack(l10n.transferOwnershipNoAdmins, error: true);
+      return;
+    }
+
+    final chosen = await showDialog<OrgMember>(
+      context: context,
+      builder: (ctx) {
+        final l10nInner = ref.read(l10nProvider);
+        return AlertDialog(
+          backgroundColor: AppColors.surfaceColor(context),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(
+            l10nInner.transferOwnershipPickTitle,
+            style: TextStyle(
+                color: AppColors.onSurface(context),
+                fontWeight: FontWeight.w700,
+                fontSize: 17),
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10nInner.transferOwnershipPickSubtitle,
+                  style: TextStyle(
+                      color: AppColors.secondary(context), fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                ...admins.map((admin) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        backgroundColor:
+                            AppColors.primary.withOpacity(0.15),
+                        child: Text(
+                          _initials(admin.firstName, admin.lastName),
+                          style: const TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14),
+                        ),
+                      ),
+                      title: Text(
+                        admin.fullName,
+                        style: TextStyle(
+                            color: AppColors.onSurface(context),
+                            fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: (admin.email != null &&
+                              admin.email!.isNotEmpty)
+                          ? Text(
+                              admin.email!,
+                              style: TextStyle(
+                                  color: AppColors.secondary(context),
+                                  fontSize: 12),
+                            )
+                          : null,
+                      onTap: () => Navigator.of(ctx).pop(admin),
+                    )),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null),
+              child: Text(l10nInner.cancel),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (chosen == null || !mounted) return;
+
+    final confirmed = await _confirm(
+      title: l10n.transferOwnershipConfirmTitle,
+      body: l10n.transferOwnershipConfirmBody(chosen.fullName),
+      confirmLabel: l10n.transferOwnershipConfirm,
+    );
+    if (confirmed != true || !mounted) return;
+
+    final err = await ref
+        .read(organizationProvider.notifier)
+        .transferOwnershipAndLeave(chosen.userId);
+    if (!mounted) return;
+    if (err != null) {
+      _showSnack(err, error: true);
+    } else {
+      _showSnack(l10n.transferOwnershipSuccess);
+      context.pop();
+    }
+  }
+
+  static String _initials(String first, String last) {
+    final a = first.trim();
+    final b = last.trim();
+    if (a.isNotEmpty && b.isNotEmpty) {
+      return '${a[0]}${b[0]}'.toUpperCase();
+    }
+    return a.isNotEmpty ? a[0].toUpperCase() : '?';
+  }
+
   // ─── Member management sheet ──────────────────────────────────────────────
 
   void _openMemberSheet(OrgMember member, {required bool isOwner}) {
@@ -673,7 +786,6 @@ class _OrganizationAdminScreenState
             const SizedBox(height: 24),
 
             // ── Leave / danger zone ───────────────────────────────────────────
-            // Owner cannot leave — they must delete the org via the menu.
             if (!isOwner)
               SizedBox(
                 width: double.infinity,
@@ -688,6 +800,22 @@ class _OrganizationAdminScreenState
                   onPressed: _doLeaveOrg,
                   icon: const Icon(Icons.logout_rounded, size: 18),
                   label: Text(l10n.leaveOrg),
+                ),
+              ),
+            if (isOwner)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.hot,
+                    side: const BorderSide(color: AppColors.hot),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: _doTransferOwnershipAndLeave,
+                  icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+                  label: Text(l10n.transferOwnershipAndLeave),
                 ),
               ),
           ],

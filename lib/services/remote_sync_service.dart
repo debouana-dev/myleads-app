@@ -441,6 +441,28 @@ class RemoteSyncService {
     await conn.execute(
       'ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "apple_user_identifier" VARCHAR(255) DEFAULT NULL',
     );
+
+    // v25: introduce 'owner' role — promote org creator's member row from
+    // 'admin' to 'owner' and sync users.org_role to match.
+    await conn.execute(
+      '''UPDATE "organization_members"
+         SET "role" = 'owner'
+         WHERE "role" = 'admin'
+           AND "user_id" IN (
+             SELECT "owner_id" FROM "organizations"
+             WHERE "organizations"."id" = "organization_members"."organization_id"
+           )''',
+    );
+    await conn.execute(
+      '''UPDATE "users"
+         SET "org_role" = 'owner'
+         WHERE "organization_id" IS NOT NULL
+           AND "org_role" = 'admin'
+           AND "id" IN (
+             SELECT "owner_id" FROM "organizations"
+             WHERE "organizations"."id" = "users"."organization_id"
+           )''',
+    );
   }
 
   // ── Cloud user helpers ───────────────────────────────────────────────────────

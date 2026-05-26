@@ -976,6 +976,33 @@ class AppL10n {
   String get adminPrivilegesNote =>
       _en ? 'Admins always have full privileges' : 'Les admins ont toujours tous les droits';
 
+  // ─── Ownership transfer ──────────────────────────────────────────────────
+  String get transferOwnershipAndLeave => _en
+      ? 'Transfer ownership & leave'
+      : 'Transférer la propriété et quitter';
+  String get transferOwnershipNoAdmins => _en
+      ? 'No active admin found. Promote a member to admin before leaving.'
+      : "Aucun admin actif trouvé. Promouvez un membre en admin avant de quitter.";
+  String get transferOwnershipPickTitle =>
+      _en ? 'Choose new owner' : 'Choisir le nouveau propriétaire';
+  String get transferOwnershipPickSubtitle => _en
+      ? 'Select the admin who will inherit the owner role and receive your contacts.'
+      : "Sélectionnez l'admin qui héritera du rôle propriétaire et recevra vos contacts.";
+  String get transferOwnershipConfirmTitle => _en
+      ? 'Confirm ownership transfer'
+      : 'Confirmer le transfert de propriété';
+  String transferOwnershipConfirmBody(String name) => _en
+      ? '$name will become the new owner. Contacts you brought into the organization will be duplicated to your personal account. Contacts you added while in the organization will stay with the organization. This cannot be undone.'
+      : '$name deviendra le nouveau propriétaire. Les contacts que vous avez apportés seront dupliqués dans votre compte personnel. Les contacts ajoutés au sein de l\'organisation resteront avec l\'organisation. Cette action est irréversible.';
+  String get transferOwnershipConfirm =>
+      _en ? 'Transfer & leave' : 'Transférer et quitter';
+  String get transferOwnershipSuccess => _en
+      ? 'Ownership transferred. You have left the organization.'
+      : "Propriété transférée. Vous avez quitté l'organisation.";
+  String get transferOwnershipAdminOnly => _en
+      ? 'Ownership can only be transferred to an active admin.'
+      : "La propriété ne peut être transférée qu'à un admin actif.";
+
   // ─── Import / Export ─────────────────────────────────────────────────────
   String get importExportTitle => _en ? 'Import / Export' : 'Import / Export';
   String get importExportSubtitle =>
