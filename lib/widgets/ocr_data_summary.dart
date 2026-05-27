@@ -1,41 +1,52 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_colors.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/l10n/app_l10n.dart';
+import '../core/theme/app_colors.dart';
+import '../services/ocr_parser.dart';
 
-/// Display widget for OCR extraction confidence and summary
-class OcrDataSummary extends StatelessWidget {
+/// Display widget for OCR extraction confidence and field summary.
+///
+/// [mlKitConfidence] is the weighted average from the ML Kit element
+/// hierarchy (0.0–1.0). [fieldConfidences] maps field names to the
+/// per-field confidence level returned by [OcrParser]. Together they
+/// produce a blended score: 60% ML Kit signal + 40% parser quality.
+class OcrDataSummary extends ConsumerWidget {
   final Map<String, String> ocrData;
+  final double mlKitConfidence;
+  final Map<String, FieldConfidence> fieldConfidences;
   final bool showConfidenceBar;
 
   const OcrDataSummary({
     super.key,
     required this.ocrData,
+    this.mlKitConfidence = 0.0,
+    this.fieldConfidences = const {},
     this.showConfidenceBar = true,
   });
 
-  int _countExtractedFields() {
-    int count = 0;
-    if (ocrData['firstName']?.isNotEmpty ?? false) count++;
-    if (ocrData['lastName']?.isNotEmpty ?? false) count++;
-    if (ocrData['email']?.isNotEmpty ?? false) count++;
-    if (ocrData['phone']?.isNotEmpty ?? false) count++;
-    if (ocrData['jobTitle']?.isNotEmpty ?? false) count++;
-    if (ocrData['company']?.isNotEmpty ?? false) count++;
-    return count;
-  }
-
   double _calculateConfidence() {
-    // Confidence based on extracted fields (0-100%)
-    return (_countExtractedFields() / 6 * 100).clamp(0, 100);
+    final mlPart = mlKitConfidence * 0.6;
+    if (fieldConfidences.isEmpty) return (mlPart * 100).clamp(0, 100);
+    final avg = fieldConfidences.values
+            .map((c) => switch (c) {
+                  FieldConfidence.high => 1.0,
+                  FieldConfidence.fair => 0.6,
+                  FieldConfidence.low => 0.25,
+                })
+            .reduce((a, b) => a + b) /
+        fieldConfidences.length;
+    return ((mlPart + avg * 0.4) * 100).clamp(0, 100);
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = ref.watch(l10nProvider);
     final confidence = _calculateConfidence();
     final confidenceLabel = confidence >= 75
-        ? 'High confidence'
+        ? l10n.confidenceHigh
         : confidence >= 50
-            ? 'Fair confidence'
-            : 'Low confidence';
+            ? l10n.confidenceFair
+            : l10n.confidenceLow;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -84,7 +95,6 @@ class OcrDataSummary extends StatelessWidget {
           ),
           const SizedBox(height: 12),
         ],
-        // Show quick summary
         Wrap(
           spacing: 8,
           runSpacing: 4,
@@ -93,14 +103,14 @@ class OcrDataSummary extends StatelessWidget {
               _buildTag('👤 ${ocrData['firstName']}'),
             if (ocrData['lastName']?.isNotEmpty ?? false)
               _buildTag('${ocrData['lastName']}'),
-            if (ocrData['email']?.isNotEmpty ?? false)
-              _buildTag('✉️ Email'),
-            if (ocrData['phone']?.isNotEmpty ?? false)
-              _buildTag('📞 Phone'),
+            if (ocrData['email']?.isNotEmpty ?? false) _buildTag('✉️ Email'),
+            if (ocrData['phone']?.isNotEmpty ?? false) _buildTag('📞 Phone'),
             if (ocrData['company']?.isNotEmpty ?? false)
-              _buildTag('🏢 ${ocrData['company']?.substring(0, 15)}${ocrData['company']!.length > 15 ? '...' : ''}'),
+              _buildTag(
+                  '🏢 ${ocrData['company']?.substring(0, ocrData['company']!.length.clamp(0, 15))}${ocrData['company']!.length > 15 ? '...' : ''}'),
             if (ocrData['jobTitle']?.isNotEmpty ?? false)
-              _buildTag('💼 ${ocrData['jobTitle']?.substring(0, 12)}${ocrData['jobTitle']!.length > 12 ? '...' : ''}'),
+              _buildTag(
+                  '💼 ${ocrData['jobTitle']?.substring(0, ocrData['jobTitle']!.length.clamp(0, 12))}${ocrData['jobTitle']!.length > 12 ? '...' : ''}'),
           ],
         ),
       ],
@@ -129,4 +139,3 @@ class OcrDataSummary extends StatelessWidget {
     );
   }
 }
-
