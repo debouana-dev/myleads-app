@@ -468,8 +468,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           if (!context.mounted) return;
                           if (connectivity.contains(ConnectivityResult.none)) {
                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                              content:
-                                  Text(l10nRead.orgScreenRequiresInternet),
+                              content: Text(l10nRead.orgScreenRequiresInternet),
                               backgroundColor: AppColors.hot,
                               duration: const Duration(seconds: 2),
                             ));
