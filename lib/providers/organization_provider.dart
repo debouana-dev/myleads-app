@@ -478,8 +478,9 @@ class OrgNotifier extends StateNotifier<OrgState> {
         );
       }
 
-      // Pull the org's shared data (org row, all members, member contacts).
+      // Pull the org's shared data (org row + members); contacts sync in background.
       await RemoteSyncService.pullOrganizationDataById(org.id);
+      unawaited(RemoteSyncService.pullOrgContactsById(org.id));
 
        final members = await DatabaseService.getMembersForOrganization(org.id);
        final privs = await DatabaseService.getMemberPrivileges(
@@ -1280,6 +1281,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
       await RemoteSyncService.pullOrganizationDataById(orgId);
       await loadForCurrentUser();
     }));
+    unawaited(RemoteSyncService.pullOrgContactsById(orgId));
   }
 
   /// Refresh organization data from cloud, then reload locally.
@@ -1300,6 +1302,8 @@ class OrgNotifier extends StateNotifier<OrgState> {
       }
       await RemoteSyncService.pullOrganizationDataById(orgId);
       await loadForCurrentUser();
+      unawaited(RemoteSyncService.syncTasksForOrg(user!.id, orgId));
+      unawaited(RemoteSyncService.pullOrgContactsById(orgId));
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
@@ -1348,4 +1352,15 @@ final orgCanExportContactsProvider = Provider<bool>((ref) {
 /// True when the current user is the org creator (role = 'owner').
 final orgIsOwnerProvider = Provider<bool>((ref) {
   return StorageService.currentUser?.orgRole == 'owner';
+});
+
+/// True when the current user's org membership status is 'suspended'.
+/// Solo users (no organizationId) are never suspended.
+final orgCurrentUserIsSuspendedProvider = Provider<bool>((ref) {
+  final user = StorageService.currentUser;
+  if (user?.organizationId == null) return false;
+  final members = ref.watch(organizationProvider).members;
+  final matches = members.where((m) => m.userId == user!.id);
+  final current = matches.isNotEmpty ? matches.first : null;
+  return current?.status == 'suspended';
 });

@@ -1320,6 +1320,69 @@ class AppL10n {
   String subscriptionDaysLeft(int days) => _en
       ? '$days day${days > 1 ? "s" : ""} remaining'
       : '$days jour${days > 1 ? "s" : ""} restant${days > 1 ? "s" : ""}';
+
+  // ─── Tasks ────────────────────────────────────────────────────────────────
+  String get tasksTitle => _en ? 'Tasks' : 'Tâches';
+  String get tasksSection => _en ? 'Team Tasks' : "Tâches d'équipe";
+  String get newTask => _en ? 'New task' : 'Nouvelle tâche';
+  String get createTaskTitle => _en ? 'Create a task' : 'Créer une tâche';
+  String get editTaskTitle => _en ? 'Edit task' : 'Modifier la tâche';
+  String get assigneeSection => _en ? 'Assigned to' : 'Assigné à';
+  String get assignedTo => _en ? 'Assigned to' : 'Assigné à';
+  String get assignedBy => _en ? 'Assigned by' : 'Assigné par';
+  String get assignToSelf => _en ? 'Assign to myself' : "M'assigner";
+  String get selectMember => _en ? 'Select a member' : 'Sélectionner un membre';
+  String get taskPending => _en ? 'Pending' : 'En cours';
+  String get taskCompletedTab => _en ? 'Completed' : 'Terminées';
+  String get completeTask => _en ? 'Mark as complete' : 'Marquer comme terminée';
+  String get uncompleteTask => _en ? 'Reopen task' : 'Rouvrir la tâche';
+  String get noTask => _en ? 'No tasks' : 'Aucune tâche';
+  String get noTaskDesc => _en
+      ? 'Tasks assigned to the team will appear here.'
+      : "Les tâches assignées à l'équipe apparaîtront ici.";
+  String get deleteTaskTitle => _en ? 'Delete task?' : 'Supprimer la tâche ?';
+  String get deleteTaskWarning =>
+      _en ? 'This action is irreversible.' : 'Cette action est irréversible.';
+  String get taskNotFound => _en ? 'Task not found' : 'Tâche introuvable';
+  String get taskUpcomingNotif => _en ? 'Task in 15 min' : 'Tâche dans 15 min';
+  String get taskOntimeNotif =>
+      _en ? 'Me2Leads: Task now!' : 'Me2Leads : Tâche maintenant !';
+  String get taskOverdueNotif => _en ? 'Task overdue' : 'Tâche en retard';
+  String get taskRepeatNotif => _en ? 'Recurring task' : 'Tâche récurrente';
+  String get taskNoteHint => _en
+      ? 'Ex: Prepare quarterly report'
+      : 'Ex: Préparer le rapport trimestriel';
+  String get noAssigneeSelected =>
+      _en ? 'Select an assignee' : 'Sélectionnez un assigné';
+  String get createTaskBtn => _en ? 'Create task' : 'Créer la tâche';
+  String get saveTaskBtn => _en ? 'Save' : 'Enregistrer';
+  String get taskCompletedBy => _en ? 'Completed by' : 'Terminée par';
+  String get taskOnlyAdminCanDelete =>
+      _en ? 'Only admins can delete tasks' : 'Seuls les admins peuvent supprimer les tâches';
+  String get taskOnlyCreatorOrAssigneeCanComplete => _en
+      ? 'Only the creator or assignee can mark this task complete'
+      : 'Seul le créateur ou l\'assigné peut marquer cette tâche comme terminée';
+  String tasksCount(int n) =>
+      _en ? '$n task${n == 1 ? '' : 's'}' : '$n tâche${n > 1 ? 's' : ''}';
+  String get noMembersAvailable =>
+      _en ? 'No members available' : 'Aucun membre disponible';
+  String get taskSuspendedTitle =>
+      _en ? 'Access restricted' : 'Accès restreint';
+  String get taskSuspendedDesc => _en
+      ? 'Your membership is suspended. You cannot view or be assigned organization tasks.'
+      : "Votre adhésion est suspendue. Vous ne pouvez pas consulter ni recevoir des tâches de l'organisation.";
+
+  String get taskAssigneesLabel => _en ? 'Assigned to' : 'Assigné à';
+  String get taskSelectAssignees =>
+      _en ? 'Select assignees' : 'Sélectionner les assignés';
+  String get taskNoAssigneeSelected =>
+      _en ? 'Select at least one assignee' : 'Sélectionnez au moins un assigné';
+  String taskAssigneesCount(int n) =>
+      _en ? '$n assignee${n == 1 ? '' : 's'}' : '$n assigné${n > 1 ? 's' : ''}';
+  String get myTasks => _en ? 'My Tasks' : 'Mes tâches';
+  String get allTasks => _en ? 'All Tasks' : 'Toutes les tâches';
+  String tasksAssignedToYou(int n) =>
+      _en ? '$n assigned to you' : '$n assignée${n > 1 ? 's' : ''} à vous';
 }
 
 final l10nProvider = Provider<AppL10n>((ref) {

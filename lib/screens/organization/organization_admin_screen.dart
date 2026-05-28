@@ -11,9 +11,11 @@ import 'package:uuid/uuid.dart';
 import '../../config/app_config.dart';
 import '../../core/l10n/app_l10n.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 import '../../models/organization.dart';
 import '../../models/user_account.dart';
 import '../../providers/organization_provider.dart';
+import '../../providers/tasks_provider.dart';
 import '../../services/database_service.dart';
 import '../../services/photo_storage_service.dart';
 import '../../services/revenue_cat_service.dart';
@@ -775,6 +777,10 @@ class _OrganizationAdminScreenState
               const SizedBox(height: 24),
             ],
 
+            // ── Tasks entry ───────────────────────────────────────────────────
+            _TasksEntryCard(l10n: l10n),
+            const SizedBox(height: 24),
+
             // ── Members list ──────────────────────────────────────────────────
             _SectionLabel(
                 '${l10n.orgMembersTitle} (${members.length}/${org.licenseCount})'),
@@ -1135,6 +1141,91 @@ class _SectionLabel extends StatelessWidget {
         fontWeight: FontWeight.w700,
         color: AppColors.hint(context),
         letterSpacing: 1,
+      ),
+    );
+  }
+}
+
+// ─── Tasks entry card ─────────────────────────────────────────────────────────
+
+class _TasksEntryCard extends ConsumerWidget {
+  final AppL10n l10n;
+  const _TasksEntryCard({required this.l10n});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tasksState = ref.watch(tasksProvider);
+    final pendingCount = tasksState.pendingTasks.length;
+    final currentUserId = StorageService.currentUserId;
+    final myCount = tasksState.myAssignedTasks(currentUserId).length;
+
+    return GestureDetector(
+      onTap: () => context.push('/organization/tasks'),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceColor(context),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: AppTheme.cardShadow,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                gradient: AppColors.primaryGradient,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.task_alt_rounded,
+                  color: Colors.white, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.tasksSection,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onSurface(context),
+                    ),
+                  ),
+                  if (myCount > 0)
+                    Text(
+                      l10n.tasksAssignedToYou(myCount),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.secondary(context),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (pendingCount > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  gradient: AppColors.primaryGradient,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$pendingCount',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800),
+                ),
+              ),
+            const SizedBox(width: 8),
+            Icon(Icons.chevron_right_rounded,
+                color: AppColors.hint(context)),
+          ],
+        ),
       ),
     );
   }

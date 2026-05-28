@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:workmanager/workmanager.dart';
 
+import '../models/app_task.dart';
 import 'database_service.dart';
 import 'notification_service.dart';
 import 'remote_sync_service.dart';
@@ -32,8 +33,7 @@ void callbackDispatcher() {
       await SubscriptionService.checkAndEnforceExpiry();
 
       if (task == _kBusinessSyncTaskName) {
-        // Belt-and-suspenders plan check — skip silently if plan was downgraded.
-        if (await StorageService.getEffectivePlan() != 'business') return true;
+        // plan/org gate is enforced inside push() and pull()
         await RemoteSyncService.push(ownerId);
         await RemoteSyncService.pull(ownerId);
         return true;
@@ -42,9 +42,17 @@ void callbackDispatcher() {
       final reminders = await DatabaseService.getAllRemindersForOwner(ownerId);
       final contacts = await DatabaseService.getAllContactsForOwner(ownerId);
 
+      final user = await DatabaseService.findUserById(ownerId);
+      final orgId = user?.organizationId;
+      List<AppTask> orgTasks = const [];
+      if (orgId != null) {
+        orgTasks = await DatabaseService.getTasksForOrganization(orgId);
+      }
+
       await NotificationService.runPeriodicCheck(
         reminders: reminders,
         contacts: contacts,
+        tasks: orgTasks,
       );
       return true;
     } catch (_) {
@@ -66,8 +74,15 @@ Future<void> initBackgroundTasks() async {
       existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
       constraints: Constraints(networkType: NetworkType.notRequired),
     );
-    if (await StorageService.getEffectivePlan() == 'business') {
+    final plan = await StorageService.getEffectivePlan();
+    if (plan == 'business') {
       await scheduleBusinessSync();
+    } else {
+      final user =
+          await DatabaseService.findUserById(StorageService.currentUserId);
+      if (user?.organizationId?.isNotEmpty == true) {
+        await scheduleBusinessSync();
+      }
     }
   } catch (_) {}
 }

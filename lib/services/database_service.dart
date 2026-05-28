@@ -9,6 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/app_notification.dart';
+import '../models/app_task.dart';
 import '../models/contact.dart';
 import '../models/interaction.dart';
 import '../models/organization.dart';
@@ -28,7 +29,7 @@ import 'web_db_factory_stub.dart'
 class DatabaseService {
   static Database? _db;
   static const _dbName = 'myleads.db';
-  static const _dbVersion = 25;
+  static const _dbVersion = 27;
   static const _uuid = Uuid();
 
   // ── Remote sync callbacks ──────────────────────────────────────────────────
@@ -434,6 +435,60 @@ class DatabaseService {
         ''');
       } catch (_) {}
     }
+    if (oldVersion < 26) {
+      // v25 → v26: tasks table for org (and future personal) task assignment.
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS tasks (
+            id TEXT PRIMARY KEY,
+            organization_id TEXT,
+            created_by_user_id TEXT NOT NULL,
+            assigned_to_user_id TEXT NOT NULL,
+            start_date_time TEXT NOT NULL,
+            end_date_time TEXT,
+            repeat_frequency TEXT,
+            note TEXT NOT NULL DEFAULT '',
+            todo_action TEXT NOT NULL DEFAULT 'call',
+            priority TEXT NOT NULL DEFAULT 'normal',
+            is_completed INTEGER NOT NULL DEFAULT 0,
+            completed_by_user_id TEXT,
+            created_at TEXT NOT NULL
+          )
+        ''');
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_tasks_org ON tasks(organization_id)');
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_to_user_id)');
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_tasks_creator ON tasks(created_by_user_id)');
+      } catch (_) {}
+    }
+    if (oldVersion < 27) {
+      // v26 → v27: task_assignees join table for multi-member task assignment.
+      // assigned_to_user_id stays in tasks (can't drop in SQLite) but is no longer
+      // the active source of truth — task_assignees is.
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS task_assignees (
+            task_id TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            assigned_at TEXT NOT NULL,
+            PRIMARY KEY (task_id, user_id),
+            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+          )
+        ''');
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_task_assignees_task ON task_assignees(task_id)');
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_task_assignees_user ON task_assignees(user_id)');
+        await db.execute('''
+          INSERT OR IGNORE INTO task_assignees (task_id, user_id, assigned_at)
+          SELECT id, assigned_to_user_id, created_at
+          FROM tasks
+          WHERE assigned_to_user_id IS NOT NULL AND assigned_to_user_id != ''
+        ''');
+      } catch (_) {}
+    }
   }
 
   // =====================================================================
@@ -652,6 +707,46 @@ class DatabaseService {
     ''');
     await db.execute(
         'CREATE INDEX idx_payment_history_user ON payment_history(user_id)');
+
+    // ----- TASKS (v26) -----
+    await db.execute('''
+      CREATE TABLE tasks (
+        id TEXT PRIMARY KEY,
+        organization_id TEXT,
+        created_by_user_id TEXT NOT NULL,
+        assigned_to_user_id TEXT NOT NULL,
+        start_date_time TEXT NOT NULL,
+        end_date_time TEXT,
+        repeat_frequency TEXT,
+        note TEXT NOT NULL DEFAULT '',
+        todo_action TEXT NOT NULL DEFAULT 'call',
+        priority TEXT NOT NULL DEFAULT 'normal',
+        is_completed INTEGER NOT NULL DEFAULT 0,
+        completed_by_user_id TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX idx_tasks_org ON tasks(organization_id)');
+    await db.execute(
+        'CREATE INDEX idx_tasks_assigned ON tasks(assigned_to_user_id)');
+    await db.execute(
+        'CREATE INDEX idx_tasks_creator ON tasks(created_by_user_id)');
+
+    // ----- TASK_ASSIGNEES (v27) -----
+    await db.execute('''
+      CREATE TABLE task_assignees (
+        task_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        assigned_at TEXT NOT NULL,
+        PRIMARY KEY (task_id, user_id),
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX idx_task_assignees_task ON task_assignees(task_id)');
+    await db.execute(
+        'CREATE INDEX idx_task_assignees_user ON task_assignees(user_id)');
   }
 
   // =====================================================================
@@ -1266,6 +1361,194 @@ class DatabaseService {
   }
 
   // =====================================================================
+  // TASKS
+  // =====================================================================
+
+  static Future<List<AppTask>> getTasksForOrganization(String orgId) async {
+    final db = await database;
+    final taskRows = await db.query(
+      'tasks',
+      where: 'organization_id = ?',
+      whereArgs: [orgId],
+      orderBy: 'start_date_time DESC',
+    );
+    if (taskRows.isEmpty) return [];
+    return _attachAssignees(db, taskRows);
+  }
+
+  static Future<List<AppTask>> getTasksForUser(String userId) async {
+    final db = await database;
+    final taskRows = await db.query(
+      'tasks',
+      where: 'organization_id IS NULL AND created_by_user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'start_date_time DESC',
+    );
+    if (taskRows.isEmpty) return [];
+    return _attachAssignees(db, taskRows);
+  }
+
+  /// Batch-loads task_assignees for [taskRows] in a single query and merges.
+  static Future<List<AppTask>> _attachAssignees(
+      Database db, List<Map<String, dynamic>> taskRows) async {
+    final taskIds = taskRows.map((r) => r['id'] as String).toList();
+    final placeholders = List.filled(taskIds.length, '?').join(',');
+    final assigneeRows = await db.rawQuery(
+      'SELECT task_id, user_id FROM task_assignees '
+      'WHERE task_id IN ($placeholders) '
+      'ORDER BY assigned_at ASC',
+      taskIds,
+    );
+    final assigneeMap = <String, List<String>>{};
+    for (final ar in assigneeRows) {
+      (assigneeMap[ar['task_id'] as String] ??= []).add(ar['user_id'] as String);
+    }
+    return taskRows.map((row) {
+      return _taskFromRow(row,
+          assigneeUserIds: assigneeMap[row['id'] as String] ?? []);
+    }).toList();
+  }
+
+  static Future<void> insertTask(AppTask task) async {
+    final db = await database;
+    final row = _taskToRow(task);
+    await db.transaction((txn) async {
+      await txn.insert('tasks', row,
+          conflictAlgorithm: ConflictAlgorithm.replace);
+      final now = task.createdAt.toIso8601String();
+      for (final uid in task.assigneeUserIds) {
+        await txn.insert(
+          'task_assignees',
+          {'task_id': task.id, 'user_id': uid, 'assigned_at': now},
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      }
+    });
+    _onRemoteUpsert?.call('tasks', row);
+    for (final uid in task.assigneeUserIds) {
+      _onRemoteUpsert?.call('task_assignees', {
+        'task_id': task.id,
+        'user_id': uid,
+        'assigned_at': task.createdAt.toIso8601String(),
+      });
+    }
+  }
+
+  static Future<void> updateTask(AppTask task) async {
+    final db = await database;
+    final row = _taskToRow(task);
+    await db.transaction((txn) async {
+      await txn.update('tasks', row,
+          where: 'id = ?', whereArgs: [task.id]);
+      await txn.delete('task_assignees',
+          where: 'task_id = ?', whereArgs: [task.id]);
+      final now = DateTime.now().toIso8601String();
+      for (final uid in task.assigneeUserIds) {
+        await txn.insert(
+          'task_assignees',
+          {'task_id': task.id, 'user_id': uid, 'assigned_at': now},
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      }
+    });
+    _onRemoteUpsert?.call('tasks', row);
+    for (final uid in task.assigneeUserIds) {
+      _onRemoteUpsert?.call('task_assignees', {
+        'task_id': task.id,
+        'user_id': uid,
+        'assigned_at': DateTime.now().toIso8601String(),
+      });
+    }
+  }
+
+  static Future<void> deleteTask(String id) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('task_assignees',
+          where: 'task_id = ?', whereArgs: [id]);
+      await txn.delete('tasks', where: 'id = ?', whereArgs: [id]);
+    });
+    _onRemoteDelete?.call('tasks', id);
+  }
+
+  static Future<void> completeTask(
+      String id, String completedByUserId) async {
+    final db = await database;
+    final patch = {
+      'is_completed': 1,
+      'completed_by_user_id': completedByUserId,
+    };
+    await db.update('tasks', patch, where: 'id = ?', whereArgs: [id]);
+    final rows =
+        await db.query('tasks', where: 'id = ?', whereArgs: [id], limit: 1);
+    if (rows.isNotEmpty) _onRemoteUpsert?.call('tasks', rows.first);
+  }
+
+  static Future<void> uncompleteTask(String id) async {
+    final db = await database;
+    final patch = {
+      'is_completed': 0,
+      'completed_by_user_id': null,
+    };
+    await db.update('tasks', patch, where: 'id = ?', whereArgs: [id]);
+    final rows =
+        await db.query('tasks', where: 'id = ?', whereArgs: [id], limit: 1);
+    if (rows.isNotEmpty) _onRemoteUpsert?.call('tasks', rows.first);
+  }
+
+  static Map<String, dynamic> _taskToRow(AppTask t) => {
+        'id': t.id,
+        'organization_id': t.organizationId,
+        'created_by_user_id': t.createdByUserId,
+        // Legacy NOT NULL column — keep populated with the first assignee.
+        'assigned_to_user_id':
+            t.assigneeUserIds.isNotEmpty ? t.assigneeUserIds.first : '',
+        'start_date_time': t.startDateTime.toIso8601String(),
+        'end_date_time': t.endDateTime?.toIso8601String(),
+        'repeat_frequency': t.repeatFrequency,
+        'note': t.note,
+        'todo_action': t.toDoAction,
+        'priority': t.priority,
+        'is_completed': t.isCompleted ? 1 : 0,
+        'completed_by_user_id': t.completedByUserId,
+        'created_at': t.createdAt.toIso8601String(),
+      };
+
+  static AppTask _taskFromRow(Map<String, dynamic> row,
+      {List<String> assigneeUserIds = const []}) {
+    DateTime parseDt(dynamic v) {
+      if (v == null) return DateTime.now();
+      if (v is String) {
+        try {
+          return DateTime.parse(v);
+        } catch (_) {}
+      }
+      return DateTime.now();
+    }
+
+    return AppTask(
+      id: row['id'] as String,
+      organizationId: row['organization_id'] as String?,
+      createdByUserId: row['created_by_user_id'] as String? ?? '',
+      // Use the join-table list; fall back to the legacy column for pre-v27 rows.
+      assigneeUserIds: assigneeUserIds.isNotEmpty
+          ? assigneeUserIds
+          : [(row['assigned_to_user_id'] as String? ?? '')],
+      startDateTime: parseDt(row['start_date_time']),
+      endDateTime: row['end_date_time'] == null
+          ? null
+          : parseDt(row['end_date_time']),
+      repeatFrequency: row['repeat_frequency'] as String?,
+      note: row['note'] as String? ?? '',
+      toDoAction: row['todo_action'] as String? ?? 'call',
+      priority: row['priority'] as String? ?? 'normal',
+      isCompleted: (row['is_completed'] as int? ?? 0) == 1,
+      completedByUserId: row['completed_by_user_id'] as String?,
+      createdAt: parseDt(row['created_at']),
+    );
+  }
+
+  // =====================================================================
   // INTERACTIONS
   // =====================================================================
 
@@ -1436,6 +1719,8 @@ class DatabaseService {
           where: 'user_id = ?', whereArgs: [userId]);
       await txn
           .delete('payment_history', where: 'user_id = ?', whereArgs: [userId]);
+      await txn.delete('task_assignees',
+          where: 'user_id = ?', whereArgs: [userId]);
       await txn.delete('users', where: 'id = ?', whereArgs: [userId]);
     });
   }
@@ -2626,6 +2911,27 @@ class DatabaseService {
         .toList();
   }
 
+  static Future<List<Map<String, dynamic>>> getRawTaskRows(
+      String orgId) async {
+    final db = await database;
+    return (await db.query('tasks',
+            where: 'organization_id = ?', whereArgs: [orgId]))
+        .map((r) => Map<String, dynamic>.from(r))
+        .toList();
+  }
+
+  static Future<List<Map<String, dynamic>>> getRawTaskAssigneeRows(
+      String orgId) async {
+    final db = await database;
+    return (await db.rawQuery(
+      'SELECT ta.task_id, ta.user_id, ta.assigned_at '
+      'FROM task_assignees ta '
+      'INNER JOIN tasks t ON t.id = ta.task_id '
+      'WHERE t.organization_id = ?',
+      [orgId],
+    )).map((r) => Map<String, dynamic>.from(r)).toList();
+  }
+
   static Future<Map<String, dynamic>?> getRawOrgMemberRowByOrgAndUser(
       String orgId, String userId) async {
     final db = await database;
@@ -2700,6 +3006,7 @@ class DatabaseService {
       'notifications',
       'organizations',
       'organization_members',
+      'tasks',
     ];
     final result = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
