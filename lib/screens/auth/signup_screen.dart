@@ -152,6 +152,17 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
     }
   }
 
+  Future<void> _launchTermsOfUse() async {
+    final url = Uri.parse('https://me2leads.com/terms');
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Could not launch $url: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = ref.watch(l10nProvider);
@@ -387,11 +398,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
 
             const SizedBox(height: 16),
 
-            // Phone (optional but enforced unique if provided)
-            _buildInputLabel(l10n.phoneOptional),
-            const SizedBox(height: 8),
+            // Phone
             PhonePrefixInput(
               controller: _phoneController,
+              labelText: l10n.phoneOptional,
+              showLabel: true,
               hint: '6 99 88 77 66',
               textInputAction: TextInputAction.next,
             ),
@@ -550,6 +561,26 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
                             text: l10n.privacyPolicyLink,
                             recognizer: TapGestureRecognizer()
                               ..onTap = _launchPrivacyPolicy,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.accent,
+                              decoration: TextDecoration.underline,
+                              decorationColor: AppColors.accent,
+                            ),
+                          ),
+                          TextSpan(
+                            text: l10n.and,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.secondary(context),
+                            ),
+                          ),
+                          TextSpan(
+                            text: l10n.termsOfUseLink,
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = _launchTermsOfUse,
                             style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w800,
