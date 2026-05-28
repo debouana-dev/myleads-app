@@ -210,9 +210,9 @@ class AppL10n {
       _en ? 'Already have an account?' : 'Déjà un compte ?';
   String get privacyPolicyAccept => _en ? 'I accept the ' : "J'accepte la ";
   String get privacyPolicyLink =>
-      _en ? 'Privacy Policy' : 'politique de confidentialité';
+      _en ? 'Privacy Policy' : 'Politique de confidentialité';
   String get termsOfUseLink =>
-      _en ? 'Terms of Use' : 'conditions d\'utilisation';
+      _en ? 'Terms of Use' : 'Conditions d\'utilisation';
   String get and => _en ? ' and ' : ' et les ';
   String get eulaLink => 'EULA';
   String get privacyPolicyDesc => _en
@@ -1351,7 +1351,8 @@ class AppL10n {
   String get selectMember => _en ? 'Select a member' : 'Sélectionner un membre';
   String get taskPending => _en ? 'Pending' : 'En cours';
   String get taskCompletedTab => _en ? 'Completed' : 'Terminées';
-  String get completeTask => _en ? 'Mark as complete' : 'Marquer comme terminée';
+  String get completeTask =>
+      _en ? 'Mark as complete' : 'Marquer comme terminée';
   String get uncompleteTask => _en ? 'Reopen task' : 'Rouvrir la tâche';
   String get noTask => _en ? 'No tasks' : 'Aucune tâche';
   String get noTaskDesc => _en
@@ -1374,8 +1375,9 @@ class AppL10n {
   String get createTaskBtn => _en ? 'Create task' : 'Créer la tâche';
   String get saveTaskBtn => _en ? 'Save' : 'Enregistrer';
   String get taskCompletedBy => _en ? 'Completed by' : 'Terminée par';
-  String get taskOnlyAdminCanDelete =>
-      _en ? 'Only admins can delete tasks' : 'Seuls les admins peuvent supprimer les tâches';
+  String get taskOnlyAdminCanDelete => _en
+      ? 'Only admins can delete tasks'
+      : 'Seuls les admins peuvent supprimer les tâches';
   String get taskOnlyCreatorOrAssigneeCanComplete => _en
       ? 'Only the creator or assignee can mark this task complete'
       : 'Seul le créateur ou l\'assigné peut marquer cette tâche comme terminée';
