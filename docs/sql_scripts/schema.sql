@@ -168,12 +168,12 @@ CREATE TABLE IF NOT EXISTS "organizations" (
 
 
 -- ============================================================
--- TABLE: organization_members  (v7 + v8 privileges + v10 reminder access + v12 history access + v18 member profile denormalization + v20 export access + v21 email encryption + v24 phone + v25 owner role)
+-- TABLE: organization_members  (v7 + v8 privileges + v10 reminder access + v12 history access + v18 member profile denormalization + v20 export access + v21 email encryption + v24 phone + v25 owner role + v28 view-others-tasks)
 -- role: owner | admin | member
 -- status: active | suspended
 -- Denormalized member profile fields are stored here for fast local display.
--- can_edit / can_create / can_view_reminders / can_view_history / can_export_contacts: per-member flags.
--- Admins always have all five set to 1 regardless of stored value.
+-- can_edit / can_create / can_view_reminders / can_view_history / can_export_contacts / can_view_others_tasks: per-member flags.
+-- Admins always have all six set to 1 regardless of stored value.
 -- email: AES-256-CBC ciphertext, key = SHA256(SECRET_KEY:organization_id). (v21+)
 -- phone: AES-256-CBC ciphertext, key = SHA256(SECRET_KEY:organization_id). (v24+)
 -- ============================================================
@@ -192,11 +192,12 @@ CREATE TABLE IF NOT EXISTS "organization_members" (
   "company"             VARCHAR(255),
   "biography"           TEXT,
   "photo_path"          TEXT,
-  "can_edit"            SMALLINT     NOT NULL DEFAULT 0,
-  "can_create"          SMALLINT     NOT NULL DEFAULT 1,
-  "can_view_reminders"  SMALLINT     NOT NULL DEFAULT 0,
-  "can_view_history"    SMALLINT     NOT NULL DEFAULT 0,
-  "can_export_contacts" SMALLINT     NOT NULL DEFAULT 0,
+  "can_edit"               SMALLINT     NOT NULL DEFAULT 0,
+  "can_create"             SMALLINT     NOT NULL DEFAULT 1,
+  "can_view_reminders"     SMALLINT     NOT NULL DEFAULT 0,
+  "can_view_history"       SMALLINT     NOT NULL DEFAULT 0,
+  "can_export_contacts"    SMALLINT     NOT NULL DEFAULT 0,
+  "can_view_others_tasks"  SMALLINT     NOT NULL DEFAULT 0,
 
   PRIMARY KEY ("id"),
   UNIQUE ("organization_id", "user_id")
@@ -230,6 +231,45 @@ CREATE TABLE IF NOT EXISTS "payment_history" (
   PRIMARY KEY ("id")
 );
 CREATE INDEX IF NOT EXISTS "idx_payment_history_user" ON "payment_history" ("user_id");
+
+
+-- TABLE: tasks  (v26 — org tasks + future personal tasks)
+-- organization_id NULL  = personal task (future); non-null = org task.
+-- No FK constraint on organization_id so the table can hold personal tasks
+-- (organization_id IS NULL) without schema changes in the future.
+CREATE TABLE IF NOT EXISTS "tasks" (
+  "id"                    VARCHAR(36)   NOT NULL,
+  "organization_id"       VARCHAR(36)   DEFAULT NULL,
+  "created_by_user_id"    VARCHAR(36)   NOT NULL,
+  "assigned_to_user_id"   VARCHAR(36)   NOT NULL,
+  "start_date_time"       VARCHAR(50)   NOT NULL,
+  "end_date_time"         VARCHAR(50)   DEFAULT NULL,
+  "repeat_frequency"      VARCHAR(20)   DEFAULT NULL,
+  "note"                  TEXT          NOT NULL DEFAULT '',
+  "todo_action"           VARCHAR(20)   NOT NULL DEFAULT 'call',
+  "priority"              VARCHAR(30)   NOT NULL DEFAULT 'normal',
+  "is_completed"          SMALLINT      NOT NULL DEFAULT 0,
+  "completed_by_user_id"  VARCHAR(36)   DEFAULT NULL,
+  "created_at"            VARCHAR(50)   NOT NULL,
+  PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "idx_tasks_org"      ON "tasks" ("organization_id");
+CREATE INDEX IF NOT EXISTS "idx_tasks_assigned" ON "tasks" ("assigned_to_user_id");
+CREATE INDEX IF NOT EXISTS "idx_tasks_creator"  ON "tasks" ("created_by_user_id");
+
+
+-- TABLE: task_assignees  (v27 — multi-member task assignment)
+-- Join table: one row per (task, assignee) pair.
+-- assigned_to_user_id on the tasks table is retained for migration
+-- compatibility but is no longer the active source of truth.
+CREATE TABLE IF NOT EXISTS "task_assignees" (
+  "task_id"     VARCHAR(36)  NOT NULL,
+  "user_id"     VARCHAR(36)  NOT NULL,
+  "assigned_at" VARCHAR(50)  NOT NULL,
+  PRIMARY KEY ("task_id", "user_id")
+);
+CREATE INDEX IF NOT EXISTS "idx_task_assignees_task" ON "task_assignees" ("task_id");
+CREATE INDEX IF NOT EXISTS "idx_task_assignees_user" ON "task_assignees" ("user_id");
 
 
 -- ============================================================
@@ -378,6 +418,10 @@ ALTER TABLE "organization_members"
 -- v24   : organization_members.phone — AES-256-CBC ciphertext, key = SHA256(SECRET_KEY:org_id)
 -- v25   : organization_members.role gains 'owner' value — org creator promoted from
 --         'admin' to 'owner'; users.org_role updated to match
+-- v26   : tasks table — org/personal task assignment; organization_id nullable so
+--         the same table serves personal tasks (NULL) without future schema changes
+-- v27   : task_assignees join table — replaces single assigned_to_user_id with
+--         multi-member assignment; legacy column retained for migration compatibility
 -- ============================================================
 
 
@@ -411,3 +455,66 @@ UPDATE "users"
       SELECT "owner_id" FROM "organizations"
       WHERE "organizations"."id" = "users"."organization_id"
     );
+
+-- ============================================================
+-- UPGRADE SCRIPT (v25 → v26)
+-- Add tasks table for org task assignment (personal tasks future).
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS "tasks" (
+  "id"                    VARCHAR(36)   NOT NULL,
+  "organization_id"       VARCHAR(36)   DEFAULT NULL,
+  "created_by_user_id"    VARCHAR(36)   NOT NULL,
+  "assigned_to_user_id"   VARCHAR(36)   NOT NULL,
+  "start_date_time"       VARCHAR(50)   NOT NULL,
+  "end_date_time"         VARCHAR(50)   DEFAULT NULL,
+  "repeat_frequency"      VARCHAR(20)   DEFAULT NULL,
+  "note"                  TEXT          NOT NULL DEFAULT '',
+  "todo_action"           VARCHAR(20)   NOT NULL DEFAULT 'call',
+  "priority"              VARCHAR(30)   NOT NULL DEFAULT 'normal',
+  "is_completed"          SMALLINT      NOT NULL DEFAULT 0,
+  "completed_by_user_id"  VARCHAR(36)   DEFAULT NULL,
+  "created_at"            VARCHAR(50)   NOT NULL,
+  PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "idx_tasks_org"      ON "tasks" ("organization_id");
+CREATE INDEX IF NOT EXISTS "idx_tasks_assigned" ON "tasks" ("assigned_to_user_id");
+CREATE INDEX IF NOT EXISTS "idx_tasks_creator"  ON "tasks" ("created_by_user_id");
+
+-- Placeholder for future tasks columns (add here as needed):
+-- ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "..." VARCHAR(36) DEFAULT NULL;
+
+-- ============================================================
+-- UPGRADE SCRIPT (v26 → v27)
+-- Add task_assignees join table for multi-member task assignment.
+-- Seeds from the legacy assigned_to_user_id column (idempotent).
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS "task_assignees" (
+  "task_id"     VARCHAR(36)  NOT NULL,
+  "user_id"     VARCHAR(36)  NOT NULL,
+  "assigned_at" VARCHAR(50)  NOT NULL,
+  PRIMARY KEY ("task_id", "user_id")
+);
+CREATE INDEX IF NOT EXISTS "idx_task_assignees_task" ON "task_assignees" ("task_id");
+CREATE INDEX IF NOT EXISTS "idx_task_assignees_user" ON "task_assignees" ("user_id");
+
+INSERT INTO "task_assignees" ("task_id", "user_id", "assigned_at")
+SELECT "id", "assigned_to_user_id", "created_at"
+FROM "tasks"
+WHERE "assigned_to_user_id" IS NOT NULL
+  AND "assigned_to_user_id" != ''
+ON CONFLICT ("task_id", "user_id") DO NOTHING;
+
+-- ============================================================
+-- UPGRADE SCRIPT (v27 → v28)
+-- Add per-member permission to view tasks assigned to other
+-- organization members. Disabled by default; admins get it
+-- automatically. Every statement is idempotent (safe to re-run).
+-- ============================================================
+
+ALTER TABLE "organization_members"
+  ADD COLUMN IF NOT EXISTS "can_view_others_tasks" SMALLINT NOT NULL DEFAULT 0;
+UPDATE "organization_members"
+  SET "can_view_others_tasks" = 1
+  WHERE "role" IN ('admin', 'owner') AND "can_view_others_tasks" = 0;

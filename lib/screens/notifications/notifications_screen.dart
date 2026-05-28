@@ -8,6 +8,7 @@ import '../../models/app_notification.dart';
 import '../../providers/notifications_provider.dart';
 import '../contacts/contact_detail_screen.dart';
 import '../reminders/reminder_detail_screen.dart';
+import '../tasks/task_detail_screen.dart';
 
 class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
@@ -330,6 +331,20 @@ class _NotificationCard extends ConsumerWidget {
           ),
         );
         break;
+      case 'task_upcoming':
+      case 'task_ontime':
+      case 'task_overdue':
+      case 'task_repeat':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ProviderScope(
+              parent: ProviderScope.containerOf(context),
+              child: TaskDetailScreen(taskId: n.referenceId!),
+            ),
+          ),
+        );
+        break;
     }
   }
 
@@ -343,6 +358,14 @@ class _NotificationCard extends ConsumerWidget {
         return AppColors.accent;
       case 'contact_incomplete':
         return AppColors.warm;
+      case 'task_overdue':
+        return AppColors.hot;
+      case 'task_upcoming':
+        return AppColors.primary;
+      case 'task_ontime':
+        return AppColors.success;
+      case 'task_repeat':
+        return AppColors.accent;
       default:
         return AppColors.primary;
     }
@@ -358,6 +381,14 @@ class _NotificationCard extends ConsumerWidget {
         return Icons.repeat_rounded;
       case 'contact_incomplete':
         return Icons.person_outline_rounded;
+      case 'task_overdue':
+        return Icons.assignment_late_rounded;
+      case 'task_upcoming':
+        return Icons.schedule_rounded;
+      case 'task_ontime':
+        return Icons.task_alt_rounded;
+      case 'task_repeat':
+        return Icons.repeat_rounded;
       default:
         return Icons.notifications_rounded;
     }
@@ -373,6 +404,14 @@ class _NotificationCard extends ConsumerWidget {
         return l10n.repeatReminderBadge;
       case 'contact_incomplete':
         return l10n.incompleteProfileBadge;
+      case 'task_overdue':
+        return l10n.taskOverdueNotif;
+      case 'task_upcoming':
+        return l10n.taskUpcomingNotif;
+      case 'task_ontime':
+        return l10n.taskOntimeNotif;
+      case 'task_repeat':
+        return l10n.taskRepeatNotif;
       default:
         return l10n.notificationLabel;
     }

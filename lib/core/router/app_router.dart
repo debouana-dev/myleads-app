@@ -30,6 +30,10 @@ import '../../screens/organization/join_organization_screen.dart';
 import '../../screens/organization/organization_admin_screen.dart';
 import '../../screens/profile/import_export_screen.dart';
 import '../../screens/profile/sync_screen.dart';
+import '../../screens/tasks/tasks_screen.dart';
+import '../../screens/tasks/create_task_screen.dart';
+import '../../screens/tasks/task_detail_screen.dart';
+import '../../models/app_task.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/',
@@ -459,6 +463,56 @@ final appRouter = GoRouter(
           return SlideTransition(position: animation.drive(tween), child: child);
         },
       ),
+    ),
+    GoRoute(
+      path: '/organization/tasks',
+      pageBuilder: (context, state) => CustomTransitionPage(
+        key: state.pageKey,
+        child: const TasksScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(1.0, 0.0);
+          const end = Offset.zero;
+          final tween = Tween(begin: begin, end: end)
+              .chain(CurveTween(curve: Curves.easeInOut));
+          return SlideTransition(position: animation.drive(tween), child: child);
+        },
+      ),
+    ),
+    GoRoute(
+      path: '/organization/tasks/new',
+      pageBuilder: (context, state) {
+        final existing = state.extra as AppTask?;
+        return CustomTransitionPage(
+          key: state.pageKey,
+          child: CreateTaskScreen(existing: existing),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            const begin = Offset(1.0, 0.0);
+            const end = Offset.zero;
+            final tween = Tween(begin: begin, end: end)
+                .chain(CurveTween(curve: Curves.easeInOut));
+            return SlideTransition(
+                position: animation.drive(tween), child: child);
+          },
+        );
+      },
+    ),
+    GoRoute(
+      path: '/organization/task/:id',
+      pageBuilder: (context, state) {
+        final taskId = state.pathParameters['id']!;
+        return CustomTransitionPage(
+          key: state.pageKey,
+          child: TaskDetailScreen(taskId: taskId),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            const begin = Offset(1.0, 0.0);
+            const end = Offset.zero;
+            final tween = Tween(begin: begin, end: end)
+                .chain(CurveTween(curve: Curves.easeInOut));
+            return SlideTransition(
+                position: animation.drive(tween), child: child);
+          },
+        );
+      },
     ),
     GoRoute(
       path: '/sync',
