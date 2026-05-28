@@ -449,6 +449,20 @@ class AppL10n {
   String get sendSms => _en ? 'Send SMS' : 'Envoyer un SMS';
   String get openWhatsapp => _en ? 'Open WhatsApp' : 'Ouvrir WhatsApp';
   String get sendEmail => _en ? 'Send email' : 'Envoyer un email';
+  String get taskAssigneeNoPhone => _en
+      ? "This team member hasn't registered a phone number in their profile"
+      : "Ce membre n'a pas enregistré de numéro de téléphone dans son profil";
+  String get taskAssigneeNoEmail => _en
+      ? "This team member hasn't registered an email address in their profile"
+      : "Ce membre n'a pas enregistré d'adresse e-mail dans son profil";
+  String get contactNoPhone => _en
+      ? 'No phone number registered for this contact'
+      : 'Aucun numéro de téléphone pour ce contact';
+  String get contactNoEmail => _en
+      ? 'No email address registered for this contact'
+      : 'Aucun e-mail pour ce contact';
+  String get contactInvalidPhone =>
+      _en ? 'Invalid phone number' : 'Numéro de téléphone invalide';
 
   // ─── Profile ─────────────────────────────────────────────────────────────
   String get accountLabel => _en ? 'Account' : 'Compte';

@@ -467,61 +467,73 @@ class _TaskDetailScreenState extends ConsumerState<TaskDetailScreen> {
     final String rawPhone = assignee?.phone ?? '';
     final String rawEmail = assignee?.email ?? '';
 
+    void showMissingInfo(String msg) =>
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(msg),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ));
+
     Color color;
     IconData icon;
     String label;
-    VoidCallback? action;
+    VoidCallback action;
+    bool missingInfo;
 
     switch (task.toDoAction) {
       case 'sms':
         color = AppColors.primary;
         icon = Icons.sms_rounded;
         label = l10n.sendSms;
-        action = rawPhone.isNotEmpty
-            ? () => _launch(
-                Uri(scheme: 'sms', path: _cleanPhone(rawPhone)))
-            : null;
+        missingInfo = rawPhone.isEmpty;
+        action = missingInfo
+            ? () => showMissingInfo(l10n.taskAssigneeNoPhone)
+            : () => _launch(Uri(scheme: 'sms', path: _cleanPhone(rawPhone)));
         break;
       case 'whatsapp':
         color = const Color(0xFF25D366);
         icon = Icons.chat_rounded;
         label = l10n.openWhatsapp;
-        final digits =
-            rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
-        action = digits.isNotEmpty
-            ? () => _launch(Uri.parse('https://wa.me/$digits'),
-                mode: LaunchMode.externalApplication)
-            : null;
+        final digits = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
+        missingInfo = digits.isEmpty;
+        action = missingInfo
+            ? () => showMissingInfo(l10n.taskAssigneeNoPhone)
+            : () => _launch(Uri.parse('https://wa.me/$digits'),
+                mode: LaunchMode.externalApplication);
         break;
       case 'email':
         color = AppColors.warm;
         icon = Icons.email_rounded;
         label = l10n.sendEmail;
-        action = rawEmail.isNotEmpty
-            ? () => _launch(Uri(scheme: 'mailto', path: rawEmail))
-            : null;
+        missingInfo = rawEmail.isEmpty;
+        action = missingInfo
+            ? () => showMissingInfo(l10n.taskAssigneeNoEmail)
+            : () => _launch(Uri(scheme: 'mailto', path: rawEmail));
         break;
       default:
         color = AppColors.success;
         icon = Icons.phone_rounded;
         label = l10n.callLabel;
-        action = rawPhone.isNotEmpty
-            ? () => _launch(
-                Uri(scheme: 'tel', path: _cleanPhone(rawPhone)))
-            : null;
+        missingInfo = rawPhone.isEmpty;
+        action = missingInfo
+            ? () => showMissingInfo(l10n.taskAssigneeNoPhone)
+            : () => _launch(Uri(scheme: 'tel', path: _cleanPhone(rawPhone)));
     }
 
-    return ElevatedButton.icon(
-      onPressed: action,
-      icon: Icon(icon, size: 20),
-      label: Text(label),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        foregroundColor: Colors.white,
-        minimumSize: const Size(double.infinity, 48),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12)),
-        elevation: 0,
+    return Opacity(
+      opacity: missingInfo ? 0.55 : 1.0,
+      child: ElevatedButton.icon(
+        onPressed: action,
+        icon: Icon(icon, size: 20),
+        label: Text(label),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.white,
+          minimumSize: const Size(double.infinity, 48),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          elevation: 0,
+        ),
       ),
     );
   }
