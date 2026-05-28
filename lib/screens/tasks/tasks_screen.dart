@@ -87,13 +87,16 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
   Widget build(BuildContext context) {
     final l10n = ref.watch(l10nProvider);
     final isSuspended = ref.watch(orgCurrentUserIsSuspendedProvider);
+    final canViewOthers = ref.watch(orgCanViewOthersTasksProvider);
     final state = ref.watch(tasksProvider);
 
     final currentUserId = StorageService.currentUserId;
-    final pendingList = _scopeAll
+    // Members without the "view team tasks" privilege always see only their own tasks.
+    final effectiveScopeAll = canViewOthers && _scopeAll;
+    final pendingList = effectiveScopeAll
         ? state.pendingTasks
         : state.myAssignedTasks(currentUserId);
-    final completedList = _scopeAll
+    final completedList = effectiveScopeAll
         ? state.completedTasks
         : state.completedTasksForUser(currentUserId);
     final current = _activeTab == 'done' ? completedList : pendingList;
@@ -170,26 +173,28 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
             ),
             const SizedBox(height: 16),
 
-            // ── Scope toggle (Mine / All) ─────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  _ScopeChip(
-                    label: l10n.myTasks,
-                    active: !_scopeAll,
-                    onTap: () => setState(() => _scopeAll = false),
-                  ),
-                  const SizedBox(width: 8),
-                  _ScopeChip(
-                    label: l10n.allTasks,
-                    active: _scopeAll,
-                    onTap: () => setState(() => _scopeAll = true),
-                  ),
-                ],
+            // ── Scope toggle (Mine / All) — only for permitted members ────
+            if (canViewOthers) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    _ScopeChip(
+                      label: l10n.myTasks,
+                      active: !_scopeAll,
+                      onTap: () => setState(() => _scopeAll = false),
+                    ),
+                    const SizedBox(width: 8),
+                    _ScopeChip(
+                      label: l10n.allTasks,
+                      active: _scopeAll,
+                      onTap: () => setState(() => _scopeAll = true),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
+              const SizedBox(height: 10),
+            ],
 
             // ── Tabs ──────────────────────────────────────────────────────
             Padding(

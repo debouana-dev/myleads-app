@@ -1397,6 +1397,8 @@ class AppL10n {
   String get allTasks => _en ? 'All Tasks' : 'Toutes les tâches';
   String tasksAssignedToYou(int n) =>
       _en ? '$n assigned to you' : '$n assignée${n > 1 ? 's' : ''} à vous';
+  String get viewOthersTasksPrivilege =>
+      _en ? 'Can view team tasks' : "Peut voir les tâches d'équipe";
 }
 
 final l10nProvider = Provider<AppL10n>((ref) {

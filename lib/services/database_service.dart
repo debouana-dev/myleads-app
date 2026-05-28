@@ -29,7 +29,7 @@ import 'web_db_factory_stub.dart'
 class DatabaseService {
   static Database? _db;
   static const _dbName = 'myleads.db';
-  static const _dbVersion = 27;
+  static const _dbVersion = 28;
   static const _uuid = Uuid();
 
   // ── Remote sync callbacks ──────────────────────────────────────────────────
@@ -489,6 +489,17 @@ class DatabaseService {
         ''');
       } catch (_) {}
     }
+    if (oldVersion < 28) {
+      // v27 → v28: per-member permission to view tasks assigned to other members.
+      try {
+        await db.execute(
+            'ALTER TABLE organization_members ADD COLUMN can_view_others_tasks INTEGER NOT NULL DEFAULT 0');
+      } catch (_) {}
+      try {
+        await db.execute(
+            "UPDATE organization_members SET can_view_others_tasks = 1 WHERE role IN ('admin', 'owner')");
+      } catch (_) {}
+    }
   }
 
   // =====================================================================
@@ -678,6 +689,7 @@ class DatabaseService {
         can_view_reminders INTEGER NOT NULL DEFAULT 0,
         can_view_history INTEGER NOT NULL DEFAULT 0,
         can_export_contacts INTEGER NOT NULL DEFAULT 0,
+        can_view_others_tasks INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         UNIQUE (organization_id, user_id)
@@ -1899,6 +1911,8 @@ class DatabaseService {
         canViewHistory: isAdmin || (row['can_view_history'] as int? ?? 0) == 1,
         canExportContacts:
             isAdmin || (row['can_export_contacts'] as int? ?? 0) == 1,
+        canViewOthersTasks:
+            isAdmin || (row['can_view_others_tasks'] as int? ?? 0) == 1,
       ));
     }
     return members;
@@ -1937,6 +1951,7 @@ class DatabaseService {
       'can_view_reminders': isAdmin ? 1 : 0,
       'can_view_history': isAdmin ? 1 : 0,
       'can_export_contacts': isAdmin ? 1 : 0,
+      'can_view_others_tasks': isAdmin ? 1 : 0,
     };
     await db.insert('organization_members', row,
         conflictAlgorithm: ConflictAlgorithm.ignore);
@@ -2018,7 +2033,7 @@ class DatabaseService {
     return !org.isSuspended && !org.isExpired;
   }
 
-  /// Update the edit/create/view-reminders/view-history/export privileges for a single member.
+  /// Update privileges for a single member.
   static Future<void> updateMemberPrivileges({
     required String orgId,
     required String userId,
@@ -2027,6 +2042,7 @@ class DatabaseService {
     required bool canViewReminders,
     required bool canViewHistory,
     required bool canExportContacts,
+    required bool canViewOthersTasks,
   }) async {
     final db = await database;
     await db.update(
@@ -2037,6 +2053,7 @@ class DatabaseService {
         'can_view_reminders': canViewReminders ? 1 : 0,
         'can_view_history': canViewHistory ? 1 : 0,
         'can_export_contacts': canExportContacts ? 1 : 0,
+        'can_view_others_tasks': canViewOthersTasks ? 1 : 0,
       },
       where: 'organization_id = ? AND user_id = ?',
       whereArgs: [orgId, userId],
@@ -2374,6 +2391,7 @@ class DatabaseService {
           'can_view_reminders': 1,
           'can_view_history': 1,
           'can_export_contacts': 1,
+          'can_view_others_tasks': 1,
         },
         where: 'organization_id = ? AND user_id = ?',
         whereArgs: [orgId, newOwnerId],
@@ -2478,7 +2496,8 @@ class DatabaseService {
         bool canCreate,
         bool canViewReminders,
         bool canViewHistory,
-        bool canExportContacts
+        bool canExportContacts,
+        bool canViewOthersTasks
       })> getMemberPrivileges({
     required String userId,
     required String? orgId,
@@ -2489,19 +2508,12 @@ class DatabaseService {
         canCreate: true,
         canViewReminders: true,
         canViewHistory: true,
-        canExportContacts: true
+        canExportContacts: true,
+        canViewOthersTasks: true,
       );
     }
     final db = await database;
     final rows = await db.query('organization_members',
-        columns: [
-          'role',
-          'can_edit',
-          'can_create',
-          'can_view_reminders',
-          'can_view_history',
-          'can_export_contacts'
-        ],
         where: 'organization_id = ? AND user_id = ?',
         whereArgs: [orgId, userId],
         limit: 1);
@@ -2511,7 +2523,8 @@ class DatabaseService {
         canCreate: true,
         canViewReminders: true,
         canViewHistory: true,
-        canExportContacts: true
+        canExportContacts: true,
+        canViewOthersTasks: true,
       );
     }
     final isAdmin = (rows.first['role'] as String?) == 'owner' ||
@@ -2525,6 +2538,8 @@ class DatabaseService {
           isAdmin || (rows.first['can_view_history'] as int? ?? 0) == 1,
       canExportContacts:
           isAdmin || (rows.first['can_export_contacts'] as int? ?? 0) == 1,
+      canViewOthersTasks:
+          isAdmin || (rows.first['can_view_others_tasks'] as int? ?? 0) == 1,
     );
   }
 
@@ -2592,6 +2607,7 @@ class DatabaseService {
         'can_view_reminders': isElevated ? 1 : 0,
         'can_view_history': isElevated ? 1 : 0,
         'can_export_contacts': isElevated ? 1 : 0,
+        'can_view_others_tasks': isElevated ? 1 : 0,
       },
       where: 'organization_id = ? AND user_id = ?',
       whereArgs: [orgId, userId],

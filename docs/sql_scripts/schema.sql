@@ -168,12 +168,12 @@ CREATE TABLE IF NOT EXISTS "organizations" (
 
 
 -- ============================================================
--- TABLE: organization_members  (v7 + v8 privileges + v10 reminder access + v12 history access + v18 member profile denormalization + v20 export access + v21 email encryption + v24 phone + v25 owner role)
+-- TABLE: organization_members  (v7 + v8 privileges + v10 reminder access + v12 history access + v18 member profile denormalization + v20 export access + v21 email encryption + v24 phone + v25 owner role + v28 view-others-tasks)
 -- role: owner | admin | member
 -- status: active | suspended
 -- Denormalized member profile fields are stored here for fast local display.
--- can_edit / can_create / can_view_reminders / can_view_history / can_export_contacts: per-member flags.
--- Admins always have all five set to 1 regardless of stored value.
+-- can_edit / can_create / can_view_reminders / can_view_history / can_export_contacts / can_view_others_tasks: per-member flags.
+-- Admins always have all six set to 1 regardless of stored value.
 -- email: AES-256-CBC ciphertext, key = SHA256(SECRET_KEY:organization_id). (v21+)
 -- phone: AES-256-CBC ciphertext, key = SHA256(SECRET_KEY:organization_id). (v24+)
 -- ============================================================
@@ -192,11 +192,12 @@ CREATE TABLE IF NOT EXISTS "organization_members" (
   "company"             VARCHAR(255),
   "biography"           TEXT,
   "photo_path"          TEXT,
-  "can_edit"            SMALLINT     NOT NULL DEFAULT 0,
-  "can_create"          SMALLINT     NOT NULL DEFAULT 1,
-  "can_view_reminders"  SMALLINT     NOT NULL DEFAULT 0,
-  "can_view_history"    SMALLINT     NOT NULL DEFAULT 0,
-  "can_export_contacts" SMALLINT     NOT NULL DEFAULT 0,
+  "can_edit"               SMALLINT     NOT NULL DEFAULT 0,
+  "can_create"             SMALLINT     NOT NULL DEFAULT 1,
+  "can_view_reminders"     SMALLINT     NOT NULL DEFAULT 0,
+  "can_view_history"       SMALLINT     NOT NULL DEFAULT 0,
+  "can_export_contacts"    SMALLINT     NOT NULL DEFAULT 0,
+  "can_view_others_tasks"  SMALLINT     NOT NULL DEFAULT 0,
 
   PRIMARY KEY ("id"),
   UNIQUE ("organization_id", "user_id")
@@ -504,3 +505,16 @@ FROM "tasks"
 WHERE "assigned_to_user_id" IS NOT NULL
   AND "assigned_to_user_id" != ''
 ON CONFLICT ("task_id", "user_id") DO NOTHING;
+
+-- ============================================================
+-- UPGRADE SCRIPT (v27 → v28)
+-- Add per-member permission to view tasks assigned to other
+-- organization members. Disabled by default; admins get it
+-- automatically. Every statement is idempotent (safe to re-run).
+-- ============================================================
+
+ALTER TABLE "organization_members"
+  ADD COLUMN IF NOT EXISTS "can_view_others_tasks" SMALLINT NOT NULL DEFAULT 0;
+UPDATE "organization_members"
+  SET "can_view_others_tasks" = 1
+  WHERE "role" IN ('admin', 'owner') AND "can_view_others_tasks" = 0;

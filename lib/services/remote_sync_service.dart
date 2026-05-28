@@ -311,11 +311,12 @@ class RemoteSyncService {
         "company"            VARCHAR(255),
         "biography"          TEXT,
         "photo_path"         TEXT,
-        "can_edit"            SMALLINT    NOT NULL DEFAULT 0,
-        "can_create"          SMALLINT    NOT NULL DEFAULT 1,
-        "can_view_reminders"  SMALLINT    NOT NULL DEFAULT 0,
-        "can_view_history"    SMALLINT    NOT NULL DEFAULT 0,
-        "can_export_contacts" SMALLINT    NOT NULL DEFAULT 0,
+        "can_edit"               SMALLINT    NOT NULL DEFAULT 0,
+        "can_create"             SMALLINT    NOT NULL DEFAULT 1,
+        "can_view_reminders"     SMALLINT    NOT NULL DEFAULT 0,
+        "can_view_history"       SMALLINT    NOT NULL DEFAULT 0,
+        "can_export_contacts"    SMALLINT    NOT NULL DEFAULT 0,
+        "can_view_others_tasks"  SMALLINT    NOT NULL DEFAULT 0,
         PRIMARY KEY ("id"),
         UNIQUE ("organization_id", "user_id")
       )
@@ -346,6 +347,14 @@ class RemoteSyncService {
     );
     await conn.execute(
       'UPDATE "organization_members" SET "can_export_contacts" = 1 WHERE "role" = \'admin\' AND "can_export_contacts" = 0',
+    );
+
+    // v28: per-member permission to view tasks assigned to other members.
+    await conn.execute(
+      'ALTER TABLE "organization_members" ADD COLUMN IF NOT EXISTS "can_view_others_tasks" SMALLINT NOT NULL DEFAULT 0',
+    );
+    await conn.execute(
+      'UPDATE "organization_members" SET "can_view_others_tasks" = 1 WHERE "role" IN (\'admin\', \'owner\') AND "can_view_others_tasks" = 0',
     );
 
     // v24: denormalized member phone, encrypted with org key.
@@ -1944,11 +1953,11 @@ class RemoteSyncService {
         INSERT INTO "organization_members"
           (id,organization_id,user_id,role,status,joined_at,
            first_name,last_name,email,phone,nickname,company,biography,photo_path,
-           can_edit,can_create,can_view_reminders,can_view_history,can_export_contacts)
+           can_edit,can_create,can_view_reminders,can_view_history,can_export_contacts,can_view_others_tasks)
         VALUES
           (@id,@organization_id,@user_id,@role,@status,@joined_at,
            @first_name,@last_name,@email,@phone,@nickname,@company,@biography,@photo_path,
-           @can_edit,@can_create,@can_view_reminders,@can_view_history,@can_export_contacts)
+           @can_edit,@can_create,@can_view_reminders,@can_view_history,@can_export_contacts,@can_view_others_tasks)
         ON CONFLICT (id) DO UPDATE SET
           role=EXCLUDED.role,status=EXCLUDED.status,
           first_name=EXCLUDED.first_name,last_name=EXCLUDED.last_name,
@@ -1957,7 +1966,8 @@ class RemoteSyncService {
           can_edit=EXCLUDED.can_edit,can_create=EXCLUDED.can_create,
           can_view_reminders=EXCLUDED.can_view_reminders,
           can_view_history=EXCLUDED.can_view_history,
-          can_export_contacts=EXCLUDED.can_export_contacts
+          can_export_contacts=EXCLUDED.can_export_contacts,
+          can_view_others_tasks=EXCLUDED.can_view_others_tasks
       '''),
       parameters: {
         'id': r['id'],
@@ -1979,6 +1989,7 @@ class RemoteSyncService {
         'can_view_reminders': r['can_view_reminders'] ?? 0,
         'can_view_history': r['can_view_history'] ?? 0,
         'can_export_contacts': r['can_export_contacts'] ?? 0,
+        'can_view_others_tasks': r['can_view_others_tasks'] ?? 0,
       },
     );
   }
@@ -2116,7 +2127,8 @@ class RemoteSyncService {
     'can_create',
     'can_view_reminders',
     'can_view_history',
-    'can_export_contacts'
+    'can_export_contacts',
+    'can_view_others_tasks',
   };
 
   static Map<String, dynamic> _normaliseBools(

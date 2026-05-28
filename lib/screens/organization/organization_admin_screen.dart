@@ -242,8 +242,7 @@ class _OrganizationAdminScreenState
                 ...admins.map((admin) => ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: CircleAvatar(
-                        backgroundColor:
-                            AppColors.primary.withOpacity(0.15),
+                        backgroundColor: AppColors.primary.withOpacity(0.15),
                         child: Text(
                           _initials(admin.firstName, admin.lastName),
                           style: const TextStyle(
@@ -258,8 +257,7 @@ class _OrganizationAdminScreenState
                             color: AppColors.onSurface(context),
                             fontWeight: FontWeight.w600),
                       ),
-                      subtitle: (admin.email != null &&
-                              admin.email!.isNotEmpty)
+                      subtitle: (admin.email != null && admin.email!.isNotEmpty)
                           ? Text(
                               admin.email!,
                               style: TextStyle(
@@ -326,13 +324,14 @@ class _OrganizationAdminScreenState
         member: member,
         isCurrentUserOwner: isOwner,
         onUpdatePrivileges: (canEdit, canCreate, canViewReminders,
-                canViewHistory, canExportContacts) =>
+                canViewHistory, canExportContacts, canViewOthersTasks) =>
             _updatePrivileges(member,
                 canEdit: canEdit,
                 canCreate: canCreate,
                 canViewReminders: canViewReminders,
                 canViewHistory: canViewHistory,
-                canExportContacts: canExportContacts),
+                canExportContacts: canExportContacts,
+                canViewOthersTasks: canViewOthersTasks),
         onSuspend: member.status == 'active'
             ? () => _doSuspend(member)
             : () => _doReactivate(member),
@@ -341,8 +340,9 @@ class _OrganizationAdminScreenState
             isOwner && member.role == 'member' && member.status == 'active'
                 ? () => _doAssignAdmin(member)
                 : null,
-        onRevokeAdmin:
-            isOwner && member.role == 'admin' ? () => _doRevokeAdmin(member) : null,
+        onRevokeAdmin: isOwner && member.role == 'admin'
+            ? () => _doRevokeAdmin(member)
+            : null,
       ),
     );
   }
@@ -357,8 +357,9 @@ class _OrganizationAdminScreenState
       confirmColor: AppColors.primary,
     );
     if (ok != true || !mounted) return;
-    final err =
-        await ref.read(organizationProvider.notifier).assignAdminRole(member.userId);
+    final err = await ref
+        .read(organizationProvider.notifier)
+        .assignAdminRole(member.userId);
     if (!mounted) return;
     if (err != null) {
       _showSnack(err, error: true);
@@ -377,8 +378,9 @@ class _OrganizationAdminScreenState
       confirmColor: AppColors.warm,
     );
     if (ok != true || !mounted) return;
-    final err =
-        await ref.read(organizationProvider.notifier).revokeAdminRole(member.userId);
+    final err = await ref
+        .read(organizationProvider.notifier)
+        .revokeAdminRole(member.userId);
     if (!mounted) return;
     if (err != null) {
       _showSnack(err, error: true);
@@ -392,7 +394,8 @@ class _OrganizationAdminScreenState
       required bool canCreate,
       required bool canViewReminders,
       required bool canViewHistory,
-      required bool canExportContacts}) async {
+      required bool canExportContacts,
+      required bool canViewOthersTasks}) async {
     final l10n = ref.read(l10nProvider);
     final err =
         await ref.read(organizationProvider.notifier).updateMemberPrivileges(
@@ -402,6 +405,7 @@ class _OrganizationAdminScreenState
               canViewReminders: canViewReminders,
               canViewHistory: canViewHistory,
               canExportContacts: canExportContacts,
+              canViewOthersTasks: canViewOthersTasks,
             );
     if (!mounted) return;
     if (err != null) {
@@ -589,7 +593,7 @@ class _OrganizationAdminScreenState
     );
 
     setState(() {});
-    
+
     bool success = false;
     String? transactionId;
     String? errorCode;
@@ -635,9 +639,8 @@ class _OrganizationAdminScreenState
     if (!mounted) return;
 
     if (!success) {
-      final msg = errorCode == 'cancelled'
-          ? l10n.paymentCancelled
-          : l10n.paymentFailed;
+      final msg =
+          errorCode == 'cancelled' ? l10n.paymentCancelled : l10n.paymentFailed;
       _showSnack(msg, error: true);
       return;
     }
@@ -721,7 +724,8 @@ class _OrganizationAdminScreenState
       backgroundColor: AppColors.bg(context),
       appBar: _appBar(l10n, org, isAdmin: isAdmin, isOwner: isOwner),
       body: RefreshIndicator(
-        onRefresh: () => ref.read(organizationProvider.notifier).refreshFromCloud(),
+        onRefresh: () =>
+            ref.read(organizationProvider.notifier).refreshFromCloud(),
         color: AppColors.primary,
         backgroundColor: AppColors.surfaceColor(context),
         child: ListView(
@@ -1207,8 +1211,7 @@ class _TasksEntryCard extends ConsumerWidget {
             ),
             if (pendingCount > 0)
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   gradient: AppColors.primaryGradient,
                   borderRadius: BorderRadius.circular(10),
@@ -1222,8 +1225,7 @@ class _TasksEntryCard extends ConsumerWidget {
                 ),
               ),
             const SizedBox(width: 8),
-            Icon(Icons.chevron_right_rounded,
-                color: AppColors.hint(context)),
+            Icon(Icons.chevron_right_rounded, color: AppColors.hint(context)),
           ],
         ),
       ),
@@ -1400,8 +1402,13 @@ class _MemberManagementSheet extends ConsumerWidget {
 
   final OrgMember member;
   final bool isCurrentUserOwner;
-  final void Function(bool canEdit, bool canCreate, bool canViewReminders,
-      bool canViewHistory, bool canExportContacts) onUpdatePrivileges;
+  final void Function(
+      bool canEdit,
+      bool canCreate,
+      bool canViewReminders,
+      bool canViewHistory,
+      bool canExportContacts,
+      bool canViewOthersTasks) onUpdatePrivileges;
   final VoidCallback onSuspend;
   final VoidCallback onRemove;
   final VoidCallback? onAssignAdmin;
@@ -1520,7 +1527,8 @@ class _MemberManagementSheet extends ConsumerWidget {
                     live.canCreate,
                     live.canViewReminders,
                     live.canViewHistory,
-                    live.canExportContacts),
+                    live.canExportContacts,
+                    live.canViewOthersTasks),
               ),
               _PrivilegeRow(
                 label: l10n.createPrivilege,
@@ -1530,17 +1538,8 @@ class _MemberManagementSheet extends ConsumerWidget {
                     val,
                     live.canViewReminders,
                     live.canViewHistory,
-                    live.canExportContacts),
-              ),
-              _PrivilegeRow(
-                label: l10n.viewRemindersPrivilege,
-                value: live.canViewReminders,
-                onChanged: (val) => onUpdatePrivileges(
-                    live.canEdit,
-                    live.canCreate,
-                    val,
-                    live.canViewHistory,
-                    live.canExportContacts),
+                    live.canExportContacts,
+                    live.canViewOthersTasks),
               ),
               _PrivilegeRow(
                 label: l10n.viewHistoryPrivilege,
@@ -1550,7 +1549,30 @@ class _MemberManagementSheet extends ConsumerWidget {
                     live.canCreate,
                     live.canViewReminders,
                     val,
-                    live.canExportContacts),
+                    live.canExportContacts,
+                    live.canViewOthersTasks),
+              ),
+              _PrivilegeRow(
+                label: l10n.viewRemindersPrivilege,
+                value: live.canViewReminders,
+                onChanged: (val) => onUpdatePrivileges(
+                    live.canEdit,
+                    live.canCreate,
+                    val,
+                    live.canViewHistory,
+                    live.canExportContacts,
+                    live.canViewOthersTasks),
+              ),
+              _PrivilegeRow(
+                label: l10n.viewOthersTasksPrivilege,
+                value: live.canViewOthersTasks,
+                onChanged: (val) => onUpdatePrivileges(
+                    live.canEdit,
+                    live.canCreate,
+                    live.canViewReminders,
+                    live.canViewHistory,
+                    live.canExportContacts,
+                    val),
               ),
               _PrivilegeRow(
                 label: l10n.exportPrivilege,
@@ -1560,7 +1582,8 @@ class _MemberManagementSheet extends ConsumerWidget {
                     live.canCreate,
                     live.canViewReminders,
                     live.canViewHistory,
-                    val),
+                    val,
+                    live.canViewOthersTasks),
               ),
             ],
 
