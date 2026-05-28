@@ -311,11 +311,12 @@ class RemoteSyncService {
         "company"            VARCHAR(255),
         "biography"          TEXT,
         "photo_path"         TEXT,
-        "can_edit"            SMALLINT    NOT NULL DEFAULT 0,
-        "can_create"          SMALLINT    NOT NULL DEFAULT 1,
-        "can_view_reminders"  SMALLINT    NOT NULL DEFAULT 0,
-        "can_view_history"    SMALLINT    NOT NULL DEFAULT 0,
-        "can_export_contacts" SMALLINT    NOT NULL DEFAULT 0,
+        "can_edit"               SMALLINT    NOT NULL DEFAULT 0,
+        "can_create"             SMALLINT    NOT NULL DEFAULT 1,
+        "can_view_reminders"     SMALLINT    NOT NULL DEFAULT 0,
+        "can_view_history"       SMALLINT    NOT NULL DEFAULT 0,
+        "can_export_contacts"    SMALLINT    NOT NULL DEFAULT 0,
+        "can_view_others_tasks"  SMALLINT    NOT NULL DEFAULT 0,
         PRIMARY KEY ("id"),
         UNIQUE ("organization_id", "user_id")
       )
@@ -346,6 +347,14 @@ class RemoteSyncService {
     );
     await conn.execute(
       'UPDATE "organization_members" SET "can_export_contacts" = 1 WHERE "role" = \'admin\' AND "can_export_contacts" = 0',
+    );
+
+    // v28: per-member permission to view tasks assigned to other members.
+    await conn.execute(
+      'ALTER TABLE "organization_members" ADD COLUMN IF NOT EXISTS "can_view_others_tasks" SMALLINT NOT NULL DEFAULT 0',
+    );
+    await conn.execute(
+      'UPDATE "organization_members" SET "can_view_others_tasks" = 1 WHERE "role" IN (\'admin\', \'owner\') AND "can_view_others_tasks" = 0',
     );
 
     // v24: denormalized member phone, encrypted with org key.
@@ -463,6 +472,59 @@ class RemoteSyncService {
              WHERE "organizations"."id" = "users"."organization_id"
            )''',
     );
+
+    // v26: tasks table (org-first, nullable organization_id for future personal tasks).
+    await conn.execute('''
+      CREATE TABLE IF NOT EXISTS "tasks" (
+        "id"                  VARCHAR(36) NOT NULL,
+        "organization_id"     VARCHAR(36),
+        "created_by_user_id"  VARCHAR(36) NOT NULL,
+        "assigned_to_user_id" VARCHAR(36) NOT NULL,
+        "start_date_time"     VARCHAR(50) NOT NULL,
+        "end_date_time"       VARCHAR(50),
+        "repeat_frequency"    VARCHAR(20),
+        "note"                TEXT        NOT NULL DEFAULT '',
+        "todo_action"         VARCHAR(20) NOT NULL DEFAULT 'call',
+        "priority"            VARCHAR(30) NOT NULL DEFAULT 'normal',
+        "is_completed"        SMALLINT    NOT NULL DEFAULT 0,
+        "completed_by_user_id" VARCHAR(36),
+        "created_at"          VARCHAR(50) NOT NULL,
+        PRIMARY KEY ("id")
+      )
+    ''');
+    await conn.execute(
+      'CREATE INDEX IF NOT EXISTS "idx_tasks_org" ON "tasks" ("organization_id")',
+    );
+    await conn.execute(
+      'CREATE INDEX IF NOT EXISTS "idx_tasks_assigned" ON "tasks" ("assigned_to_user_id")',
+    );
+    await conn.execute(
+      'CREATE INDEX IF NOT EXISTS "idx_tasks_creator" ON "tasks" ("created_by_user_id")',
+    );
+
+    // v27: task_assignees — multi-member task assignment join table.
+    await conn.execute('''
+      CREATE TABLE IF NOT EXISTS "task_assignees" (
+        "task_id"     VARCHAR(36) NOT NULL,
+        "user_id"     VARCHAR(36) NOT NULL,
+        "assigned_at" VARCHAR(50) NOT NULL,
+        PRIMARY KEY ("task_id", "user_id")
+      )
+    ''');
+    await conn.execute(
+      'CREATE INDEX IF NOT EXISTS "idx_task_assignees_task" ON "task_assignees" ("task_id")',
+    );
+    await conn.execute(
+      'CREATE INDEX IF NOT EXISTS "idx_task_assignees_user" ON "task_assignees" ("user_id")',
+    );
+    // Seed from legacy column on existing cloud databases.
+    await conn.execute('''
+      INSERT INTO "task_assignees" ("task_id", "user_id", "assigned_at")
+      SELECT "id", "assigned_to_user_id", "created_at"
+      FROM "tasks"
+      WHERE "assigned_to_user_id" IS NOT NULL AND "assigned_to_user_id" != ''
+      ON CONFLICT ("task_id", "user_id") DO NOTHING
+    ''');
   }
 
   // ── Cloud user helpers ───────────────────────────────────────────────────────
@@ -673,7 +735,7 @@ class RemoteSyncService {
 
   /// Dispatches a background upsert for any supported table.
   /// The `users` table is always synced; all other tables require a
-  /// premium or business plan.
+  /// premium or business plan, except tasks which also allow org-licensed users.
   static Future<void> _pushRowBackground(
           String table, Map<String, dynamic> row) =>
       fireAndForget((conn) async {
@@ -681,7 +743,16 @@ class RemoteSyncService {
           await upsertUser(conn, row);
           return;
         }
-        if (!(await _hasSyncPlan())) return;
+        final hasPlan = await _hasSyncPlan();
+        if (!hasPlan) {
+          if (table == 'tasks' || table == 'task_assignees') {
+            final userId = StorageService.currentUserId;
+            if (userId.isEmpty) return;
+            if (!(await _isOrgLicenseCoveredInCloud(conn, userId))) return;
+          } else {
+            return;
+          }
+        }
         switch (table) {
           case 'contacts':
             await _upsertContact(conn, row);
@@ -695,16 +766,30 @@ class RemoteSyncService {
             await upsertOrgMember(conn, row);
           case 'payment_history':
             await _upsertPaymentRecord(conn, row);
+          case 'tasks':
+            await _upsertTask(conn, row);
+          case 'task_assignees':
+            await _upsertTaskAssignee(conn, row);
         }
       });
 
   /// Dispatches a background delete for any supported table.
   /// Handles cascaded deletes for contacts (interactions + reminders)
   /// and organisations (all member rows).
-  /// Data-table deletes require a premium or business plan.
+  /// Data-table deletes require a premium or business plan,
+  /// except tasks which also allow org-licensed users.
   static Future<void> _deleteRowBackground(String table, String id) =>
       fireAndForget((conn) async {
-        if (!(await _hasSyncPlan())) return;
+        final hasPlan = await _hasSyncPlan();
+        if (!hasPlan) {
+          if (table == 'tasks') {
+            final userId = StorageService.currentUserId;
+            if (userId.isEmpty) return;
+            if (!(await _isOrgLicenseCoveredInCloud(conn, userId))) return;
+          } else {
+            return;
+          }
+        }
         if (table == 'contacts') {
           await conn.execute(
             Sql.named('DELETE FROM "interactions" WHERE "contact_id" = @id'),
@@ -718,6 +803,11 @@ class RemoteSyncService {
           await conn.execute(
             Sql.named(
                 'DELETE FROM "organization_members" WHERE "organization_id" = @id'),
+            parameters: {'id': id},
+          );
+        } else if (table == 'tasks') {
+          await conn.execute(
+            Sql.named('DELETE FROM "task_assignees" WHERE "task_id" = @id'),
             parameters: {'id': id},
           );
         }
@@ -830,6 +920,19 @@ class RemoteSyncService {
           final members = await DatabaseService.getRawOrgMemberRows(orgId);
           for (final row in members) {
             await upsertOrgMember(conn, row);
+          }
+
+          // Tasks
+          final tasks = await DatabaseService.getRawTaskRows(orgId);
+          for (final row in tasks) {
+            await _upsertTask(conn, row);
+          }
+
+          // Task assignees
+          final taskAssignees =
+              await DatabaseService.getRawTaskAssigneeRows(orgId);
+          for (final row in taskAssignees) {
+            await _upsertTaskAssignee(conn, row);
           }
         }
 
@@ -1191,6 +1294,52 @@ class RemoteSyncService {
         }
         // Reconcile: remove local members that no longer exist in the cloud.
         await DatabaseService.reconcileOrgMembers(orgId, memberUserIds);
+
+        // ── Tasks ─────────────────────────────────────────────────────────
+        final taskRes = await conn.execute(
+          Sql.named(
+              'SELECT * FROM "tasks" WHERE "organization_id" = @orgId'),
+          parameters: {'orgId': orgId},
+        );
+        for (final row in taskRes) {
+          final r = row.toColumnMap();
+          await DatabaseService.upsertRawRow('tasks', {
+            'id': r['id'],
+            'organization_id': r['organization_id'],
+            'created_by_user_id': r['created_by_user_id'],
+            'assigned_to_user_id': r['assigned_to_user_id'],
+            'start_date_time': r['start_date_time'],
+            'end_date_time': r['end_date_time'],
+            'repeat_frequency': r['repeat_frequency'],
+            'note': r['note'] ?? '',
+            'todo_action': r['todo_action'] ?? 'call',
+            'priority': r['priority'] ?? 'normal',
+            'is_completed': r['is_completed'] is bool
+                ? (r['is_completed'] as bool ? 1 : 0)
+                : (int.tryParse(r['is_completed']?.toString() ?? '0') ?? 0),
+            'completed_by_user_id': r['completed_by_user_id'],
+            'created_at': r['created_at'],
+          });
+        }
+
+        // ── Task assignees ─────────────────────────────────────────────────
+        final taskAssigneeRes = await conn.execute(
+          Sql.named(
+            'SELECT ta."task_id", ta."user_id", ta."assigned_at" '
+            'FROM "task_assignees" ta '
+            'INNER JOIN "tasks" t ON t."id" = ta."task_id" '
+            'WHERE t."organization_id" = @orgId',
+          ),
+          parameters: {'orgId': orgId},
+        );
+        for (final row in taskAssigneeRes) {
+          final r = row.toColumnMap();
+          await DatabaseService.upsertRawRow('task_assignees', {
+            'task_id': r['task_id']?.toString() ?? '',
+            'user_id': r['user_id']?.toString() ?? '',
+            'assigned_at': r['assigned_at']?.toString() ?? '',
+          });
+        }
       }
 
       // ── Payment history ───────────────────────────────────────────────────
@@ -1445,6 +1594,122 @@ class RemoteSyncService {
     );
   }
 
+  static Future<void> _upsertTask(
+      Connection conn, Map<String, dynamic> r) async {
+    await conn.execute(
+      Sql.named('''
+        INSERT INTO "tasks"
+          (id,organization_id,created_by_user_id,assigned_to_user_id,
+           start_date_time,end_date_time,repeat_frequency,note,
+           todo_action,priority,is_completed,completed_by_user_id,created_at)
+        VALUES
+          (@id,@organization_id,@created_by_user_id,@assigned_to_user_id,
+           @start_date_time,@end_date_time,@repeat_frequency,@note,
+           @todo_action,@priority,@is_completed,@completed_by_user_id,@created_at)
+        ON CONFLICT (id) DO UPDATE SET
+          assigned_to_user_id=EXCLUDED.assigned_to_user_id,
+          start_date_time=EXCLUDED.start_date_time,
+          end_date_time=EXCLUDED.end_date_time,
+          repeat_frequency=EXCLUDED.repeat_frequency,
+          note=EXCLUDED.note,
+          todo_action=EXCLUDED.todo_action,
+          priority=EXCLUDED.priority,
+          is_completed=EXCLUDED.is_completed,
+          completed_by_user_id=EXCLUDED.completed_by_user_id
+      '''),
+      parameters: {
+        'id': r['id'],
+        'organization_id': r['organization_id'],
+        'created_by_user_id': r['created_by_user_id'],
+        'assigned_to_user_id': r['assigned_to_user_id'],
+        'start_date_time': r['start_date_time'],
+        'end_date_time': r['end_date_time'],
+        'repeat_frequency': r['repeat_frequency'],
+        'note': r['note'] ?? '',
+        'todo_action': r['todo_action'] ?? 'call',
+        'priority': r['priority'] ?? 'normal',
+        'is_completed': r['is_completed'] ?? 0,
+        'completed_by_user_id': r['completed_by_user_id'],
+        'created_at': r['created_at'],
+      },
+    );
+  }
+
+  /// Push + pull for the tasks table only.
+  /// Called on tasks-screen open and pull-to-refresh.
+  /// Same plan/org-licence gate as the full sync.
+  static Future<void> syncTasksForOrg(String userId, String orgId) async {
+    if (kIsWeb) return;
+    final connectivity = await Connectivity().checkConnectivity();
+    if (connectivity.contains(ConnectivityResult.none)) return;
+
+    final conn = await _connect();
+    if (conn == null) return;
+
+    try {
+      if (!_schemaReady) {
+        await _ensureSchema(conn);
+        _schemaReady = true;
+      }
+      if (!(await _hasSyncPlan())) {
+        if (!(await _isOrgLicenseCoveredInCloud(conn, userId))) return;
+      }
+
+      // Push local → cloud
+      final localTasks = await DatabaseService.getRawTaskRows(orgId);
+      for (final row in localTasks) {
+        await _upsertTask(conn, row);
+      }
+
+      // Pull cloud → local
+      final taskRes = await conn.execute(
+        Sql.named('SELECT * FROM "tasks" WHERE "organization_id" = @orgId'),
+        parameters: {'orgId': orgId},
+      );
+      for (final row in taskRes) {
+        final r = row.toColumnMap();
+        await DatabaseService.upsertRawRow('tasks', {
+          'id': r['id'],
+          'organization_id': r['organization_id'],
+          'created_by_user_id': r['created_by_user_id'],
+          'assigned_to_user_id': r['assigned_to_user_id'],
+          'start_date_time': r['start_date_time'],
+          'end_date_time': r['end_date_time'],
+          'repeat_frequency': r['repeat_frequency'],
+          'note': r['note'] ?? '',
+          'todo_action': r['todo_action'] ?? 'call',
+          'priority': r['priority'] ?? 'normal',
+          'is_completed': r['is_completed'] is bool
+              ? (r['is_completed'] as bool ? 1 : 0)
+              : (int.tryParse(r['is_completed']?.toString() ?? '0') ?? 0),
+          'completed_by_user_id': r['completed_by_user_id'],
+          'created_at': r['created_at'],
+        });
+      }
+    } catch (e) {
+      debugPrint('RemoteSyncService.syncTasksForOrg: $e');
+    } finally {
+      await conn.close();
+    }
+  }
+
+  static Future<void> _upsertTaskAssignee(
+      Connection conn, Map<String, dynamic> r) async {
+    await conn.execute(
+      Sql.named('''
+        INSERT INTO "task_assignees" ("task_id", "user_id", "assigned_at")
+        VALUES (@task_id, @user_id, @assigned_at)
+        ON CONFLICT ("task_id", "user_id") DO UPDATE SET
+          "assigned_at" = EXCLUDED."assigned_at"
+      '''),
+      parameters: {
+        'task_id': r['task_id'],
+        'user_id': r['user_id'],
+        'assigned_at': r['assigned_at'],
+      },
+    );
+  }
+
   static Future<void> _upsertInteraction(
       Connection conn, Map<String, dynamic> r) async {
     await conn.execute(
@@ -1597,11 +1862,10 @@ class RemoteSyncService {
     }
   }
 
-  /// Pulls the organization row, all its member rows, and all member contacts
-  /// from the remote database into the local SQLite store.
-  ///
-  /// Called after a new member joins an org so the device is immediately
-  /// populated with the org's shared data. All errors are swallowed.
+  /// Pulls the organization row and all its member rows from the remote
+  /// database into the local SQLite store. Contacts are intentionally excluded
+  /// — call [pullOrgContactsById] as a fire-and-forget operation for those.
+  /// All errors are swallowed.
   static Future<void> pullOrganizationDataById(String orgId) async {
     if (kIsWeb) return;
     final conn = await _connect();
@@ -1621,7 +1885,7 @@ class RemoteSyncService {
         await DatabaseService.upsertRawRow('organizations', row.toColumnMap());
       }
 
-      // Pull all member rows; collect user IDs for the contacts query.
+      // Pull all member rows; collect user IDs for reconciliation.
       final memRes = await conn.execute(
         Sql.named(
             'SELECT * FROM "organization_members" WHERE "organization_id" = @id'),
@@ -1637,21 +1901,46 @@ class RemoteSyncService {
 
       // Reconcile: remove local members that no longer exist in the cloud.
       await DatabaseService.reconcileOrgMembers(orgId, memberUserIds);
-
-      // Pull contacts owned by any org member.
-      if (memberUserIds.isNotEmpty) {
-        final inP = _buildInParams(memberUserIds);
-        final contactRes = await conn.execute(
-          Sql.named(
-              'SELECT * FROM "contacts" WHERE "owner_id" IN (${inP.placeholders})'),
-          parameters: inP.params,
-        );
-        for (final row in contactRes) {
-          await DatabaseService.upsertRawRow('contacts', row.toColumnMap());
-        }
-      }
     } catch (e) {
       debugPrint('[RemoteSync] pullOrganizationDataById: $e');
+    } finally {
+      await conn.close();
+    }
+  }
+
+  /// Pulls contacts owned by any member of [orgId] from the remote database
+  /// into the local SQLite store. Intended to be called as a fire-and-forget
+  /// operation so it never blocks the Organization Admin screen. Reads member
+  /// user IDs from the local SQLite store (already up-to-date after
+  /// [pullOrganizationDataById] has run). All errors are swallowed.
+  static Future<void> pullOrgContactsById(String orgId) async {
+    if (kIsWeb) return;
+    final memberRows = await DatabaseService.getRawOrgMemberRows(orgId);
+    final memberUserIds = memberRows
+        .map((m) => m['user_id'] as String?)
+        .where((id) => id != null && id.isNotEmpty)
+        .cast<String>()
+        .toList();
+    if (memberUserIds.isEmpty) return;
+
+    final conn = await _connect();
+    if (conn == null) return;
+    try {
+      if (!_schemaReady) {
+        await _ensureSchema(conn);
+        _schemaReady = true;
+      }
+      final inP = _buildInParams(memberUserIds);
+      final contactRes = await conn.execute(
+        Sql.named(
+            'SELECT * FROM "contacts" WHERE "owner_id" IN (${inP.placeholders})'),
+        parameters: inP.params,
+      );
+      for (final row in contactRes) {
+        await DatabaseService.upsertRawRow('contacts', row.toColumnMap());
+      }
+    } catch (e) {
+      debugPrint('[RemoteSync] pullOrgContactsById: $e');
     } finally {
       await conn.close();
     }
@@ -1664,11 +1953,11 @@ class RemoteSyncService {
         INSERT INTO "organization_members"
           (id,organization_id,user_id,role,status,joined_at,
            first_name,last_name,email,phone,nickname,company,biography,photo_path,
-           can_edit,can_create,can_view_reminders,can_view_history,can_export_contacts)
+           can_edit,can_create,can_view_reminders,can_view_history,can_export_contacts,can_view_others_tasks)
         VALUES
           (@id,@organization_id,@user_id,@role,@status,@joined_at,
            @first_name,@last_name,@email,@phone,@nickname,@company,@biography,@photo_path,
-           @can_edit,@can_create,@can_view_reminders,@can_view_history,@can_export_contacts)
+           @can_edit,@can_create,@can_view_reminders,@can_view_history,@can_export_contacts,@can_view_others_tasks)
         ON CONFLICT (id) DO UPDATE SET
           role=EXCLUDED.role,status=EXCLUDED.status,
           first_name=EXCLUDED.first_name,last_name=EXCLUDED.last_name,
@@ -1677,7 +1966,8 @@ class RemoteSyncService {
           can_edit=EXCLUDED.can_edit,can_create=EXCLUDED.can_create,
           can_view_reminders=EXCLUDED.can_view_reminders,
           can_view_history=EXCLUDED.can_view_history,
-          can_export_contacts=EXCLUDED.can_export_contacts
+          can_export_contacts=EXCLUDED.can_export_contacts,
+          can_view_others_tasks=EXCLUDED.can_view_others_tasks
       '''),
       parameters: {
         'id': r['id'],
@@ -1699,6 +1989,7 @@ class RemoteSyncService {
         'can_view_reminders': r['can_view_reminders'] ?? 0,
         'can_view_history': r['can_view_history'] ?? 0,
         'can_export_contacts': r['can_export_contacts'] ?? 0,
+        'can_view_others_tasks': r['can_view_others_tasks'] ?? 0,
       },
     );
   }
@@ -1836,7 +2127,8 @@ class RemoteSyncService {
     'can_create',
     'can_view_reminders',
     'can_view_history',
-    'can_export_contacts'
+    'can_export_contacts',
+    'can_view_others_tasks',
   };
 
   static Map<String, dynamic> _normaliseBools(

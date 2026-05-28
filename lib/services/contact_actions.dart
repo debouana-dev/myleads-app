@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/l10n/app_l10n.dart';
 import '../core/utils/validators.dart';
 import '../models/contact.dart';
 import 'action_tracker.dart';
@@ -18,7 +20,8 @@ class ContactActions {
   /// Open the default phone app with the contact's number ready to call.
   static Future<bool> call(BuildContext context, Contact contact) async {
     if (contact.phone == null || contact.phone!.trim().isEmpty) {
-      _toast(context, 'Aucun numéro de téléphone pour ce contact');
+      final l10n = ProviderScope.containerOf(context).read(l10nProvider);
+      _toast(context, l10n.contactNoPhone);
       return false;
     }
     final uri = Uri(scheme: 'tel', path: _cleanPhone(contact.phone!));
@@ -29,7 +32,8 @@ class ContactActions {
   /// Open the default SMS app with the contact's number ready to send a message.
   static Future<bool> sms(BuildContext context, Contact contact) async {
     if (contact.phone == null || contact.phone!.trim().isEmpty) {
-      _toast(context, 'Aucun numéro de téléphone pour ce contact');
+      final l10n = ProviderScope.containerOf(context).read(l10nProvider);
+      _toast(context, l10n.contactNoPhone);
       return false;
     }
     final uri = Uri(scheme: 'sms', path: _cleanPhone(contact.phone!));
@@ -40,13 +44,15 @@ class ContactActions {
   /// Open WhatsApp with the contact's number ready to chat.
   static Future<bool> whatsapp(BuildContext context, Contact contact) async {
     if (contact.phone == null || contact.phone!.trim().isEmpty) {
-      _toast(context, 'Aucun numéro de téléphone pour ce contact');
+      final l10n = ProviderScope.containerOf(context).read(l10nProvider);
+      _toast(context, l10n.contactNoPhone);
       return false;
     }
     // WhatsApp expects digits only, no leading + or spaces.
     final digits = contact.phone!.replaceAll(RegExp(r'[^0-9]'), '');
     if (digits.isEmpty) {
-      _toast(context, 'Numéro de téléphone invalide');
+      final l10n = ProviderScope.containerOf(context).read(l10nProvider);
+      _toast(context, l10n.contactInvalidPhone);
       return false;
     }
     final uri = Uri.parse('https://wa.me/$digits');
@@ -62,7 +68,8 @@ class ContactActions {
   /// Open the default email app with a new message addressed to the contact.
   static Future<bool> email(BuildContext context, Contact contact) async {
     if (contact.email == null || contact.email!.trim().isEmpty) {
-      _toast(context, 'Aucun email pour ce contact');
+      final l10n = ProviderScope.containerOf(context).read(l10nProvider);
+      _toast(context, l10n.contactNoEmail);
       return false;
     }
     final uri = Uri(

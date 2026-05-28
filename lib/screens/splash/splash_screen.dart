@@ -36,8 +36,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       if (!mounted) return;
       // If a session was restored during StorageService.init(), skip login.
       if (StorageService.isLoggedIn) {
-        await ref.read(contactsProvider.notifier).reload();
-        await ref.read(remindersProvider.notifier).reload();
+        try {
+          await ref.read(contactsProvider.notifier).reload();
+          await ref.read(remindersProvider.notifier).reload();
+        } catch (e) {
+          debugPrint('Splash reload error: $e');
+        }
         if (mounted) context.go('/main');
       } else {
          context.go('/login');

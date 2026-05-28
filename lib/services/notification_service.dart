@@ -6,6 +6,7 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../models/app_notification.dart';
+import '../models/app_task.dart';
 import '../models/contact.dart';
 import '../models/reminder.dart';
 import '../services/database_service.dart';
@@ -136,6 +137,16 @@ class NotificationService {
 
   static int _repeatPushId(String reminderId, int i) =>
       'repeat_${reminderId}_$i'.hashCode.abs() % 1000000;
+
+  // Task push IDs — use 'task_' prefix to avoid colliding with reminder IDs.
+  static int _taskUpcomingPushId(String taskId) =>
+      'task_upcoming_$taskId'.hashCode.abs() % 1000000;
+  static int _taskOnTimePushId(String taskId) =>
+      'task_ontime_$taskId'.hashCode.abs() % 1000000;
+  static int _taskOverduePushId(String taskId) =>
+      'task_overdue_$taskId'.hashCode.abs() % 1000000;
+  static int _taskRepeatPushId(String taskId, int i) =>
+      'task_repeat_${taskId}_$i'.hashCode.abs() % 1000000;
 
   // -----------------------------------------------------------------------
   // Internal push helpers
@@ -618,6 +629,225 @@ class NotificationService {
   }
 
   // -----------------------------------------------------------------------
+  // Public API — task notifications (mirrors reminder pattern)
+  // -----------------------------------------------------------------------
+
+  /// Schedules the upcoming push (15 min before task start) for the assignee.
+  /// [assigneeId] is stored as ownerId on the in-app notification so it appears
+  /// in the assignee's notification feed, not the creator's.
+  static Future<void> scheduleTaskUpcoming(
+      AppTask task, String assigneeId) async {
+    if (kIsWeb || !_initialized) return;
+    final scheduledAt =
+        task.startDateTime.subtract(const Duration(minutes: 15));
+    final now = DateTime.now();
+    final title = 'Tâche dans 15 min';
+    final body = task.note.isNotEmpty
+        ? task.note
+        : 'Tâche prévue à ${_formatTime(task.startDateTime)}';
+
+    await _persistIfNew(AppNotification(
+      id: 'task_upcoming_${task.id}',
+      ownerId: assigneeId,
+      type: 'task_upcoming',
+      title: title,
+      body: body,
+      scheduledAt: scheduledAt,
+      createdAt: now,
+      referenceId: task.id,
+    ));
+
+    final pushId = _taskUpcomingPushId(task.id);
+    try {
+      await _plugin.cancel(pushId);
+    } catch (_) {}
+
+    if (scheduledAt.isAfter(now)) {
+      await _schedulePush(
+          id: pushId,
+          title: title,
+          body: body,
+          priority: task.priority,
+          scheduledAt: scheduledAt);
+    } else if (task.startDateTime.isAfter(now)) {
+      await _sendPush(
+          id: pushId, title: title, body: body, priority: task.priority);
+    }
+  }
+
+  /// Schedules the on-time push (at task startDateTime) for the assignee.
+  static Future<void> scheduleTaskOnTime(
+      AppTask task, String assigneeId) async {
+    if (kIsWeb || !_initialized) return;
+    final scheduledAt = task.startDateTime;
+    final now = DateTime.now();
+    final title = 'Me2Leads : Tâche maintenant !';
+    final body =
+        task.note.isNotEmpty ? task.note : "C'est le moment de votre tâche.";
+
+    await _persistIfNew(AppNotification(
+      id: 'task_ontime_${task.id}',
+      ownerId: assigneeId,
+      type: 'task_ontime',
+      title: title,
+      body: body,
+      scheduledAt: scheduledAt,
+      createdAt: now,
+      referenceId: task.id,
+    ));
+
+    final pushId = _taskOnTimePushId(task.id);
+    try {
+      await _plugin.cancel(pushId);
+    } catch (_) {}
+
+    if (scheduledAt.isAfter(now)) {
+      await _schedulePush(
+          id: pushId,
+          title: title,
+          body: body,
+          priority: task.priority,
+          scheduledAt: scheduledAt);
+    } else if (now.difference(scheduledAt).inMinutes < 5) {
+      await _sendPush(
+          id: pushId, title: title, body: body, priority: task.priority);
+    }
+  }
+
+  /// Schedules the overdue push (4 hours after deadline) for the assignee.
+  static Future<void> createOverdueTaskNotification(
+      AppTask task, String assigneeId) async {
+    final notifId = 'task_overdue_${task.id}';
+    final deadline = task.endDateTime ?? task.startDateTime;
+    final scheduledAt = deadline.add(const Duration(hours: 4));
+    final now = DateTime.now();
+    final title = 'Tâche en retard';
+    final body = task.note.isNotEmpty
+        ? task.note
+        : 'Tâche du ${_formatDate(deadline)} non effectuée';
+
+    final existed = await DatabaseService.notificationExists(notifId);
+    await _persistIfNew(AppNotification(
+      id: notifId,
+      ownerId: assigneeId,
+      type: 'task_overdue',
+      title: title,
+      body: body,
+      scheduledAt: scheduledAt,
+      createdAt: now,
+      referenceId: task.id,
+    ));
+
+    if (!existed) {
+      final pushId = _taskOverduePushId(task.id);
+      if (scheduledAt.isAfter(now)) {
+        if (!kIsWeb && _initialized) {
+          await _schedulePush(
+              id: pushId,
+              title: title,
+              body: body,
+              priority: task.priority,
+              scheduledAt: scheduledAt);
+        }
+      } else {
+        await _sendPush(
+            id: pushId, title: title, body: body, priority: task.priority);
+      }
+    }
+  }
+
+  /// Schedules up to [_kMaxRepeatSlots] future repeat occurrences for [task].
+  static Future<void> scheduleTaskRepeats(
+      AppTask task, String assigneeId) async {
+    // Cancel existing repeat slots first (idempotent).
+    if (!kIsWeb && _initialized) {
+      for (int i = 0; i < _kMaxRepeatSlots; i++) {
+        try {
+          await _plugin.cancel(_taskRepeatPushId(task.id, i));
+        } catch (_) {}
+      }
+    }
+    await DatabaseService.deleteNotification('task_repeat_${task.id}');
+
+    if (task.isCompleted) return;
+    final step = _frequencyToDuration(task.repeatFrequency);
+    if (step == null) return;
+    final now = DateTime.now();
+    if (task.startDateTime.isAfter(now)) return;
+
+    const title = 'Tâche récurrente';
+    final body = task.note.isNotEmpty
+        ? task.note
+        : 'Tâche prévue à ${_formatTime(task.startDateTime)}';
+
+    DateTime nextTime = _computeNextRepeatTime(
+        startDateTime: task.startDateTime, step: step, now: now);
+
+    await DatabaseService.insertNotification(AppNotification(
+      id: 'task_repeat_${task.id}',
+      ownerId: assigneeId,
+      type: 'task_repeat',
+      title: title,
+      body: body,
+      scheduledAt: nextTime,
+      createdAt: now,
+      referenceId: task.id,
+    ));
+
+    for (int i = 0; i < _kMaxRepeatSlots; i++) {
+      await _schedulePush(
+          id: _taskRepeatPushId(task.id, i),
+          title: title,
+          body: body,
+          priority: task.priority,
+          scheduledAt: nextTime);
+      nextTime = nextTime.add(step);
+    }
+  }
+
+  /// Schedules all notifications (upcoming, on-time, overdue, repeat) for a
+  /// task on the **assignee's** device only. No-op if the task is completed.
+  static Future<void> scheduleAllTaskNotifications(
+      AppTask task, String assigneeId) async {
+    if (task.isCompleted) return;
+    await scheduleTaskUpcoming(task, assigneeId);
+    await scheduleTaskOnTime(task, assigneeId);
+
+    // Reset overdue push so an updated deadline takes effect.
+    final overdueId = 'task_overdue_${task.id}';
+    if (!kIsWeb && _initialized) {
+      try {
+        await _plugin.cancel(_taskOverduePushId(task.id));
+      } catch (_) {}
+    }
+    final exists = await DatabaseService.notificationExists(overdueId);
+    if (exists) await DatabaseService.deleteNotification(overdueId);
+    await createOverdueTaskNotification(task, assigneeId);
+
+    await scheduleTaskRepeats(task, assigneeId);
+  }
+
+  /// Cancels all scheduled OS alarms and in-app records for [taskId].
+  static Future<void> cancelTaskScheduledNotifications(String taskId) async {
+    if (!kIsWeb && _initialized) {
+      try {
+        await _plugin.cancel(_taskUpcomingPushId(taskId));
+        await _plugin.cancel(_taskOnTimePushId(taskId));
+        await _plugin.cancel(_taskOverduePushId(taskId));
+      } catch (_) {}
+      for (int i = 0; i < _kMaxRepeatSlots; i++) {
+        try {
+          await _plugin.cancel(_taskRepeatPushId(taskId, i));
+        } catch (_) {}
+      }
+    }
+    await DatabaseService.deleteNotification('task_upcoming_$taskId');
+    await DatabaseService.deleteNotification('task_ontime_$taskId');
+    await DatabaseService.deleteNotification('task_overdue_$taskId');
+    await DatabaseService.deleteNotification('task_repeat_$taskId');
+  }
+
+  // -----------------------------------------------------------------------
   // Periodic check — run on app resume and provider refresh
   // -----------------------------------------------------------------------
 
@@ -630,6 +860,7 @@ class NotificationService {
   static Future<void> runPeriodicCheck({
     required List<Reminder> reminders,
     required List<Contact> contacts,
+    List<AppTask> tasks = const [],
   }) async {
     final ownerId = StorageService.currentUserId;
     if (ownerId.isEmpty) return;
@@ -666,6 +897,29 @@ class NotificationService {
       if (now.isAfter(c.createdAt.add(const Duration(days: 3)))) {
         await createIncompleteContactNotification(c);
       }
+    }
+
+    // Task notifications — only schedule for tasks assigned to the current user.
+    for (final t in tasks) {
+      if (t.isCompleted) continue;
+      if (!t.assigneeUserIds.contains(ownerId)) continue;
+      await scheduleTaskUpcoming(t, ownerId);
+      await scheduleTaskOnTime(t, ownerId);
+    }
+    for (final t in tasks) {
+      if (t.isCompleted) continue;
+      if (!t.assigneeUserIds.contains(ownerId)) continue;
+      final deadline = t.endDateTime ?? t.startDateTime;
+      if (now.isAfter(deadline.add(const Duration(hours: 4)))) {
+        await createOverdueTaskNotification(t, ownerId);
+      }
+    }
+    for (final t in tasks) {
+      if (t.isCompleted) continue;
+      if (!t.assigneeUserIds.contains(ownerId)) continue;
+      if (t.repeatFrequency == null) continue;
+      if (t.startDateTime.isAfter(now)) continue;
+      await scheduleTaskRepeats(t, ownerId);
     }
   }
 

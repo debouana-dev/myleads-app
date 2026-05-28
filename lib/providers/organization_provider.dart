@@ -28,6 +28,8 @@ class OrgState {
       currentUserCanViewHistory; // can view history authored by other members
   final bool
       currentUserCanExportContacts; // can export shared org contacts
+  final bool
+      currentUserCanViewOthersTasks; // can view tasks assigned to other members
   // Deduplicated total contact count for the org (excludes hidden duplicates).
   final int uniqueContactCount;
   // True when the current user is the org creator (role = 'owner').
@@ -43,6 +45,7 @@ class OrgState {
     this.currentUserCanViewReminders = true,
     this.currentUserCanViewHistory = true,
     this.currentUserCanExportContacts = false,
+    this.currentUserCanViewOthersTasks = false,
     this.uniqueContactCount = 0,
     this.currentUserIsOwner = false,
   });
@@ -71,6 +74,7 @@ class OrgState {
     bool? currentUserCanViewReminders,
     bool? currentUserCanViewHistory,
     bool? currentUserCanExportContacts,
+    bool? currentUserCanViewOthersTasks,
     int? uniqueContactCount,
     bool? currentUserIsOwner,
     bool clearError = false,
@@ -89,6 +93,8 @@ class OrgState {
           currentUserCanViewHistory ?? this.currentUserCanViewHistory,
       currentUserCanExportContacts:
           currentUserCanExportContacts ?? this.currentUserCanExportContacts,
+      currentUserCanViewOthersTasks:
+          currentUserCanViewOthersTasks ?? this.currentUserCanViewOthersTasks,
       uniqueContactCount: uniqueContactCount ?? this.uniqueContactCount,
       currentUserIsOwner: currentUserIsOwner ?? this.currentUserIsOwner,
     );
@@ -183,6 +189,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
         currentUserCanViewReminders: privs.canViewReminders,
         currentUserCanViewHistory: privs.canViewHistory,
         currentUserCanExportContacts: privs.canExportContacts,
+        currentUserCanViewOthersTasks: privs.canViewOthersTasks,
         uniqueContactCount: uniqueCount,
         currentUserIsOwner: isOwner,
       );
@@ -217,6 +224,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
           currentUserCanViewReminders: privs.canViewReminders,
           currentUserCanViewHistory: privs.canViewHistory,
           currentUserCanExportContacts: privs.canExportContacts,
+          currentUserCanViewOthersTasks: privs.canViewOthersTasks,
           currentUserIsOwner: isOwner,
         );
       } else {
@@ -226,7 +234,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
     } catch (_) {}
   }
 
-  /// Admin updates the edit/create/view-reminders/view-history/export privileges for a member.
+  /// Admin updates privileges for a member.
   Future<String?> updateMemberPrivileges({
     required String userId,
     required bool canEdit,
@@ -234,6 +242,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
     required bool canViewReminders,
     required bool canViewHistory,
     required bool canExportContacts,
+    required bool canViewOthersTasks,
   }) async {
     final user = StorageService.currentUser;
     if (user == null) return 'Aucun utilisateur connecté';
@@ -260,6 +269,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
         canViewReminders: canViewReminders,
         canViewHistory: canViewHistory,
         canExportContacts: canExportContacts,
+        canViewOthersTasks: canViewOthersTasks,
       );
       await refreshMembers();
 
@@ -478,8 +488,9 @@ class OrgNotifier extends StateNotifier<OrgState> {
         );
       }
 
-      // Pull the org's shared data (org row, all members, member contacts).
+      // Pull the org's shared data (org row + members); contacts sync in background.
       await RemoteSyncService.pullOrganizationDataById(org.id);
+      unawaited(RemoteSyncService.pullOrgContactsById(org.id));
 
        final members = await DatabaseService.getMembersForOrganization(org.id);
        final privs = await DatabaseService.getMemberPrivileges(
@@ -493,6 +504,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
          currentUserCanViewReminders: privs.canViewReminders,
          currentUserCanViewHistory: privs.canViewHistory,
          currentUserCanExportContacts: privs.canExportContacts,
+         currentUserCanViewOthersTasks: privs.canViewOthersTasks,
        );
 
        _notifyAdminsOfNewMember(
@@ -1280,6 +1292,7 @@ class OrgNotifier extends StateNotifier<OrgState> {
       await RemoteSyncService.pullOrganizationDataById(orgId);
       await loadForCurrentUser();
     }));
+    unawaited(RemoteSyncService.pullOrgContactsById(orgId));
   }
 
   /// Refresh organization data from cloud, then reload locally.
@@ -1300,6 +1313,8 @@ class OrgNotifier extends StateNotifier<OrgState> {
       }
       await RemoteSyncService.pullOrganizationDataById(orgId);
       await loadForCurrentUser();
+      unawaited(RemoteSyncService.syncTasksForOrg(user!.id, orgId));
+      unawaited(RemoteSyncService.pullOrgContactsById(orgId));
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
@@ -1345,7 +1360,24 @@ final orgCanExportContactsProvider = Provider<bool>((ref) {
   return ref.watch(organizationProvider).currentUserCanExportContacts;
 });
 
+final orgCanViewOthersTasksProvider = Provider<bool>((ref) {
+  final user = StorageService.currentUser;
+  if (user?.organizationId == null) return true; // solo: no team tasks
+  return ref.watch(organizationProvider).currentUserCanViewOthersTasks;
+});
+
 /// True when the current user is the org creator (role = 'owner').
 final orgIsOwnerProvider = Provider<bool>((ref) {
   return StorageService.currentUser?.orgRole == 'owner';
+});
+
+/// True when the current user's org membership status is 'suspended'.
+/// Solo users (no organizationId) are never suspended.
+final orgCurrentUserIsSuspendedProvider = Provider<bool>((ref) {
+  final user = StorageService.currentUser;
+  if (user?.organizationId == null) return false;
+  final members = ref.watch(organizationProvider).members;
+  final matches = members.where((m) => m.userId == user!.id);
+  final current = matches.isNotEmpty ? matches.first : null;
+  return current?.status == 'suspended';
 });
