@@ -8,7 +8,7 @@ initializeApp();
 // Declare the secret — Cloud Secret Manager provisions it automatically.
 // Provision before first deploy:  firebase functions:secrets:set STRIPE_SECRET_KEY
 // Local emulation: add STRIPE_SECRET_KEY=sk_test_... to functions/.secret.local
-const stripeSecretKey = defineSecret('STRIPE_SECRET_KEY');
+const stripeSecretKey = defineSecret('STRIPE_SECRET_LIVE_KEY');
 
 const ALLOWED_PLANS = ['premium', 'business'];
 const ALLOWED_CYCLES = ['monthly', 'yearly'];

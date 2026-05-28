@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import '../../core/l10n/app_l10n.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/contact.dart';
 import '../../providers/contacts_provider.dart';
+import '../../services/ocr_parser.dart';
 import '../../widgets/phone_prefix_input.dart';
 
 class ReviewScreen extends ConsumerStatefulWidget {
@@ -32,6 +34,8 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
   late final TextEditingController _project2BudgetCtrl;
   late final TextEditingController _notesCtrl;
   String? _photoPath;
+  double _mlKitConfidence = 0.0;
+  final Map<String, FieldConfidence> _fieldConfidences = {};
 
   @override
   void initState() {
@@ -45,11 +49,31 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     _emailCtrl = TextEditingController(text: d['email'] ?? '');
     _sourceCtrl = TextEditingController(text: d['source'] ?? '');
     _project1Ctrl = TextEditingController(text: d['project1'] ?? '');
-    _project1BudgetCtrl = TextEditingController(text: d['project1Budget'] ?? '');
+    _project1BudgetCtrl =
+        TextEditingController(text: d['project1Budget'] ?? '');
     _project2Ctrl = TextEditingController(text: d['project2'] ?? '');
-    _project2BudgetCtrl = TextEditingController(text: d['project2Budget'] ?? '');
+    _project2BudgetCtrl =
+        TextEditingController(text: d['project2Budget'] ?? '');
     _notesCtrl = TextEditingController(text: d['notes'] ?? '');
     _photoPath = d['photoPath'];
+
+    _mlKitConfidence = double.tryParse(d['mlKitConfidence'] ?? '') ?? 0.0;
+
+    final rawConf = d['fieldConfidences'] ?? '';
+    if (rawConf.isNotEmpty) {
+      try {
+        for (final part in rawConf.split(',')) {
+          final idx = part.lastIndexOf(':');
+          if (idx < 0) continue;
+          final field = part.substring(0, idx);
+          final name = part.substring(idx + 1);
+          _fieldConfidences[field] = FieldConfidence.values.firstWhere(
+            (e) => e.name == name,
+            orElse: () => FieldConfidence.low,
+          );
+        }
+      } catch (_) {}
+    }
 
     // Pre-select tags found by OCR (comma-separated).
     final parsedTags = (d['tags'] ?? '')
@@ -94,6 +118,20 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     super.dispose();
   }
 
+  double _blendedConfidence() {
+    final mlPart = _mlKitConfidence * 0.6;
+    if (_fieldConfidences.isEmpty) return (mlPart * 100).clamp(0, 100);
+    final avg = _fieldConfidences.values
+            .map((c) => switch (c) {
+                  FieldConfidence.high => 1.0,
+                  FieldConfidence.fair => 0.6,
+                  FieldConfidence.low => 0.25,
+                })
+            .reduce((a, b) => a + b) /
+        _fieldConfidences.length;
+    return ((mlPart + avg * 0.4) * 100).clamp(0, 100);
+  }
+
   String? _orNull(String value) => value.trim().isEmpty ? null : value.trim();
 
   String _randomHexColor() {
@@ -121,7 +159,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       notes: _orNull(_notesCtrl.text),
       tags: _selectedTags.toList(),
       status: 'warm',
-      captureMethod: 'scan',
+      captureMethod: widget.ocrData['captureMethod'] ?? 'scan',
       photoPath: _photoPath,
       avatarColor: _randomHexColor(),
     );
@@ -177,9 +215,36 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     return error;
   }
 
+  void _showFullPhoto(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(16),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: InteractiveViewer(
+            child: Image.file(
+              File(_photoPath!),
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Padding(
+                padding: EdgeInsets.all(32),
+                child: Icon(Icons.broken_image_rounded,
+                    color: Colors.white54, size: 64),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = ref.watch(l10nProvider);
+    final confidence = _blendedConfidence();
+    final pct = confidence.toStringAsFixed(0);
+
     return Scaffold(
       backgroundColor: AppColors.bg(context),
       body: Column(
@@ -190,7 +255,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
               top: MediaQuery.of(context).padding.top + 10,
               left: 24,
               right: 24,
-              bottom: 28,
+              bottom: 20,
             ),
             decoration: const BoxDecoration(
               gradient: AppColors.primaryGradient,
@@ -210,7 +275,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.12),
+                          color: Colors.white.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(Icons.arrow_back,
@@ -232,16 +297,17 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                 Text(
                   l10n.reviewSubtitle,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.5),
+                    color: Colors.white.withValues(alpha: 0.5),
                     fontSize: 13,
                   ),
                 ),
                 const SizedBox(height: 12),
+                // Confidence chip
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppColors.success.withOpacity(0.15),
+                    color: AppColors.success.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -251,7 +317,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                           color: AppColors.success, size: 14),
                       const SizedBox(width: 6),
                       Text(
-                        l10n.ocrConfidence,
+                        l10n.ocrConfidencePercent(pct),
                         style: const TextStyle(
                           color: AppColors.success,
                           fontSize: 12,
@@ -261,6 +327,30 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                     ],
                   ),
                 ),
+                // Photo thumbnail (card scans only)
+                if (_photoPath != null) ...[
+                  const SizedBox(height: 12),
+                  GestureDetector(
+                    onTap: () => _showFullPhoto(context),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        File(_photoPath!),
+                        height: 80,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          height: 80,
+                          color: Colors.white.withValues(alpha: 0.08),
+                          child: const Center(
+                            child: Icon(Icons.broken_image_rounded,
+                                color: Colors.white54, size: 32),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -272,10 +362,14 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildField(l10n.firstName, _firstNameCtrl),
-                  _buildField(l10n.lastName, _lastNameCtrl),
-                  _buildField(l10n.jobTitleLabel, _jobTitleCtrl),
-                  _buildField(l10n.companyLabel, _companyCtrl),
+                  _buildField(l10n, l10n.firstName, _firstNameCtrl,
+                      'firstName'),
+                  _buildField(
+                      l10n, l10n.lastName, _lastNameCtrl, 'lastName'),
+                  _buildField(l10n, l10n.jobTitleLabel, _jobTitleCtrl,
+                      'jobTitle'),
+                  _buildField(
+                      l10n, l10n.companyLabel, _companyCtrl, 'company'),
                   const SizedBox(height: 4),
                   PhonePrefixInput(
                     controller: _phoneCtrl,
@@ -284,13 +378,18 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                     hint: '6 99 88 77 66',
                   ),
                   const SizedBox(height: 16),
-                  _buildField(l10n.emailLabel, _emailCtrl,
+                  _buildField(l10n, l10n.emailLabel, _emailCtrl, 'email',
                       type: TextInputType.emailAddress),
-                  _buildField(l10n.sourceLabel, _sourceCtrl),
-                  _buildField(l10n.project1Review, _project1Ctrl),
-                  _buildField(l10n.project1BudgetReview, _project1BudgetCtrl),
-                  _buildField(l10n.project2Review, _project2Ctrl),
-                  _buildField(l10n.project2BudgetReview, _project2BudgetCtrl),
+                  _buildField(
+                      l10n, l10n.sourceLabel, _sourceCtrl, 'source'),
+                  _buildField(l10n, l10n.project1Review, _project1Ctrl,
+                      'project1'),
+                  _buildField(l10n, l10n.project1BudgetReview,
+                      _project1BudgetCtrl, 'project1Budget'),
+                  _buildField(l10n, l10n.project2Review, _project2Ctrl,
+                      'project2'),
+                  _buildField(l10n, l10n.project2BudgetReview,
+                      _project2BudgetCtrl, 'project2Budget'),
 
                   // Tags
                   const SizedBox(height: 4),
@@ -326,7 +425,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                           decoration: BoxDecoration(
                             color: selected
                                 ? AppColors.accent
-                                : AppColors.primary.withOpacity(0.06),
+                                : AppColors.primary.withValues(alpha: 0.06),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -343,7 +442,8 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                   ),
 
                   const SizedBox(height: 16),
-                  _buildField(l10n.notesLabel, _notesCtrl, maxLines: 3),
+                  _buildField(l10n, l10n.notesLabel, _notesCtrl, 'notes',
+                      maxLines: 3),
 
                   // Quick Actions
                   const SizedBox(height: 8),
@@ -392,7 +492,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
               color: AppColors.bg(context),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 10,
                   offset: const Offset(0, -4),
                 ),
@@ -428,44 +528,64 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     );
   }
 
-  Widget _buildField(String label, TextEditingController ctrl,
-      {TextInputType? type, int maxLines = 1}) {
+  Widget _buildField(
+    AppL10n l10n,
+    String label,
+    TextEditingController ctrl,
+    String fieldKey, {
+    TextInputType? type,
+    int maxLines = 1,
+  }) {
+    final confidence = _fieldConfidences[fieldKey];
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label.toUpperCase(),
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textLight,
-              letterSpacing: 1,
-            ),
+          Row(
+            children: [
+              Text(
+                label.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.hint(context),
+                  letterSpacing: 1,
+                ),
+              ),
+              if (confidence == FieldConfidence.fair ||
+                  confidence == FieldConfidence.low) ...[
+                const SizedBox(width: 6),
+                _ConfidenceBadge(confidence: confidence!, l10n: l10n),
+              ],
+            ],
           ),
           const SizedBox(height: 6),
           TextField(
             controller: ctrl,
             keyboardType: type,
             maxLines: maxLines,
-            style: const TextStyle(fontSize: 14, color: AppColors.textDark),
+            style: TextStyle(
+                fontSize: 14, color: AppColors.onSurface(context)),
             decoration: InputDecoration(
               filled: true,
-              fillColor: AppColors.card,
+              fillColor: AppColors.inputBackground(context),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppColors.border, width: 2),
+                borderSide: BorderSide(
+                    color: AppColors.borderColor(context), width: 2),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppColors.border, width: 2),
+                borderSide: BorderSide(
+                    color: AppColors.borderColor(context), width: 2),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: AppColors.accent, width: 2),
+                borderSide:
+                    const BorderSide(color: AppColors.accent, width: 2),
               ),
             ),
           ),
@@ -478,9 +598,10 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     return Expanded(
       child: GestureDetector(
         onTap: () {
+          final l10n = ref.read(l10nProvider);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('$label en cours...'),
+              content: Text(l10n.actionInProgress(label)),
               duration: const Duration(seconds: 1),
             ),
           );
@@ -488,11 +609,11 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
-            color: AppColors.card,
+            color: AppColors.surfaceColor(context),
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withOpacity(0.08),
+                color: AppColors.primary.withValues(alpha: 0.08),
                 blurRadius: 20,
                 offset: const Offset(0, 4),
               ),
@@ -504,7 +625,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(
@@ -517,15 +638,43 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
               const SizedBox(height: 6),
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.textMid,
+                  color: AppColors.secondary(context),
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ConfidenceBadge extends StatelessWidget {
+  final FieldConfidence confidence;
+  final AppL10n l10n;
+
+  const _ConfidenceBadge({required this.confidence, required this.l10n});
+
+  @override
+  Widget build(BuildContext context) {
+    final isLow = confidence == FieldConfidence.low;
+    final color = isLow ? AppColors.hot : AppColors.warm;
+    final label =
+        isLow ? l10n.confidenceBadgeLow : l10n.confidenceBadgeFair;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+            fontSize: 9, color: color, fontWeight: FontWeight.w700),
       ),
     );
   }

@@ -208,6 +208,7 @@ Future<void> _createSchema(Database db, int version) async {
       first_name TEXT NOT NULL,
       last_name TEXT NOT NULL,
       email TEXT,
+      phone TEXT,
       nickname TEXT,
       company TEXT,
       biography TEXT,
@@ -226,6 +227,25 @@ Future<void> _createSchema(Database db, int version) async {
       'CREATE INDEX idx_org_members_org ON organization_members(organization_id)');
   await db.execute(
       'CREATE INDEX idx_org_members_user ON organization_members(user_id)');
+
+  await db.execute('''
+    CREATE TABLE payment_history (
+      id TEXT PRIMARY KEY,
+      transaction_id TEXT NOT NULL DEFAULT '',
+      user_id TEXT NOT NULL,
+      plan TEXT NOT NULL,
+      billing_cycle TEXT NOT NULL,
+      amount REAL NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'EUR',
+      status TEXT NOT NULL DEFAULT 'succeeded',
+      stripe_payment_intent_id TEXT NOT NULL,
+      payment_method TEXT NOT NULL DEFAULT 'card',
+      account_type TEXT NOT NULL DEFAULT 'individual',
+      created_at TEXT NOT NULL
+    )
+  ''');
+  await db.execute(
+      'CREATE INDEX idx_payment_history_user ON payment_history(user_id)');
 }
 
 // ─── Test-data helpers ────────────────────────────────────────────────────────
@@ -240,7 +260,7 @@ Future<void> _seedUsers() async {
     passwordHash: 'hash:admin',
     plan: 'business',
     organizationId: _orgId,
-    orgRole: 'admin',
+    orgRole: 'owner',
     emailVerified: true,
     createdAt: now,
     passwordChangedAt: now,
@@ -332,7 +352,8 @@ void main() {
   late Database db;
 
   setUpAll(() async {
-    dotenv.loadFromString(envString: 'SECRET_KEY=test_key_for_tests');
+    dotenv.loadFromString(
+        isOptional: true, mergeWith: {'SECRET_KEY': 'test-secret-key'});
     EncryptionService.initForTest(keyB64: _kTestKeyB64, ivB64: _kTestIvB64);
 
     db = await databaseFactoryFfi.openDatabase(
@@ -409,7 +430,7 @@ void main() {
         id: 'mem-admin',
         orgId: _orgId,
         userId: _adminId,
-        role: 'admin',
+        role: 'owner',
       );
 
       await DatabaseService.deleteOrganization(_orgId);
@@ -436,17 +457,17 @@ void main() {
       await DatabaseService.insertOrganization(_makeOrg());
     });
 
-    test('admin member gets all privileges', () async {
+    test('owner member gets all privileges', () async {
       await DatabaseService.insertOrgMember(
         id: 'mem-admin',
         orgId: _orgId,
         userId: _adminId,
-        role: 'admin',
+        role: 'owner',
       );
 
       final members = await DatabaseService.getMembersForOrganization(_orgId);
       final admin = members.firstWhere((m) => m.userId == _adminId);
-      expect(admin.role, equals('admin'));
+      expect(admin.role, equals('owner'));
       expect(admin.canEdit, isTrue);
       expect(admin.canCreate, isTrue);
       expect(admin.canViewReminders, isTrue);
@@ -613,8 +634,7 @@ void main() {
       final bobRow = rows.firstWhere((r) => r['user_id'] == _member1Id);
       expect(bobRow['first_name'], equals('Robert'));
       expect(bobRow['last_name'], equals('Memberson'));
-      // email is AES-CBC encrypted in organization_members — verify the plaintext
-      // via the decoded OrgMember object below, not the raw encrypted column.
+      // email is stored AES-encrypted in organization_members; non-null check only.
       expect(bobRow['email'], isNotNull);
       expect(bobRow['nickname'], equals('Rob'));
       expect(bobRow['company'], equals('Acme Subsidiary'));
@@ -643,7 +663,7 @@ void main() {
       await _seedUsers();
       await DatabaseService.insertOrganization(_makeOrg());
       await DatabaseService.insertOrgMember(
-          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'admin');
+          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'owner');
       await DatabaseService.insertOrgMember(
           id: 'mem-bob', orgId: _orgId, userId: _member1Id, role: 'member');
     });
@@ -750,7 +770,7 @@ void main() {
       await _seedUsers();
       await DatabaseService.insertOrganization(_makeOrg());
       await DatabaseService.insertOrgMember(
-          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'admin');
+          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'owner');
       await DatabaseService.insertOrgMember(
           id: 'mem-bob', orgId: _orgId, userId: _member1Id, role: 'member');
       await DatabaseService.insertOrgMember(
@@ -859,7 +879,7 @@ void main() {
       await _seedUsers();
       await DatabaseService.insertOrganization(_makeOrg());
       await DatabaseService.insertOrgMember(
-          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'admin');
+          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'owner');
       await DatabaseService.insertOrgMember(
           id: 'mem-bob', orgId: _orgId, userId: _member1Id, role: 'member');
 
@@ -900,7 +920,7 @@ void main() {
       await _seedUsers();
       await DatabaseService.insertOrganization(_makeOrg());
       await DatabaseService.insertOrgMember(
-          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'admin');
+          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'owner');
       await DatabaseService.insertOrgMember(
           id: 'mem-bob', orgId: _orgId, userId: _member1Id, role: 'member');
       await DatabaseService.insertOrgMember(
@@ -920,9 +940,10 @@ void main() {
       expect(adminContacts.map((c) => c.id), contains('bob-unique'));
     });
 
-    test('transferNonDuplicate deletes post-join duplicate contacts', () async {
-      // Bob's contact was created after he joined (post-join) and has the same
-      // phone as Carol's contact → post-join duplicate is deleted, not kept.
+    test('transferNonDuplicate deletes post-join contacts that duplicate another member',
+        () async {
+      // Carol has the same phone as Bob → Bob's post-join contact is a duplicate.
+      // On transfer: org already has the contact via Carol, so Bob's copy is deleted.
       await DatabaseService.insertContact(_makeContact(
           id: 'bob-dup', ownerId: _member1Id, phone: '+33699111111'));
       await DatabaseService.insertContact(_makeContact(
@@ -931,22 +952,21 @@ void main() {
       await DatabaseService.transferNonDuplicateContactsToAdmin(
           fromUserId: _member1Id, orgId: _orgId);
 
-      // bob-dup is deleted (post-join + duplicate of carol's contact).
+      // bob-dup is deleted — org retains the contact via Carol.
       final bobContacts =
           await DatabaseService.getAllContactsForOwner(_member1Id);
-      expect(bobContacts.map((c) => c.id), isNot(contains('bob-dup')));
-      // Carol's original is untouched.
+      expect(bobContacts, isEmpty);
+      // Carol's contact is unaffected.
       final carolContacts =
           await DatabaseService.getAllContactsForOwner(_member2Id);
       expect(carolContacts.map((c) => c.id), contains('carol-same'));
     });
 
     test(
-        'transferNonDuplicate deletes post-join contact that duplicates admin phone',
+        'transferNonDuplicate deletes post-join contact that duplicates the owner',
         () async {
-      // Admin is included in "other active members". A post-join contact whose
-      // phone matches the admin's is treated as a duplicate and deleted — it is
-      // NOT transferred to avoid creating a double-copy on the admin.
+      // Owner already has a contact with the same phone as Bob's.
+      // Bob's post-join duplicate is deleted rather than transferred (avoids double-copy).
       await DatabaseService.insertContact(_makeContact(
           id: 'admin-c', ownerId: _adminId, phone: '+33699222222'));
       await DatabaseService.insertContact(_makeContact(
@@ -955,40 +975,15 @@ void main() {
       await DatabaseService.transferNonDuplicateContactsToAdmin(
           fromUserId: _member1Id, orgId: _orgId);
 
-      // bob-c is deleted (post-join + duplicate of admin's contact).
+      // bob-c deleted — owner already has the same contact.
       final bobContacts =
           await DatabaseService.getAllContactsForOwner(_member1Id);
-      expect(bobContacts.map((c) => c.id), isNot(contains('bob-c')));
-      // Admin's original contact is present and not duplicated.
+      expect(bobContacts, isEmpty);
+      // Owner's original contact is unaffected.
       final adminContacts =
           await DatabaseService.getAllContactsForOwner(_adminId);
       expect(adminContacts.map((c) => c.id), contains('admin-c'));
-      expect(adminContacts.where((c) => c.id == 'bob-c'), isEmpty);
-    });
-
-    test(
-        'transferNonDuplicate copies pre-join unique contact to admin while member retains it',
-        () async {
-      // Contact created well before the member joined → pre-join.
-      // Pre-join + non-duplicate: admin gets a copy, member keeps original.
-      final preJoinTime = DateTime(2025, 1, 1);
-      await DatabaseService.insertContact(_makeContact(
-          id: 'bob-pre',
-          ownerId: _member1Id,
-          phone: '+33699444444',
-          createdAt: preJoinTime));
-
-      await DatabaseService.transferNonDuplicateContactsToAdmin(
-          fromUserId: _member1Id, orgId: _orgId);
-
-      // Admin now has a copy with the same phone.
-      final adminContacts =
-          await DatabaseService.getAllContactsForOwner(_adminId);
-      expect(adminContacts.any((c) => c.phone == '+33699444444'), isTrue);
-      // Bob still holds his original.
-      final bobContacts =
-          await DatabaseService.getAllContactsForOwner(_member1Id);
-      expect(bobContacts.map((c) => c.id), contains('bob-pre'));
+      expect(adminContacts.map((c) => c.id), isNot(contains('bob-c')));
     });
 
     test('transferNonDuplicate returns null when fromUser is the admin',
@@ -1038,7 +1033,7 @@ void main() {
       await _seedUsers();
       await DatabaseService.insertOrganization(_makeOrg());
       await DatabaseService.insertOrgMember(
-          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'admin');
+          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'owner');
       await DatabaseService.insertOrgMember(
           id: 'mem-bob', orgId: _orgId, userId: _member1Id, role: 'member');
 
@@ -1168,7 +1163,7 @@ void main() {
       await _seedUsers();
       await DatabaseService.insertOrganization(_makeOrg());
       await DatabaseService.insertOrgMember(
-          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'admin');
+          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'owner');
       await DatabaseService.insertOrgMember(
           id: 'mem-bob', orgId: _orgId, userId: _member1Id, role: 'member');
     });
@@ -1374,6 +1369,336 @@ void main() {
           await DatabaseService.findOrganizationByInviteCode('xyzxyz12');
       expect(found, isNotNull);
       expect(found!.id, equals(_orgId));
+    });
+  });
+
+  // ===========================================================================
+  // 11 — OWNER ROLE AND ADMIN MANAGEMENT
+  // ===========================================================================
+
+  group('Owner role and admin management', () {
+    setUp(() async {
+      await _seedUsers();
+      await DatabaseService.insertOrganization(_makeOrg());
+      await DatabaseService.insertOrgMember(
+          id: 'mem-admin', orgId: _orgId, userId: _adminId, role: 'owner');
+      await DatabaseService.insertOrgMember(
+          id: 'mem-bob', orgId: _orgId, userId: _member1Id, role: 'member');
+    });
+
+    test('owner gets all privileges', () async {
+      final privs = await DatabaseService.getMemberPrivileges(
+          userId: _adminId, orgId: _orgId);
+      expect(privs.canEdit, isTrue);
+      expect(privs.canCreate, isTrue);
+      expect(privs.canViewReminders, isTrue);
+      expect(privs.canViewHistory, isTrue);
+      expect(privs.canExportContacts, isTrue);
+    });
+
+    test('updateOrgMemberRole promotes member to admin with elevated privileges',
+        () async {
+      await DatabaseService.updateOrgMemberRole(
+          orgId: _orgId, userId: _member1Id, newRole: 'admin');
+
+      final members = await DatabaseService.getMembersForOrganization(_orgId);
+      final promoted = members.firstWhere((m) => m.userId == _member1Id);
+      expect(promoted.role, equals('admin'));
+      expect(promoted.canEdit, isTrue);
+      expect(promoted.canCreate, isTrue);
+      expect(promoted.canViewReminders, isTrue);
+      expect(promoted.canViewHistory, isTrue);
+      expect(promoted.canExportContacts, isTrue);
+
+      final user = await DatabaseService.findUserById(_member1Id);
+      expect(user!.orgRole, equals('admin'));
+    });
+
+    test('updateOrgMemberRole demotes admin to member with reset privileges',
+        () async {
+      // First promote to admin.
+      await DatabaseService.updateOrgMemberRole(
+          orgId: _orgId, userId: _member1Id, newRole: 'admin');
+      // Then demote back.
+      await DatabaseService.updateOrgMemberRole(
+          orgId: _orgId, userId: _member1Id, newRole: 'member');
+
+      final members = await DatabaseService.getMembersForOrganization(_orgId);
+      final demoted = members.firstWhere((m) => m.userId == _member1Id);
+      expect(demoted.role, equals('member'));
+      expect(demoted.canEdit, isFalse);
+      expect(demoted.canCreate, isTrue);
+      expect(demoted.canViewReminders, isFalse);
+      expect(demoted.canViewHistory, isFalse);
+      expect(demoted.canExportContacts, isFalse);
+
+      final user = await DatabaseService.findUserById(_member1Id);
+      expect(user!.orgRole, equals('member'));
+    });
+
+    test('getMemberPrivileges returns full access for owner role', () async {
+      final privs = await DatabaseService.getMemberPrivileges(
+          userId: _adminId, orgId: _orgId);
+      expect(privs.canEdit, isTrue);
+      expect(privs.canCreate, isTrue);
+      expect(privs.canViewReminders, isTrue);
+      expect(privs.canViewHistory, isTrue);
+      expect(privs.canExportContacts, isTrue);
+    });
+
+    test('OrgMember.isOwner is true only for owner role', () async {
+      final members = await DatabaseService.getMembersForOrganization(_orgId);
+      final owner = members.firstWhere((m) => m.userId == _adminId);
+      final member = members.firstWhere((m) => m.userId == _member1Id);
+      expect(owner.isOwner, isTrue);
+      expect(owner.isAdminOrAbove, isTrue);
+      expect(member.isOwner, isFalse);
+      expect(member.isAdminOrAbove, isFalse);
+    });
+  });
+
+  // ===========================================================================
+  // 11 — OWNERSHIP TRANSFER ON OWNER LEAVE
+  // ===========================================================================
+
+  group('Ownership transfer on owner leave', () {
+    // Owner (_adminId) joined 2026-01-01 — contacts created before that date
+    // are "pre-join" and get duplicated; contacts created after are "post-join"
+    // and go to the new owner only.
+    const ownerJoinedAt = '2026-01-01T00:00:00.000';
+
+    setUp(() async {
+      await _seedUsers();
+      await DatabaseService.insertOrganization(_makeOrg());
+      // Owner member row.
+      await DatabaseService.insertOrgMember(
+          id: 'mem-owner', orgId: _orgId, userId: _adminId, role: 'owner');
+      // Admin candidate (_member1Id) who will receive ownership.
+      await DatabaseService.insertOrgMember(
+          id: 'mem-admin', orgId: _orgId, userId: _member1Id, role: 'admin');
+      // Patch owner's joined_at to a fixed date so pre/post-join comparisons
+      // are deterministic.
+      await db.update(
+        'organization_members',
+        {'joined_at': ownerJoinedAt},
+        where: 'organization_id = ? AND user_id = ?',
+        whereArgs: [_orgId, _adminId],
+      );
+    });
+
+    test('pre-join contact is duplicated for outgoing owner', () async {
+      // Contact created before owner's joined_at → should be duplicated.
+      await DatabaseService.insertContact(_makeContact(
+        id: 'c-pre',
+        ownerId: _adminId,
+        phone: '+33700000001',
+        createdAt: DateTime(2025, 6, 1),
+      ));
+
+      await DatabaseService.transferOwnershipOnLeave(
+        outgoingOwnerId: _adminId,
+        newOwnerId: _member1Id,
+        orgId: _orgId,
+      );
+
+      final newOwnerContacts =
+          await DatabaseService.getAllContactsForOwner(_member1Id);
+      final outgoingContacts =
+          await DatabaseService.getAllContactsForOwner(_adminId);
+
+      // Original moved to new owner.
+      expect(newOwnerContacts.any((c) => c.phone == '+33700000001'), isTrue);
+      // Personal copy retained by outgoing owner.
+      expect(outgoingContacts.any((c) => c.phone == '+33700000001'), isTrue);
+    });
+
+    test('post-join contact is NOT duplicated for outgoing owner', () async {
+      // Contact created after owner's joined_at → no personal copy.
+      await DatabaseService.insertContact(_makeContact(
+        id: 'c-post',
+        ownerId: _adminId,
+        phone: '+33700000002',
+        createdAt: DateTime(2026, 6, 1),
+      ));
+
+      await DatabaseService.transferOwnershipOnLeave(
+        outgoingOwnerId: _adminId,
+        newOwnerId: _member1Id,
+        orgId: _orgId,
+      );
+
+      final newOwnerContacts =
+          await DatabaseService.getAllContactsForOwner(_member1Id);
+      final outgoingContacts =
+          await DatabaseService.getAllContactsForOwner(_adminId);
+
+      // Moved to new owner.
+      expect(newOwnerContacts.any((c) => c.phone == '+33700000002'), isTrue);
+      // Outgoing owner gets nothing.
+      expect(outgoingContacts, isEmpty);
+    });
+
+    test('organizations.owner_id updated to new owner', () async {
+      await DatabaseService.transferOwnershipOnLeave(
+        outgoingOwnerId: _adminId,
+        newOwnerId: _member1Id,
+        orgId: _orgId,
+      );
+
+      final org = await DatabaseService.findOrganizationById(_orgId);
+      expect(org!.ownerId, equals(_member1Id));
+    });
+
+    test('new owner gets owner role and full privileges', () async {
+      await DatabaseService.transferOwnershipOnLeave(
+        outgoingOwnerId: _adminId,
+        newOwnerId: _member1Id,
+        orgId: _orgId,
+      );
+
+      final members = await DatabaseService.getMembersForOrganization(_orgId);
+      final promoted = members.firstWhere((m) => m.userId == _member1Id);
+      expect(promoted.role, equals('owner'));
+      expect(promoted.canEdit, isTrue);
+      expect(promoted.canCreate, isTrue);
+      expect(promoted.canViewReminders, isTrue);
+      expect(promoted.canViewHistory, isTrue);
+      expect(promoted.canExportContacts, isTrue);
+
+      final newOwnerUser = await DatabaseService.findUserById(_member1Id);
+      expect(newOwnerUser!.orgRole, equals('owner'));
+    });
+
+    test('live-write callbacks fire for all changed rows', () async {
+      final List<({String table, Map<String, dynamic> row})> upserts = [];
+      DatabaseService.wireRemoteSync(
+        onUpsert: (table, row) => upserts.add((table: table, row: row)),
+        onDelete: (_, __) {},
+      );
+
+      await DatabaseService.insertContact(_makeContact(
+        id: 'c-hook',
+        ownerId: _adminId,
+        phone: '+33700000099',
+        createdAt: DateTime(2025, 6, 1),
+      ));
+      upserts.clear();
+
+      await DatabaseService.transferOwnershipOnLeave(
+        outgoingOwnerId: _adminId,
+        newOwnerId: _member1Id,
+        orgId: _orgId,
+      );
+
+      final tables = upserts.map((u) => u.table).toList();
+
+      // contacts: moved original + personal copy (pre-join).
+      expect(tables.where((t) => t == 'contacts').length, greaterThanOrEqualTo(2));
+      // organization_members: new owner row promoted.
+      expect(tables, contains('organization_members'));
+      // users: new owner user row updated.
+      expect(tables, contains('users'));
+      // organizations: owner_id changed.
+      expect(tables, contains('organizations'));
+
+      final orgUpsert = upserts.firstWhere((u) => u.table == 'organizations');
+      expect(orgUpsert.row['owner_id'], equals(_member1Id));
+    });
+  });
+
+  // ===========================================================================
+  // 9 — SCHEMA MIGRATION v24 → v25 (owner role promotion)
+  // ===========================================================================
+
+  group('Schema migration — v24 → v25 owner role', () {
+    // The same UPDATE logic used in DatabaseService._onUpgrade (SQLite) and
+    // RemoteSyncService._ensureSchema (PostgreSQL). Tests run against the
+    // in-memory SQLite db to validate correctness without a live cloud connection.
+    Future<void> runV25Migration() async {
+      await db.rawUpdate('''
+        UPDATE organization_members
+        SET role = 'owner'
+        WHERE role = 'admin'
+          AND user_id IN (
+            SELECT owner_id FROM organizations
+            WHERE organizations.id = organization_members.organization_id
+          )
+      ''');
+      await db.rawUpdate('''
+        UPDATE users
+        SET org_role = 'owner'
+        WHERE organization_id IS NOT NULL
+          AND org_role = 'admin'
+          AND id IN (
+            SELECT owner_id FROM organizations
+            WHERE organizations.id = users.organization_id
+          )
+      ''');
+    }
+
+    setUp(() async {
+      await _seedUsers();
+      await DatabaseService.insertOrganization(_makeOrg());
+    });
+
+    test('promotes org creator from admin to owner', () async {
+      await DatabaseService.insertOrgMember(
+        id: 'mem-creator',
+        orgId: _orgId,
+        userId: _adminId,
+        role: 'admin',
+      );
+
+      await runV25Migration();
+
+      final members = await DatabaseService.getMembersForOrganization(_orgId);
+      final creator = members.firstWhere((m) => m.userId == _adminId);
+      expect(creator.role, equals('owner'));
+
+      final user = await DatabaseService.findUserById(_adminId);
+      expect(user!.orgRole, equals('owner'));
+    });
+
+    test('does not promote non-creator admin', () async {
+      // _adminId is organizations.owner_id; _member1Id is just an admin member.
+      await DatabaseService.insertOrgMember(
+        id: 'mem-creator',
+        orgId: _orgId,
+        userId: _adminId,
+        role: 'admin',
+      );
+      await DatabaseService.insertOrgMember(
+        id: 'mem-admin2',
+        orgId: _orgId,
+        userId: _member1Id,
+        role: 'admin',
+      );
+
+      await runV25Migration();
+
+      final members = await DatabaseService.getMembersForOrganization(_orgId);
+      final creator = members.firstWhere((m) => m.userId == _adminId);
+      final nonCreator = members.firstWhere((m) => m.userId == _member1Id);
+
+      expect(creator.role, equals('owner'));
+      expect(nonCreator.role, equals('admin'));
+    });
+
+    test('is idempotent when owner already exists', () async {
+      await DatabaseService.insertOrgMember(
+        id: 'mem-creator',
+        orgId: _orgId,
+        userId: _adminId,
+        role: 'owner',
+      );
+
+      // Running migration twice should not error or change anything.
+      await runV25Migration();
+      await runV25Migration();
+
+      final members = await DatabaseService.getMembersForOrganization(_orgId);
+      final creator = members.firstWhere((m) => m.userId == _adminId);
+      expect(creator.role, equals('owner'));
     });
   });
 }

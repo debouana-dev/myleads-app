@@ -302,7 +302,7 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
                   value: privacyAccepted,
                   label: l10n.acceptPrivacyPolicy,
                   linkLabel: l10n.privacyPolicyLink,
-                  url: 'https://me2leads.com/privacy.html',
+                  url: 'https://me2leads.com/privacy',
                   onChanged: (v) => setModalState(() => privacyAccepted = v!),
                 ),
                 const SizedBox(height: 8),
@@ -310,8 +310,7 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
                   value: eulaAccepted,
                   label: l10n.acceptEula,
                   linkLabel: l10n.eulaLink,
-                  url:
-                      'https://me2leads.com/terms',
+                  url: 'https://me2leads.com/terms',
                   onChanged: (v) => setModalState(() => eulaAccepted = v!),
                 ),
               ],
@@ -349,7 +348,6 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
       ),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -527,7 +525,7 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
       children: [
         _LegalLink(
           label: l10n.privacyPolicyLink,
-          url: 'https://me2leads.com/privacy.html',
+          url: 'https://me2leads.com/privacy',
         ),
         const SizedBox(width: 16),
         Container(
@@ -538,8 +536,7 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
         const SizedBox(width: 16),
         _LegalLink(
           label: l10n.isEnglish ? 'Terms of Use / EULA' : 'Conditions / EULA',
-          url:
-              'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/?utm_source=chatgpt.com',
+          url: 'https://me2leads.com/terms',
         ),
       ],
     );
@@ -1015,7 +1012,8 @@ class _LegalLink extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+      onTap: () =>
+          launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
       child: Text(
         label,
         style: const TextStyle(

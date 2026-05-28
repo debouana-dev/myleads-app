@@ -68,13 +68,14 @@ class OrgMember {
   final String id; // organization_members row id
   final String organizationId;
   final String userId;
-  final String role; // 'admin' | 'member'
+  final String role; // 'owner' | 'admin' | 'member'
   final String status; // 'active' | 'suspended'
   final DateTime joinedAt;
   // Denormalized user info (populated at load time).
   final String firstName;
   final String lastName;
   final String? email;
+  final String? phone;
   final String? nickname;
   final String? company;
   final String? biography;
@@ -99,6 +100,7 @@ class OrgMember {
     required this.firstName,
     required this.lastName,
     this.email,
+    this.phone,
     this.nickname,
     this.company,
     this.biography,
@@ -113,6 +115,9 @@ class OrgMember {
 
   String get fullName => '$firstName $lastName'.trim();
 
+  bool get isOwner => role == 'owner';
+  bool get isAdminOrAbove => role == 'owner' || role == 'admin';
+
   OrgMember copyWith({
     String? id,
     String? organizationId,
@@ -123,6 +128,7 @@ class OrgMember {
     String? firstName,
     String? lastName,
     String? email,
+    String? phone,
     String? nickname,
     String? company,
     String? biography,
@@ -144,6 +150,7 @@ class OrgMember {
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
       email: email ?? this.email,
+      phone: phone ?? this.phone,
       nickname: nickname ?? this.nickname,
       company: company ?? this.company,
       biography: biography ?? this.biography,
