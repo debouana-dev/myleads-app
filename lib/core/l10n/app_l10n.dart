@@ -213,6 +213,9 @@ class AppL10n {
       _en ? 'privacy Policy' : 'politique de confidentialité';
   String get termsOfUseLink =>
       _en ? 'terms of use' : 'conditions d\'utilisation';
+  String get termsOfUseDesc => _en
+      ? 'Read our terms of use'
+      : 'Lire nos conditions d\'utilisation';
   String get and => _en ? ' and ' : ' et les ';
   String get eulaLink => 'EULA';
   String get privacyPolicyDesc => _en
