@@ -25,7 +25,12 @@
       "Bash(C:\\\\Python312\\\\python.exe -c \"import docx\")",
       "Bash(C:\\\\Users\\\\munki\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\python.exe -c \"import docx; print\\('ok'\\)\")",
       "Bash(dart pub *)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(python docs/python_scripts/generate_product_overview.py)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\munki\\\\Projects\\\\Mobile\\\\Flutter Mobile\\\\me2leads-app\\\\docs\" -Force)",
+      "Bash(Select-Object Name, FullName)",
+      "Bash(python docs/python_scripts/generate_flowchart.py)",
+      "Bash(python docs/python_scripts/generate_er_diagram.py)"
     ]
   }
 }
