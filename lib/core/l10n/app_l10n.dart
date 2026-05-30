@@ -500,6 +500,10 @@ class AppL10n {
       : 'Consultez nos conditions de remboursement';
   String get helpLabel => _en ? 'Help' : 'Aide';
   String get helpDesc => _en ? 'Support & Legal' : 'Assistance & Légal';
+  String get termsOfUse => _en ? 'Terms of Use' : 'Conditions d\'utilisation';
+  String get termsOfUseDesc => _en
+      ? 'Read our terms and conditions'
+      : 'Lire nos conditions d\'utilisation';
   String get photoTooLarge => _en
       ? 'Image too large. Maximum allowed size is 5 MB.'
       : "L'image est trop volumineuse. La taille maximale autorisée est de 5 Mo.";

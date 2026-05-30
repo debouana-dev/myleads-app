@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/l10n/app_l10n.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/auth_provider.dart';
@@ -97,6 +98,137 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     await ref.read(organizationProvider.notifier).loadForCurrentUser();
     await ref.read(contactsProvider.notifier).reload();
     await ref.read(remindersProvider.notifier).reload();
+  }
+
+
+  Future<void> _launchPrivacyPolicy() async {
+    final url = Uri.parse('https://www.me2leads.com/privacy');
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Could not launch $url: $e');
+    }
+  }
+
+  Future<void> _launchContactUs() async {
+    final url = Uri.parse('https://me2leads.com/contact');
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Could not launch $url: $e');
+    }
+  }
+
+  Future<void> _launchRefundPolicy() async {
+    final url = Uri.parse('https://www.me2leads.com/refund');
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Could not launch $url: $e');
+    }
+  }
+  Future<void> _launchTermsOfUse() async {
+    final url = Uri.parse('https://me2leads.com/terms');
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Could not launch $url: $e');
+    }
+  }
+  void _showHelpBottomSheet() {
+    final l10n = ref.read(l10nProvider);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: AppColors.surfaceColor(context),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.borderColor(context),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              l10n.helpLabel,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: AppColors.onSurface(context),
+              ),
+            ),
+            const SizedBox(height: 24),
+            _menuItem(
+              context,
+              Icons.contact_support_rounded,
+              l10n.contactUs,
+              l10n.contactUsDesc,
+              AppColors.accent.withOpacity(0.1),
+              AppColors.accent,
+                  () {
+                Navigator.pop(context);
+                _launchContactUs();
+              },
+            ),
+            _menuItem(
+              context,
+              Icons.privacy_tip_rounded,
+              l10n.privacyPolicyLink.substring(0, 1).toUpperCase() +
+                  l10n.privacyPolicyLink.substring(1),
+              l10n.privacyPolicyDesc,
+              const Color(0xFF607D8B).withOpacity(0.1),
+              const Color(0xFF607D8B),
+                  () {
+                Navigator.pop(context);
+                _launchPrivacyPolicy();
+              },
+            ),
+            _menuItem(
+              context,
+              Icons.receipt_long_rounded,
+              l10n.refundPolicy,
+              l10n.refundPolicyDesc,
+              AppColors.warm.withOpacity(0.1),
+              AppColors.warm,
+                  () {
+                Navigator.pop(context);
+                _launchRefundPolicy();
+              },
+            ),
+            _menuItem(
+              context,
+              Icons.description_rounded,
+              l10n.termsOfUse,
+              l10n.termsOfUseDesc,
+              AppColors.cold.withOpacity(0.1),
+              AppColors.cold,
+                  () {
+                Navigator.pop(context);
+                _launchTermsOfUse();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -348,6 +480,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       () => context.push('/organization/join'),
                     ),
                   ],
+                  _menuItem(
+                    context,
+                    Icons.help_outline_rounded,
+                    l10n.helpLabel,
+                    l10n.helpDesc,
+                    const Color(0xFF607D8B).withOpacity(0.1),
+                    const Color(0xFF607D8B),
+                    _showHelpBottomSheet,
+                  ),
                   const SizedBox(height: 8),
                   _menuItem(
                     context,
