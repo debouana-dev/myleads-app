@@ -232,10 +232,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // If the email has not been verified yet, send a verification code and
     // block login until verification is complete.
     if (!user.emailVerified) {
-      await sendVerificationCode(email);
+      final sendErr = await sendVerificationCode(email);
       state = state.copyWith(
         isLoading: false,
-        error: _l10n.authEmailNotVerified(email),
+        error: sendErr ?? _l10n.authEmailNotVerified(email),
         requiresEmailVerification: true,
       );
       return false;
@@ -1067,7 +1067,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // Try to send email.
     final sent = await EmailService.sendRecoveryEmail(email, code);
     if (!sent) {
-      debugPrint('AuthNotifier.sendRecoveryCode: failed to send email to $email');
+      return "Impossible d'envoyer l'email de récupération. Vérifiez votre connexion ou contactez le support.";
     }
 
     return null; // success
@@ -1190,7 +1190,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // Try to send email.
     final sent = await EmailService.sendVerificationEmail(email, code);
     if (!sent) {
-      debugPrint('AuthNotifier.sendVerificationCode: failed to send email to $email');
+      return "Impossible d'envoyer l'email de vérification à $email. Veuillez vérifier l'adresse ou réessayer plus tard.";
     }
 
     return null; // success

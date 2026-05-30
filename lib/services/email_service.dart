@@ -426,11 +426,12 @@ class EmailService {
 
       await send(message, _smtpServer, timeout: _timeout);
       return true;
-    } catch (e) {
+    } catch (e, stack) {
       // Email sending failed — the in-memory code is still valid.
       // Callers should not surface this error directly; the code flow
       // continues normally.
-      debugPrint('EmailService: SMTP delivery failed — $e');
+      debugPrint('EmailService: SMTP delivery failed to $to — $e');
+      debugPrint(stack.toString());
       return false;
     }
   }
