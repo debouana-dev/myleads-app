@@ -847,7 +847,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     // Send the 6-digit code to the new address.
-    final sendErr = await sendVerificationCode(newEmail.trim());
+    final sendErr =
+        await sendVerificationCode(newEmail.trim(), forEmailChange: true);
     if (sendErr != null) return sendErr;
 
     // For premium/business non-org users: pull the latest cloud data in the
@@ -1174,7 +1175,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// it via [EmailService].
   ///
   /// Returns `null` on success, or an error string on failure.
-  Future<String?> sendVerificationCode(String email) async {
+  Future<String?> sendVerificationCode(String email,
+      {bool forEmailChange = false}) async {
     final emailErr = Validators.validateEmail(email);
     if (emailErr != null) return emailErr;
 
@@ -1188,7 +1190,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
 
     // Try to send email.
-    final sent = await EmailService.sendVerificationEmail(email, code);
+    final sent = forEmailChange
+        ? await EmailService.sendEmailChangeVerificationEmail(email, code)
+        : await EmailService.sendVerificationEmail(email, code);
     if (!sent) {
       return "Impossible d'envoyer l'email de vérification à $email. Veuillez vérifier l'adresse ou réessayer plus tard.";
     }
