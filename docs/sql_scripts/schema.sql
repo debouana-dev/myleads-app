@@ -172,8 +172,10 @@ CREATE TABLE IF NOT EXISTS "organizations" (
 -- role: owner | admin | member
 -- status: active | suspended
 -- Denormalized member profile fields are stored here for fast local display.
--- can_edit / can_create / can_view_reminders / can_view_history / can_export_contacts / can_view_others_tasks: per-member flags.
--- Admins always have all six set to 1 regardless of stored value.
+-- can_edit / can_create / can_view_reminders / can_view_history / can_export_contacts /
+--   can_view_others_tasks: LEGACY privilege columns — kept for backward compat with
+--   pre-v29 clients. As of v29, org_member_permissions is the authoritative source.
+--   These columns are dual-written but no longer the authority.
 -- email: AES-256-CBC ciphertext, key = SHA256(SECRET_KEY:organization_id). (v21+)
 -- phone: AES-256-CBC ciphertext, key = SHA256(SECRET_KEY:organization_id). (v24+)
 -- ============================================================
@@ -270,6 +272,49 @@ CREATE TABLE IF NOT EXISTS "task_assignees" (
 );
 CREATE INDEX IF NOT EXISTS "idx_task_assignees_task" ON "task_assignees" ("task_id");
 CREATE INDEX IF NOT EXISTS "idx_task_assignees_user" ON "task_assignees" ("user_id");
+
+
+-- ============================================================
+-- TABLE: org_member_permissions  (v29 — normalised ACL table)
+-- Extracted from organization_members.can_* columns.
+-- Only active admins and owners sync the full table; regular members
+-- receive only their own row. Row-Level Security (RLS) enforces this
+-- at the PostgreSQL layer (FOR SELECT policy, SET LOCAL GUC pattern).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS "org_member_permissions" (
+  "id"                    VARCHAR(36)  NOT NULL,
+  "organization_id"       VARCHAR(36)  NOT NULL,
+  "user_id"               VARCHAR(36)  NOT NULL,
+  "can_edit"              SMALLINT     NOT NULL DEFAULT 0,
+  "can_create"            SMALLINT     NOT NULL DEFAULT 1,
+  "can_view_reminders"    SMALLINT     NOT NULL DEFAULT 0,
+  "can_view_history"      SMALLINT     NOT NULL DEFAULT 0,
+  "can_export_contacts"   SMALLINT     NOT NULL DEFAULT 0,
+  "can_view_others_tasks" SMALLINT     NOT NULL DEFAULT 0,
+  "updated_at"            VARCHAR(50)  NOT NULL DEFAULT '',
+
+  PRIMARY KEY ("id"),
+  UNIQUE ("organization_id", "user_id")
+);
+CREATE INDEX IF NOT EXISTS "idx_omp_org"  ON "org_member_permissions" ("organization_id");
+CREATE INDEX IF NOT EXISTS "idx_omp_user" ON "org_member_permissions" ("user_id");
+
+-- RLS: enable after initial data migration (see v29 upgrade script below).
+ALTER TABLE "org_member_permissions" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "omp_select" ON "org_member_permissions";
+CREATE POLICY "omp_select" ON "org_member_permissions"
+  FOR SELECT
+  USING (
+    "org_member_permissions"."user_id"
+        = current_setting('app.current_user_id', true)
+    OR EXISTS (
+      SELECT 1 FROM "organization_members" om
+      WHERE om."organization_id" = "org_member_permissions"."organization_id"
+        AND om."user_id" = current_setting('app.current_user_id', true)
+        AND om."role" IN ('admin', 'owner')
+        AND om."status" = 'active'
+    )
+  );
 
 
 -- ============================================================
@@ -422,6 +467,13 @@ ALTER TABLE "organization_members"
 --         the same table serves personal tasks (NULL) without future schema changes
 -- v27   : task_assignees join table — replaces single assigned_to_user_id with
 --         multi-member assignment; legacy column retained for migration compatibility
+-- v28   : organization_members.can_view_others_tasks — controls whether a member
+--         can see tasks assigned to other org members (default 0; admins always 1)
+-- v29   : org_member_permissions table — extracts all six can_* privilege flags from
+--         organization_members into a dedicated ACL table with PostgreSQL RLS.
+--         Regular members receive only their own row on sync; admins/owners receive
+--         all rows. Legacy can_* columns in organization_members are dual-written for
+--         backward compat but are no longer the authoritative source.
 -- ============================================================
 
 
@@ -518,3 +570,64 @@ ALTER TABLE "organization_members"
 UPDATE "organization_members"
   SET "can_view_others_tasks" = 1
   WHERE "role" IN ('admin', 'owner') AND "can_view_others_tasks" = 0;
+
+-- ============================================================
+-- UPGRADE SCRIPT (v28 → v29)
+-- Extract privilege flags into a dedicated org_member_permissions
+-- table with Row-Level Security. Regular members only receive their
+-- own row on sync; admins/owners receive all rows.
+-- All statements are idempotent (safe to re-run).
+-- ============================================================
+
+-- 1. Create the new table (no-op if it already exists).
+CREATE TABLE IF NOT EXISTS "org_member_permissions" (
+  "id"                    VARCHAR(36)  NOT NULL,
+  "organization_id"       VARCHAR(36)  NOT NULL,
+  "user_id"               VARCHAR(36)  NOT NULL,
+  "can_edit"              SMALLINT     NOT NULL DEFAULT 0,
+  "can_create"            SMALLINT     NOT NULL DEFAULT 1,
+  "can_view_reminders"    SMALLINT     NOT NULL DEFAULT 0,
+  "can_view_history"      SMALLINT     NOT NULL DEFAULT 0,
+  "can_export_contacts"   SMALLINT     NOT NULL DEFAULT 0,
+  "can_view_others_tasks" SMALLINT     NOT NULL DEFAULT 0,
+  "updated_at"            VARCHAR(50)  NOT NULL DEFAULT '',
+  PRIMARY KEY ("id"),
+  UNIQUE ("organization_id", "user_id")
+);
+CREATE INDEX IF NOT EXISTS "idx_omp_org"  ON "org_member_permissions" ("organization_id");
+CREATE INDEX IF NOT EXISTS "idx_omp_user" ON "org_member_permissions" ("user_id");
+
+-- 2. Migrate existing privilege data from organization_members.
+--    ON CONFLICT DO NOTHING makes this idempotent.
+--    Run BEFORE enabling RLS so the migration insert is unrestricted.
+INSERT INTO "org_member_permissions"
+  ("id", "organization_id", "user_id",
+   "can_edit", "can_create", "can_view_reminders",
+   "can_view_history", "can_export_contacts", "can_view_others_tasks",
+   "updated_at")
+SELECT "id", "organization_id", "user_id",
+       "can_edit", "can_create", "can_view_reminders",
+       "can_view_history", "can_export_contacts", "can_view_others_tasks",
+       NOW()
+FROM "organization_members"
+ON CONFLICT ("id") DO NOTHING;
+
+-- 3. Enable RLS and create the access policy.
+--    FORCE is intentionally omitted — app DB user owns the table and bypasses
+--    RLS for schema/migration operations. The FOR SELECT policy restricts reads
+--    for non-owner connections (defence-in-depth for future roles).
+ALTER TABLE "org_member_permissions" ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "omp_select" ON "org_member_permissions";
+CREATE POLICY "omp_select" ON "org_member_permissions"
+  FOR SELECT
+  USING (
+    "org_member_permissions"."user_id"
+        = current_setting('app.current_user_id', true)
+    OR EXISTS (
+      SELECT 1 FROM "organization_members" om
+      WHERE om."organization_id" = "org_member_permissions"."organization_id"
+        AND om."user_id" = current_setting('app.current_user_id', true)
+        AND om."role" IN ('admin', 'owner')
+        AND om."status" = 'active'
+    )
+  );
