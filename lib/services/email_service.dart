@@ -66,6 +66,50 @@ class EmailService {
     );
   }
 
+  /// Sends a 6-digit email-change confirmation code to [toEmail].
+  ///
+  /// Use this instead of [sendVerificationEmail] when the user is changing
+  /// an existing email address, not creating a new account.
+  /// Returns `true` if the SMTP transaction succeeded.
+  static Future<bool> sendEmailChangeVerificationEmail(
+      String toEmail, String code) async {
+    final htmlBody = '''
+<div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #0B3C5D; margin: 0;">Me2Leads</h1>
+    <p style="color: #666; font-size: 14px;">Votre assistant de prospection intelligent</p>
+  </div>
+
+  <div style="background-color: #f9f9f9; border-radius: 8px; padding: 30px; border: 1px solid #eee;">
+    <h2 style="margin-top: 0; color: #333; font-size: 20px;">Confirmation de changement d'adresse email</h2>
+    <p>Bonjour,</p>
+    <p>Vous avez demandé à modifier l'adresse email associée à votre compte Me2Leads. Utilisez le code ci-dessous pour confirmer ce changement :</p>
+
+    <div style="margin: 30px 0; text-align: center;">
+      <span style="display: inline-block; background-color: #0B3C5D; color: white; padding: 15px 30px; font-size: 32px; font-weight: bold; letter-spacing: 8px; border-radius: 6px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        $code
+      </span>
+    </div>
+
+    <p style="font-size: 14px; color: #666;">Ce code est valide pendant <strong>10 minutes</strong>. Passé ce délai, vous devrez en demander un nouveau.</p>
+    <p style="font-size: 13px; color: #e74c3c;">Si vous n'avez pas demandé ce changement, sécurisez votre compte immédiatement en modifiant votre mot de passe.</p>
+  </div>
+
+  <div style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
+    <p>&copy; ${DateTime.now().year} Me2Leads. Tous droits réservés.</p>
+  </div>
+</div>
+''';
+
+    return _sendEmail(
+      to: toEmail,
+      subject: "Code de confirmation Me2Leads — Changement d'adresse email : $code",
+      body:
+          "Votre code de confirmation de changement d'adresse email est : $code\n\nCe code expire dans 10 minutes.\n\nSi vous n'avez pas demandé ce changement, sécurisez votre compte immédiatement.",
+      htmlBody: htmlBody,
+    );
+  }
+
   /// Sends a 6-digit password-recovery code to [toEmail].
   ///
   /// Returns `true` if the SMTP transaction succeeded.
@@ -426,11 +470,12 @@ class EmailService {
 
       await send(message, _smtpServer, timeout: _timeout);
       return true;
-    } catch (e) {
+    } catch (e, stack) {
       // Email sending failed — the in-memory code is still valid.
       // Callers should not surface this error directly; the code flow
       // continues normally.
-      debugPrint('EmailService: SMTP delivery failed — $e');
+      debugPrint('EmailService: SMTP delivery failed to $to — $e');
+      debugPrint(stack.toString());
       return false;
     }
   }

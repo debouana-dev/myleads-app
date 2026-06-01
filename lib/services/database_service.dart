@@ -29,7 +29,7 @@ import 'web_db_factory_stub.dart'
 class DatabaseService {
   static Database? _db;
   static const _dbName = 'myleads.db';
-  static const _dbVersion = 28;
+  static const _dbVersion = 29;
   static const _uuid = Uuid();
 
   // ── Remote sync callbacks ──────────────────────────────────────────────────
@@ -500,6 +500,44 @@ class DatabaseService {
             "UPDATE organization_members SET can_view_others_tasks = 1 WHERE role IN ('admin', 'owner')");
       } catch (_) {}
     }
+    if (oldVersion < 29) {
+      // v28 → v29: extract privilege flags into a dedicated access-control table.
+      // The can_* columns in organization_members remain (SQLite cannot drop columns)
+      // but are no longer written to — org_member_permissions is the source of truth.
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS org_member_permissions (
+            id              TEXT PRIMARY KEY,
+            organization_id TEXT NOT NULL,
+            user_id         TEXT NOT NULL,
+            can_edit                INTEGER NOT NULL DEFAULT 0,
+            can_create              INTEGER NOT NULL DEFAULT 1,
+            can_view_reminders      INTEGER NOT NULL DEFAULT 0,
+            can_view_history        INTEGER NOT NULL DEFAULT 0,
+            can_export_contacts     INTEGER NOT NULL DEFAULT 0,
+            can_view_others_tasks   INTEGER NOT NULL DEFAULT 0,
+            updated_at      TEXT NOT NULL,
+            FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id)         REFERENCES users(id)         ON DELETE CASCADE,
+            UNIQUE (organization_id, user_id)
+          )
+        ''');
+      } catch (_) {}
+      try {
+        await db.execute('''
+          INSERT OR IGNORE INTO org_member_permissions
+            (id, organization_id, user_id,
+             can_edit, can_create, can_view_reminders,
+             can_view_history, can_export_contacts, can_view_others_tasks,
+             updated_at)
+          SELECT id, organization_id, user_id,
+                 can_edit, can_create, can_view_reminders,
+                 can_view_history, can_export_contacts, can_view_others_tasks,
+                 datetime('now')
+          FROM organization_members
+        ''');
+      } catch (_) {}
+    }
   }
 
   // =====================================================================
@@ -759,6 +797,29 @@ class DatabaseService {
         'CREATE INDEX idx_task_assignees_task ON task_assignees(task_id)');
     await db.execute(
         'CREATE INDEX idx_task_assignees_user ON task_assignees(user_id)');
+
+    // ----- ORG_MEMBER_PERMISSIONS (v29) -----
+    await db.execute('''
+      CREATE TABLE org_member_permissions (
+        id              TEXT PRIMARY KEY,
+        organization_id TEXT NOT NULL,
+        user_id         TEXT NOT NULL,
+        can_edit                INTEGER NOT NULL DEFAULT 0,
+        can_create              INTEGER NOT NULL DEFAULT 1,
+        can_view_reminders      INTEGER NOT NULL DEFAULT 0,
+        can_view_history        INTEGER NOT NULL DEFAULT 0,
+        can_export_contacts     INTEGER NOT NULL DEFAULT 0,
+        can_view_others_tasks   INTEGER NOT NULL DEFAULT 0,
+        updated_at      TEXT NOT NULL,
+        FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id)         REFERENCES users(id)         ON DELETE CASCADE,
+        UNIQUE (organization_id, user_id)
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX idx_omp_org ON org_member_permissions(organization_id)');
+    await db.execute(
+        'CREATE INDEX idx_omp_user ON org_member_permissions(user_id)');
   }
 
   // =====================================================================
@@ -1869,12 +1930,22 @@ class DatabaseService {
 
   static Future<List<OrgMember>> getMembersForOrganization(String orgId) async {
     final db = await database;
-    final memberRows = await db.query(
-      'organization_members',
-      where: 'organization_id = ?',
-      whereArgs: [orgId],
-      orderBy: 'joined_at ASC',
-    );
+    // JOIN org_member_permissions as the authoritative source for privilege flags.
+    final memberRows = await db.rawQuery('''
+      SELECT om.*,
+             omp.can_edit        AS perm_can_edit,
+             omp.can_create      AS perm_can_create,
+             omp.can_view_reminders  AS perm_can_view_reminders,
+             omp.can_view_history    AS perm_can_view_history,
+             omp.can_export_contacts AS perm_can_export_contacts,
+             omp.can_view_others_tasks AS perm_can_view_others_tasks
+      FROM organization_members om
+      LEFT JOIN org_member_permissions omp
+             ON omp.organization_id = om.organization_id
+            AND omp.user_id = om.user_id
+      WHERE om.organization_id = ?
+      ORDER BY om.joined_at ASC
+    ''', [orgId]);
 
     final members = <OrgMember>[];
     for (final row in memberRows) {
@@ -1888,6 +1959,8 @@ class DatabaseService {
 
       final role = row['role'] as String? ?? 'member';
       final isAdmin = role == 'owner' || role == 'admin';
+      // Prefer perm_* columns (from org_member_permissions); fall back to
+      // legacy org_members columns for rows that pre-date v29.
       members.add(OrgMember(
         id: row['id'] as String,
         organizationId: orgId,
@@ -1904,15 +1977,30 @@ class DatabaseService {
         biography: row['biography'] as String? ?? user?.biography,
         photoPath: row['photo_path'] as String? ?? user?.photoPath,
         contactCount: contactCount,
-        canEdit: isAdmin || (row['can_edit'] as int? ?? 0) == 1,
-        canCreate: isAdmin || (row['can_create'] as int? ?? 1) == 1,
-        canViewReminders:
-            isAdmin || (row['can_view_reminders'] as int? ?? 0) == 1,
-        canViewHistory: isAdmin || (row['can_view_history'] as int? ?? 0) == 1,
-        canExportContacts:
-            isAdmin || (row['can_export_contacts'] as int? ?? 0) == 1,
-        canViewOthersTasks:
-            isAdmin || (row['can_view_others_tasks'] as int? ?? 0) == 1,
+        canEdit: isAdmin ||
+            ((row['perm_can_edit'] ?? row['can_edit']) as int? ?? 0) == 1,
+        canCreate: isAdmin ||
+            ((row['perm_can_create'] ?? row['can_create']) as int? ?? 1) == 1,
+        canViewReminders: isAdmin ||
+            ((row['perm_can_view_reminders'] ?? row['can_view_reminders'])
+                    as int? ??
+                0) ==
+                1,
+        canViewHistory: isAdmin ||
+            ((row['perm_can_view_history'] ?? row['can_view_history'])
+                    as int? ??
+                0) ==
+                1,
+        canExportContacts: isAdmin ||
+            ((row['perm_can_export_contacts'] ?? row['can_export_contacts'])
+                    as int? ??
+                0) ==
+                1,
+        canViewOthersTasks: isAdmin ||
+            ((row['perm_can_view_others_tasks'] ??
+                        row['can_view_others_tasks']) as int? ??
+                0) ==
+                1,
       ));
     }
     return members;
@@ -1927,13 +2015,14 @@ class DatabaseService {
     final db = await database;
     final isAdmin = role == 'owner' || role == 'admin';
     final user = await findUserById(userId);
+    final now = DateTime.now().toIso8601String();
     final row = {
       'id': id,
       'organization_id': orgId,
       'user_id': userId,
       'role': role,
       'status': 'active',
-      'joined_at': DateTime.now().toIso8601String(),
+      'joined_at': now,
       'first_name': user?.firstName ?? '',
       'last_name': user?.lastName ?? '',
       'email': (user?.email != null && user!.email.isNotEmpty)
@@ -1946,6 +2035,7 @@ class DatabaseService {
       'company': user?.companyName,
       'biography': user?.biography,
       'photo_path': user?.photoPath,
+      // Dual-write for rollback compat with pre-v29 clients
       'can_edit': isAdmin ? 1 : 0,
       'can_create': 1,
       'can_view_reminders': isAdmin ? 1 : 0,
@@ -1955,7 +2045,25 @@ class DatabaseService {
     };
     await db.insert('organization_members', row,
         conflictAlgorithm: ConflictAlgorithm.ignore);
+
+    // Insert into org_member_permissions (authoritative)
+    final permRow = {
+      'id': id,
+      'organization_id': orgId,
+      'user_id': userId,
+      'can_edit': isAdmin ? 1 : 0,
+      'can_create': 1,
+      'can_view_reminders': isAdmin ? 1 : 0,
+      'can_view_history': isAdmin ? 1 : 0,
+      'can_export_contacts': isAdmin ? 1 : 0,
+      'can_view_others_tasks': isAdmin ? 1 : 0,
+      'updated_at': now,
+    };
+    await db.insert('org_member_permissions', permRow,
+        conflictAlgorithm: ConflictAlgorithm.ignore);
+
     _onRemoteUpsert?.call('organization_members', row);
+    _onRemoteUpsert?.call('org_member_permissions', permRow);
   }
 
   static Future<void> removeOrgMember(String orgId, String userId) async {
@@ -2034,6 +2142,8 @@ class DatabaseService {
   }
 
   /// Update privileges for a single member.
+  /// Writes to org_member_permissions (source of truth). Also dual-writes to
+  /// organization_members.can_* for rollback compatibility with pre-v29 clients.
   static Future<void> updateMemberPrivileges({
     required String orgId,
     required String userId,
@@ -2045,28 +2155,41 @@ class DatabaseService {
     required bool canViewOthersTasks,
   }) async {
     final db = await database;
+    final privMap = {
+      'can_edit': canEdit ? 1 : 0,
+      'can_create': canCreate ? 1 : 0,
+      'can_view_reminders': canViewReminders ? 1 : 0,
+      'can_view_history': canViewHistory ? 1 : 0,
+      'can_export_contacts': canExportContacts ? 1 : 0,
+      'can_view_others_tasks': canViewOthersTasks ? 1 : 0,
+    };
+
+    // Primary write: org_member_permissions
     await db.update(
-      'organization_members',
-      {
-        'can_edit': canEdit ? 1 : 0,
-        'can_create': canCreate ? 1 : 0,
-        'can_view_reminders': canViewReminders ? 1 : 0,
-        'can_view_history': canViewHistory ? 1 : 0,
-        'can_export_contacts': canExportContacts ? 1 : 0,
-        'can_view_others_tasks': canViewOthersTasks ? 1 : 0,
-      },
+      'org_member_permissions',
+      {...privMap, 'updated_at': DateTime.now().toIso8601String()},
       where: 'organization_id = ? AND user_id = ?',
       whereArgs: [orgId, userId],
     );
-    final rows = await db.query(
+
+    // Dual-write to legacy columns for rollback safety
+    await db.update(
       'organization_members',
+      privMap,
+      where: 'organization_id = ? AND user_id = ?',
+      whereArgs: [orgId, userId],
+    );
+
+    // Emit live-write for org_member_permissions
+    final permRows = await db.query(
+      'org_member_permissions',
       where: 'organization_id = ? AND user_id = ?',
       whereArgs: [orgId, userId],
       limit: 1,
     );
-    if (rows.isNotEmpty) {
+    if (permRows.isNotEmpty) {
       _onRemoteUpsert?.call(
-          'organization_members', Map<String, dynamic>.from(rows.first));
+          'org_member_permissions', Map<String, dynamic>.from(permRows.first));
     }
   }
 
@@ -2462,11 +2585,16 @@ class DatabaseService {
   }) async {
     if (orgId == null) return userId == contactOwnerId;
     final db = await database;
-    final rows = await db.query('organization_members',
-        columns: ['role', 'can_edit'],
-        where: 'organization_id = ? AND user_id = ?',
-        whereArgs: [orgId, userId],
-        limit: 1);
+    final rows = await db.rawQuery('''
+      SELECT om.role,
+             COALESCE(omp.can_edit, om.can_edit) AS can_edit
+      FROM organization_members om
+      LEFT JOIN org_member_permissions omp
+             ON omp.organization_id = om.organization_id
+            AND omp.user_id = om.user_id
+      WHERE om.organization_id = ? AND om.user_id = ?
+      LIMIT 1
+    ''', [orgId, userId]);
     if (rows.isEmpty) return false;
     final role = rows.first['role'] as String? ?? 'member';
     if (role == 'owner' || role == 'admin') return true;
@@ -2479,11 +2607,16 @@ class DatabaseService {
   }) async {
     if (orgId == null) return true;
     final db = await database;
-    final rows = await db.query('organization_members',
-        columns: ['role', 'can_create'],
-        where: 'organization_id = ? AND user_id = ?',
-        whereArgs: [orgId, userId],
-        limit: 1);
+    final rows = await db.rawQuery('''
+      SELECT om.role,
+             COALESCE(omp.can_create, om.can_create) AS can_create
+      FROM organization_members om
+      LEFT JOIN org_member_permissions omp
+             ON omp.organization_id = om.organization_id
+            AND omp.user_id = om.user_id
+      WHERE om.organization_id = ? AND om.user_id = ?
+      LIMIT 1
+    ''', [orgId, userId]);
     if (rows.isEmpty) return true;
     final role = rows.first['role'] as String? ?? 'member';
     if (role == 'owner' || role == 'admin') return true;
@@ -2513,10 +2646,23 @@ class DatabaseService {
       );
     }
     final db = await database;
-    final rows = await db.query('organization_members',
-        where: 'organization_id = ? AND user_id = ?',
-        whereArgs: [orgId, userId],
-        limit: 1);
+    // Role is still authoritative in organization_members; privileges come
+    // from org_member_permissions (fallback to organization_members for pre-v29 rows).
+    final rows = await db.rawQuery('''
+      SELECT om.role,
+             COALESCE(omp.can_edit,             om.can_edit)             AS can_edit,
+             COALESCE(omp.can_create,           om.can_create)           AS can_create,
+             COALESCE(omp.can_view_reminders,   om.can_view_reminders)   AS can_view_reminders,
+             COALESCE(omp.can_view_history,     om.can_view_history)     AS can_view_history,
+             COALESCE(omp.can_export_contacts,  om.can_export_contacts)  AS can_export_contacts,
+             COALESCE(omp.can_view_others_tasks,om.can_view_others_tasks) AS can_view_others_tasks
+      FROM organization_members om
+      LEFT JOIN org_member_permissions omp
+             ON omp.organization_id = om.organization_id
+            AND omp.user_id = om.user_id
+      WHERE om.organization_id = ? AND om.user_id = ?
+      LIMIT 1
+    ''', [orgId, userId]);
     if (rows.isEmpty) {
       return (
         canEdit: true,
@@ -2598,22 +2744,34 @@ class DatabaseService {
     assert(newRole == 'admin' || newRole == 'member');
     final db = await database;
     final isElevated = newRole == 'admin';
+    final privMap = {
+      'can_edit': isElevated ? 1 : 0,
+      'can_create': 1,
+      'can_view_reminders': isElevated ? 1 : 0,
+      'can_view_history': isElevated ? 1 : 0,
+      'can_export_contacts': isElevated ? 1 : 0,
+      'can_view_others_tasks': isElevated ? 1 : 0,
+    };
+
+    // Update role in organization_members (+ dual-write can_* for rollback compat)
     await db.update(
       'organization_members',
-      {
-        'role': newRole,
-        'can_edit': isElevated ? 1 : 0,
-        'can_create': 1,
-        'can_view_reminders': isElevated ? 1 : 0,
-        'can_view_history': isElevated ? 1 : 0,
-        'can_export_contacts': isElevated ? 1 : 0,
-        'can_view_others_tasks': isElevated ? 1 : 0,
-      },
+      {'role': newRole, ...privMap},
       where: 'organization_id = ? AND user_id = ?',
       whereArgs: [orgId, userId],
     );
+
+    // Primary write for privileges: org_member_permissions
+    await db.update(
+      'org_member_permissions',
+      {...privMap, 'updated_at': DateTime.now().toIso8601String()},
+      where: 'organization_id = ? AND user_id = ?',
+      whereArgs: [orgId, userId],
+    );
+
     await db.update('users', {'org_role': newRole},
         where: 'id = ?', whereArgs: [userId]);
+
     final rows = await db.query('organization_members',
         where: 'organization_id = ? AND user_id = ?',
         whereArgs: [orgId, userId],
@@ -2621,6 +2779,14 @@ class DatabaseService {
     if (rows.isNotEmpty) {
       _onRemoteUpsert?.call(
           'organization_members', Map<String, dynamic>.from(rows.first));
+    }
+    final permRows = await db.query('org_member_permissions',
+        where: 'organization_id = ? AND user_id = ?',
+        whereArgs: [orgId, userId],
+        limit: 1);
+    if (permRows.isNotEmpty) {
+      _onRemoteUpsert?.call(
+          'org_member_permissions', Map<String, dynamic>.from(permRows.first));
     }
     final userRow =
         await db.query('users', where: 'id = ?', whereArgs: [userId], limit: 1);
@@ -2927,6 +3093,31 @@ class DatabaseService {
         .toList();
   }
 
+  /// Returns all org_member_permissions rows for [orgId].
+  /// Used by admin/owner push path — regular members must not call this.
+  static Future<List<Map<String, dynamic>>> getRawPermissionRows(
+      String orgId) async {
+    final db = await database;
+    return (await db.query('org_member_permissions',
+            where: 'organization_id = ?', whereArgs: [orgId]))
+        .map((r) => Map<String, dynamic>.from(r))
+        .toList();
+  }
+
+  /// Returns the single org_member_permissions row for [userId] in [orgId].
+  /// Used by regular-member pull path (own row only).
+  static Future<Map<String, dynamic>?> getRawOwnPermissionRow(
+      String orgId, String userId) async {
+    final db = await database;
+    final rows = await db.query(
+      'org_member_permissions',
+      where: 'organization_id = ? AND user_id = ?',
+      whereArgs: [orgId, userId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : Map<String, dynamic>.from(rows.first);
+  }
+
   static Future<List<Map<String, dynamic>>> getRawTaskRows(
       String orgId) async {
     final db = await database;
@@ -3022,7 +3213,9 @@ class DatabaseService {
       'notifications',
       'organizations',
       'organization_members',
+      'org_member_permissions',
       'tasks',
+      'task_assignees',
     ];
     final result = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");

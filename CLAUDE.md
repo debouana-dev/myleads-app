@@ -47,7 +47,8 @@ myleads-app/
     │   ├── user_account.dart         ← UserAccount + PaymentRecord
     │   ├── organization.dart         ← Organization + OrgMember
     │   ├── app_notification.dart
-    │   └── plan_features.dart
+    │   ├── plan_features.dart
+    │   └── app_task.dart
     ├── providers/
     │   ├── auth_provider.dart        ← signUp / login / logout / changeEmail / changePassword / deleteAccount
     │   ├── contacts_provider.dart    ← CRUD + filters + search
@@ -56,7 +57,8 @@ myleads-app/
     │   ├── notifications_provider.dart
     │   ├── settings_provider.dart    ← locale + theme
     │   ├── currency_provider.dart
-    │   └── organization_provider.dart ← org CRUD + member mgmt + 5 derived privilege providers
+    │   ├── organization_provider.dart ← org CRUD + member mgmt + 7 derived privilege providers
+    │   └── tasks_provider.dart        ← org task CRUD + completion + sync
     ├── screens/
     │   ├── splash/splash_screen.dart
     │   ├── auth/                     ← login / signup / forgot / verify / reset
@@ -70,6 +72,7 @@ myleads-app/
     │   ├── notifications/
     │   ├── settings/
     │   ├── organization/             ← admin panel, create, join
+    │   ├── tasks/                    ← list, create/edit, detail
     │   └── pricing/                  ← pricing, subscription plan, payment history, transaction detail
     ├── services/
     │   ├── action_tracker.dart       ← WidgetsBindingObserver: logs Interaction on app background
@@ -78,7 +81,7 @@ myleads-app/
     │   ├── contact_actions.dart      ← url_launcher (call/sms/whatsapp/email)
     │   ├── contact_import_export_service.dart ← CSV/JSON import/export
     │   ├── currency_service.dart
-    │   ├── database_service.dart     ← SQLite schema v23 + migrations
+    │   ├── database_service.dart     ← SQLite schema v28 + migrations
     │   ├── email_service.dart        ← SMTP (verification/reset codes)
     │   ├── encryption_service.dart   ← AES-256-CBC master key in Keystore
     │   ├── ftp_photo_service.dart    ← upload/download/delete (relative paths)
@@ -139,6 +142,9 @@ All "Slide" transitions are Slide L→R unless noted.
 | `/organization` | `OrganizationAdminScreen` | Slide |
 | `/organization/create` | `CreateOrganizationScreen` | Slide |
 | `/organization/join` | `JoinOrganizationScreen` | Slide |
+| `/organization/tasks` | `TasksScreen` | Slide |
+| `/organization/tasks/new` | `CreateTaskScreen(existing?)` | Slide |
+| `/organization/task/:id` | `TaskDetailScreen(taskId)` | Slide |
 
 ---
 
@@ -254,12 +260,13 @@ All providers: `StateNotifierProvider` + immutable state with `copyWith` + `_sen
 | `notificationsProvider` | Feed: unread count, mark-read, delete |
 | `settingsProvider` | Locale (`_en` bool) + theme |
 | `currencyProvider` | Real-time currency conversion |
-| `organizationProvider` | Org CRUD + member mgmt; `OrgState`: `uniqueContactCount`, `currentUserCanViewHistory`, `currentUserCanExportContacts`; derived: `orgCanCreateProvider`, `orgCanEditOthersProvider`, `orgCanViewRemindersProvider`, `orgCanViewHistoryProvider`, `orgCanExportContactsProvider` |
+| `organizationProvider` | Org CRUD + member mgmt; `OrgState`: `uniqueContactCount`, `currentUserCanViewHistory`, `currentUserCanExportContacts`; derived: `orgCanCreateProvider`, `orgCanEditOthersProvider`, `orgCanViewRemindersProvider`, `orgCanViewHistoryProvider`, `orgCanExportContactsProvider`, `orgCanViewOthersTasksProvider`, `orgCurrentUserIsSuspendedProvider` |
+| `tasksProvider` | Org task CRUD + `pendingTasks`, `completedTasks`, `myAssignedTasks()`, `syncAndLoad()`, `syncSilently()`, `completeTask()`, `uncompleteTask()`, `deleteTask()` |
 | `l10nProvider` | Defined in `lib/core/l10n/app_l10n.dart`; returns `AppL10n(_en)`. Use `ref.watch(l10nProvider)` in every widget displaying user-facing text. |
 
 ---
 
-## 6. Data model (SQLite schema v23)
+## 6. Data model (SQLite schema v28)
 
 ### Contact
 ```
@@ -304,12 +311,14 @@ license_count, org_plan_expires_at, org_status (active|suspended), org_suspended
 
 ### OrgMember
 ```
-id, org_id, user_id, role (admin|member), status (active|suspended),
+id, org_id, user_id, role (admin|member|owner), status (active|suspended),
 can_edit, can_create, can_view_reminders, can_view_history, can_export_contacts,
-joined_at, first_name, last_name, email (org-key AES-encrypted),
-nickname, company, biography, photo_path
+can_view_others_tasks,
+joined_at, first_name, last_name, phone (org-key AES-encrypted),
+email (org-key AES-encrypted), nickname, company, biography, photo_path
 ```
-- All five privileges true for admins.
+- All six privileges true for admins and owners.
+- `role='owner'` introduced in v25 — org creator's row promoted from `'admin'`. Owners have the same privileges as admins.
 - Profile fields (v18) denormalized to avoid cross-user DB joins.
 - `email` encrypted with the **org-specific key** (not user master key). v21 migrated any plaintext rows — ciphertext never contains `@`, so `email.contains('@')` detects un-encrypted values.
 - `removeMember` / `suspendMember` transfers only non-duplicate contacts to admin (dedup by `phone_lookup` / `email_lookup`).
@@ -326,6 +335,23 @@ Displayed on `PaymentHistoryScreen`; detail view on `TransactionDetailScreen`.
 ```
 id, owner_id, type, title, body, scheduled_at, created_at, reference_id, is_read
 ```
+
+### AppTask
+```
+id, organization_id (nullable — future personal tasks), created_by_user_id,
+assigned_to_user_id (legacy only — source of truth is task_assignees join table),
+assignee_user_ids (List<String>, populated at read time from task_assignees),
+start_date_time, end_date_time, repeat_frequency,
+note, todo_action (call|sms|whatsapp|email), priority (very_important|important|normal),
+is_completed, completed_by_user_id, created_at
+```
+Helper properties: `isOverdue`, `isToday`, `isThisWeek`, `isLater`, `isLate`, `sortKey`.
+
+### task_assignees (join table)
+```
+task_id TEXT, user_id TEXT, assigned_at TEXT — PK (task_id, user_id)
+```
+`assigned_to_user_id` kept in `tasks` for SQLite backward compat (cannot drop columns); `task_assignees` is authoritative. Never read `assigned_to_user_id` directly — always use `AppTask.assigneeUserIds`.
 
 ### Schema version history
 
@@ -351,6 +377,11 @@ id, owner_id, type, title, body, scheduled_at, created_at, reference_id, is_read
 | 21 | Re-encrypt member emails with org key |
 | 22 | `payment_history.account_type` |
 | 23 | `users.apple_user_identifier` |
+| 24 | `org_members.phone` (org-key AES-encrypted) |
+| 25 | Org creator `role` promoted `admin` → `owner`; `users.org_role` synced |
+| 26 | `tasks` table (org task assignment) |
+| 27 | `task_assignees` join table (multi-member); legacy `assigned_to_user_id` kept in `tasks` |
+| 28 | `org_members.can_view_others_tasks` (default 0; 1 for admin/owner) |
 
 **Bump `_dbVersion` and add `if (oldVersion < N)` on every schema change. Never rewrite existing tables.**
 
@@ -389,11 +420,18 @@ Layout: `photos/profile_pictures/<userId>/` · `photos/contact_pictures/<userId>
 | `can_view_reminders` | see reminders on shared contacts |
 | `can_view_history` | see history from other members |
 | `can_export_contacts` | CSV/JSON export |
+| `can_view_others_tasks` | see tasks assigned to other members |
 
-Derived providers: `orgCanCreateProvider` · `orgCanEditOthersProvider` · `orgCanViewRemindersProvider` · `orgCanViewHistoryProvider` · `orgCanExportContactsProvider`.
+Derived providers: `orgCanCreateProvider` · `orgCanEditOthersProvider` · `orgCanViewRemindersProvider` · `orgCanViewHistoryProvider` · `orgCanExportContactsProvider` · `orgCanViewOthersTasksProvider` · `orgCurrentUserIsSuspendedProvider`.
 
 `ContactHistoryScreen` filters to current-user entries only when `orgCanViewHistoryProvider` is false.
 `OrgState.uniqueContactCount` is the deduplicated org total (not raw per-member sum).
+
+**Task access rules:**
+- `orgCurrentUserIsSuspendedProvider = true` → blocks all task view/create/interact operations; screens show a warning overlay.
+- `orgCanViewOthersTasksProvider = false` → `TasksScreen` defaults to "Mine" scope; "All" toggle is hidden.
+- Admin/owner can assign tasks to multiple members; regular members always self-assign on creation.
+- Edit: admin, owner, or task creator only. Complete/reopen: admin, owner, creator, or assignee. Delete: admin/owner only.
 
 ---
 
@@ -448,6 +486,7 @@ Release URL: `https://github.com/debouana-dev/me2leads-app/releases/download/v1.
 | Watch CI | `gh run list --limit 3` → `gh run watch <id> --exit-status` |
 | Manual sync | `/sync` → push/pull via `RemoteSyncService` |
 | Org-gated UI | Check relevant `orgCan…Provider` before action/display |
+| Org task | `lib/screens/tasks/` + `tasksProvider` + `syncTasksForOrg()` in `remote_sync_service.dart` |
 | Payment (Android/web) | `StripeService` |
 | Payment (iOS) | `RevenueCatService` |
 | Subscription change | `SubscriptionService` — never raw DB plan writes |
@@ -471,6 +510,8 @@ Release URL: `https://github.com/debouana-dev/me2leads-app/releases/download/v1.
 - **Stripe Link recovery.** Mid-flow Link browser redirects store a pending-recovery record in `StripeService`. Resume logic stays in `StripeService` — do not handle payment state in screens.
 - **RevenueCat.** Must be configured before any purchase attempt. Android/web use Stripe; iOS uses RevenueCat.
 - **Apple Sign-In.** `apple_user_identifier` matches accounts when Apple hides the email via relay.
+- **Task multi-assignee.** `task_assignees` is the source of truth; `tasks.assigned_to_user_id` is a legacy remnant (SQLite cannot drop columns). Never read it directly — always use `AppTask.assigneeUserIds`.
+- **Task suspension gate.** `orgCurrentUserIsSuspendedProvider` is checked at the top of `TasksScreen` and `CreateTaskScreen`. Suspended members see a warning overlay and cannot perform any task operations.
 - **Subscription lifecycle.** Grace periods: 1 day monthly, 5 days yearly. Auto-downgrade on expiry via `SubscriptionService` — never raw DB plan writes.
 - **Credentials.** PostgreSQL + FTP XOR-obfuscated in `app_config.dart` (key `MyLeads2026SecretKey`). Firebase/Stripe keys via `flutter_dotenv`. Never commit secrets.
 - **SQLite web.** `dart run sqflite_common_ffi_web:setup` required before `flutter build web` (CI handles this).
@@ -489,6 +530,7 @@ Release URL: `https://github.com/debouana-dev/me2leads-app/releases/download/v1.
 | doc v9 | v12 | Plan-gated sync, multi-device login, session preservation, `startUserSync`, Business 15-min bg sync, security-field helpers, `transferNonDuplicateContactsToAdmin`, `can_view_history`, `uniqueContactCount`, 47-case test suite |
 | doc v10 | v20 | MySQL→PostgreSQL (port 5432, `ON CONFLICT…DO UPDATE`), `can_export_contacts` + `orgCanExportContactsProvider` |
 | doc v11 | v23 | Stripe + RevenueCat, `SubscriptionService`, `PaymentRecord` / `payment_history`, `TransactionDetailScreen`, org licensing (v17), member profile fields (v18), org-key email encryption (v21), Apple Sign-In (v23), Firebase, `OcrDataSummary`, `PhonePrefixInput` |
+| doc v12 | v28 | Task management: `AppTask`, `tasksProvider`, `TasksScreen` / `CreateTaskScreen` / `TaskDetailScreen`, multi-member `task_assignees` (v27), `can_view_others_tasks` + `owner` role (v28), `syncTasksForOrg()`, task notifications + calendar integration |
 
 *When "doc vN" is referenced, match behavior to the nearest anchor and consult `git log --oneline`.*
 

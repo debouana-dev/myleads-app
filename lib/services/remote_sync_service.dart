@@ -50,6 +50,10 @@ class RemoteSyncService {
   // background tasks don't run all 6 CREATE TABLE statements on every call.
   static bool _schemaReady = false;
 
+  // Mirrors SQLite's _dbVersion. Bump this whenever _ensureSchema gains new
+  // DDL/migrations so the schema_migrations fast-path re-runs for existing DBs.
+  static const int _currentSchemaVersion = 29;
+
   /// Returns true when the current user's effective plan allows full data-table sync
   /// (premium or business). The `users` table is always synced regardless.
   static Future<bool> _hasSyncPlan() async {
@@ -176,6 +180,20 @@ class RemoteSyncService {
   // ── Schema bootstrap ─────────────────────────────────────────────────────────
 
   static Future<void> _ensureSchema(Connection conn) async {
+    // Version-tracking table — created first so the SELECT below always works.
+    await conn.execute('''
+      CREATE TABLE IF NOT EXISTS "schema_migrations" (
+        "version"    SMALLINT    PRIMARY KEY,
+        "applied_at" VARCHAR(50) NOT NULL
+      )
+    ''');
+
+    // Fast-path: if this version has already been applied, skip all DDL/migrations.
+    final versionRes = await conn.execute(
+      'SELECT 1 FROM "schema_migrations" WHERE "version" = $_currentSchemaVersion LIMIT 1',
+    );
+    if (versionRes.isNotEmpty) return;
+
     await conn.execute('''
       CREATE TABLE IF NOT EXISTS "users" (
         "id"                  VARCHAR(36)  NOT NULL,
@@ -525,6 +543,90 @@ class RemoteSyncService {
       WHERE "assigned_to_user_id" IS NOT NULL AND "assigned_to_user_id" != ''
       ON CONFLICT ("task_id", "user_id") DO NOTHING
     ''');
+
+    // v29: dedicated access-control table extracted from organization_members.
+    // The can_* columns in organization_members are kept for backward compat
+    // but are no longer the authority — org_member_permissions is.
+    await conn.execute('''
+      CREATE TABLE IF NOT EXISTS "org_member_permissions" (
+        "id"                    VARCHAR(36)  NOT NULL,
+        "organization_id"       VARCHAR(36)  NOT NULL,
+        "user_id"               VARCHAR(36)  NOT NULL,
+        "can_edit"              SMALLINT     NOT NULL DEFAULT 0,
+        "can_create"            SMALLINT     NOT NULL DEFAULT 1,
+        "can_view_reminders"    SMALLINT     NOT NULL DEFAULT 0,
+        "can_view_history"      SMALLINT     NOT NULL DEFAULT 0,
+        "can_export_contacts"   SMALLINT     NOT NULL DEFAULT 0,
+        "can_view_others_tasks" SMALLINT     NOT NULL DEFAULT 0,
+        "updated_at"            VARCHAR(50)  NOT NULL DEFAULT '',
+        PRIMARY KEY ("id"),
+        UNIQUE ("organization_id", "user_id")
+      )
+    ''');
+    await conn.execute(
+      'CREATE INDEX IF NOT EXISTS "idx_omp_org" ON "org_member_permissions" ("organization_id")',
+    );
+    await conn.execute(
+      'CREATE INDEX IF NOT EXISTS "idx_omp_user" ON "org_member_permissions" ("user_id")',
+    );
+
+    // Migrate existing privilege data from organization_members (idempotent).
+    // Runs before RLS is enabled so the table owner can write freely.
+    await conn.execute('''
+      INSERT INTO "org_member_permissions"
+        ("id", "organization_id", "user_id",
+         "can_edit", "can_create", "can_view_reminders",
+         "can_view_history", "can_export_contacts", "can_view_others_tasks",
+         "updated_at")
+      SELECT "id", "organization_id", "user_id",
+             "can_edit", "can_create", "can_view_reminders",
+             "can_view_history", "can_export_contacts", "can_view_others_tasks",
+             NOW()
+      FROM "organization_members"
+      ON CONFLICT ("id") DO NOTHING
+    ''');
+
+    // Enable RLS: restricts SELECT so regular members can only read their own row.
+    // FORCE is intentionally omitted — the app's DB user owns the table and can
+    // bypass RLS for schema operations. App-level code is the primary access guard;
+    // RLS adds a defence-in-depth layer for future non-owner connection roles.
+    await conn.execute(
+      'ALTER TABLE "org_member_permissions" ENABLE ROW LEVEL SECURITY',
+    );
+    await conn.execute(
+      'DROP POLICY IF EXISTS "omp_select" ON "org_member_permissions"',
+    );
+    // Policy: admin/owner sees all rows for their org; member sees only own row.
+    // The app sets SET LOCAL app.current_user_id = ? inside a transaction before
+    // every SELECT on this table so current_setting() resolves correctly.
+    await conn.execute('''
+      CREATE POLICY "omp_select" ON "org_member_permissions"
+        FOR SELECT
+        USING (
+          "org_member_permissions"."user_id"
+              = current_setting('app.current_user_id', true)
+          OR EXISTS (
+            SELECT 1 FROM "organization_members" om
+            WHERE om."organization_id" = "org_member_permissions"."organization_id"
+              AND om."user_id" = current_setting('app.current_user_id', true)
+              AND om."role" IN ('admin', 'owner')
+              AND om."status" = 'active'
+          )
+        )
+    ''');
+
+    // Stamp the applied version so future calls fast-path past all DDL above.
+    await conn.execute(
+      Sql.named('''
+        INSERT INTO "schema_migrations" ("version", "applied_at")
+        VALUES (@v, @at)
+        ON CONFLICT ("version") DO UPDATE SET "applied_at" = EXCLUDED."applied_at"
+      '''),
+      parameters: {
+        'v': _currentSchemaVersion,
+        'at': DateTime.now().toUtc().toIso8601String(),
+      },
+    );
   }
 
   // ── Cloud user helpers ───────────────────────────────────────────────────────
@@ -764,6 +866,8 @@ class RemoteSyncService {
             await upsertOrganization(conn, row);
           case 'organization_members':
             await upsertOrgMember(conn, row);
+          case 'org_member_permissions':
+            await upsertOrgMemberPermission(conn, row);
           case 'payment_history':
             await _upsertPaymentRecord(conn, row);
           case 'tasks':
@@ -865,8 +969,10 @@ class RemoteSyncService {
     if (conn == null) return SyncResult.err('auth_failed');
 
     try {
-      await _ensureSchema(conn);
-      _schemaReady = true;
+      if (!_schemaReady) {
+        await _ensureSchema(conn);
+        _schemaReady = true;
+      }
 
       // Determine whether full data-table sync is allowed for this user.
       // Org-covered free-plan users receive business-level sync privileges.
@@ -920,6 +1026,17 @@ class RemoteSyncService {
           final members = await DatabaseService.getRawOrgMemberRows(orgId);
           for (final row in members) {
             await upsertOrgMember(conn, row);
+          }
+
+          // Push org_member_permissions only when the current user is an
+          // active admin or owner — regular members must not write this table.
+          final userOrgRole = userRow?['org_role'] as String?;
+          if (userOrgRole == 'admin' || userOrgRole == 'owner') {
+            final permRows =
+                await DatabaseService.getRawPermissionRows(orgId);
+            for (final row in permRows) {
+              await upsertOrgMemberPermission(conn, row);
+            }
           }
 
           // Tasks
@@ -1170,6 +1287,7 @@ class RemoteSyncService {
       final orgId = await _remoteOrgIdForUser(conn, userId);
       var pullOwnerIds = <String>[userId];
       var canPullOrgReminders = false;
+      var isAdminOrOwner = false;
 
       if (orgId != null) {
         final memResult = await conn.execute(
@@ -1188,6 +1306,7 @@ class RemoteSyncService {
             final role = m['role']?.toString();
             final cvr = m['can_view_reminders']?.toString();
             canPullOrgReminders = role == 'admin' || cvr == '1';
+            isAdminOrOwner = role == 'admin' || role == 'owner';
           }
         }
         pullOwnerIds = pullOwnerIds.toSet().toList();
@@ -1294,6 +1413,49 @@ class RemoteSyncService {
         }
         // Reconcile: remove local members that no longer exist in the cloud.
         await DatabaseService.reconcileOrgMembers(orgId, memberUserIds);
+
+        // ── org_member_permissions ─────────────────────────────────────────
+        // Admin/owner: pull all rows for the org.
+        // Regular member: pull only own row.
+        // SET LOCAL app.current_user_id inside a transaction so the RLS
+        // SELECT policy resolves correctly for non-owner DB connections.
+        try {
+          if (isAdminOrOwner) {
+            await conn.runTx((tx) async {
+              await tx.execute(
+                Sql.named('SET LOCAL app.current_user_id = @uid'),
+                parameters: {'uid': userId},
+              );
+              final permRes = await tx.execute(
+                Sql.named(
+                    'SELECT * FROM "org_member_permissions" WHERE "organization_id" = @orgId'),
+                parameters: {'orgId': orgId},
+              );
+              for (final row in permRes) {
+                await DatabaseService.upsertRawRow('org_member_permissions',
+                    _normaliseBools(row.toColumnMap(), _permBoolCols));
+              }
+            });
+          } else {
+            await conn.runTx((tx) async {
+              await tx.execute(
+                Sql.named('SET LOCAL app.current_user_id = @uid'),
+                parameters: {'uid': userId},
+              );
+              final permRes = await tx.execute(
+                Sql.named(
+                    'SELECT * FROM "org_member_permissions" WHERE "organization_id" = @orgId AND "user_id" = @uid'),
+                parameters: {'orgId': orgId, 'uid': userId},
+              );
+              for (final row in permRes) {
+                await DatabaseService.upsertRawRow('org_member_permissions',
+                    _normaliseBools(row.toColumnMap(), _permBoolCols));
+              }
+            });
+          }
+        } catch (e) {
+          debugPrint('RemoteSyncService pull org_member_permissions: $e');
+        }
 
         // ── Tasks ─────────────────────────────────────────────────────────
         final taskRes = await conn.execute(
@@ -1768,7 +1930,10 @@ class RemoteSyncService {
     final conn = await _connect();
     if (conn == null) return;
     try {
-      await _ensureSchema(conn);
+      if (!_schemaReady) {
+        await _ensureSchema(conn);
+        _schemaReady = true;
+      }
       await conn.execute(
         Sql.named(
             'DELETE FROM "organization_members" WHERE "organization_id" = @id'),
@@ -1948,6 +2113,9 @@ class RemoteSyncService {
 
   static Future<void> upsertOrgMember(
       Connection conn, Map<String, dynamic> r) async {
+    // can_* columns are included in INSERT for backward compat with pre-v29 rows,
+    // but are intentionally excluded from ON CONFLICT DO UPDATE — org_member_permissions
+    // is the authority for privileges and is upserted separately.
     await conn.execute(
       Sql.named('''
         INSERT INTO "organization_members"
@@ -1962,12 +2130,7 @@ class RemoteSyncService {
           role=EXCLUDED.role,status=EXCLUDED.status,
           first_name=EXCLUDED.first_name,last_name=EXCLUDED.last_name,
           email=EXCLUDED.email,phone=EXCLUDED.phone,nickname=EXCLUDED.nickname,company=EXCLUDED.company,
-          biography=EXCLUDED.biography,photo_path=EXCLUDED.photo_path,
-          can_edit=EXCLUDED.can_edit,can_create=EXCLUDED.can_create,
-          can_view_reminders=EXCLUDED.can_view_reminders,
-          can_view_history=EXCLUDED.can_view_history,
-          can_export_contacts=EXCLUDED.can_export_contacts,
-          can_view_others_tasks=EXCLUDED.can_view_others_tasks
+          biography=EXCLUDED.biography,photo_path=EXCLUDED.photo_path
       '''),
       parameters: {
         'id': r['id'],
@@ -1990,6 +2153,48 @@ class RemoteSyncService {
         'can_view_history': r['can_view_history'] ?? 0,
         'can_export_contacts': r['can_export_contacts'] ?? 0,
         'can_view_others_tasks': r['can_view_others_tasks'] ?? 0,
+      },
+    );
+  }
+
+  /// Upserts a single row into org_member_permissions.
+  /// Called by admin/owner push path. Uses a transaction with SET LOCAL to
+  /// set the current_user_id GUC so the RLS SELECT policy resolves correctly
+  /// for subsequent reads on the same connection.
+  static Future<void> upsertOrgMemberPermission(
+      Connection conn, Map<String, dynamic> r) async {
+    await conn.execute(
+      Sql.named('''
+        INSERT INTO "org_member_permissions"
+          (id,organization_id,user_id,
+           can_edit,can_create,can_view_reminders,
+           can_view_history,can_export_contacts,can_view_others_tasks,
+           updated_at)
+        VALUES
+          (@id,@organization_id,@user_id,
+           @can_edit,@can_create,@can_view_reminders,
+           @can_view_history,@can_export_contacts,@can_view_others_tasks,
+           @updated_at)
+        ON CONFLICT (id) DO UPDATE SET
+          can_edit=EXCLUDED.can_edit,
+          can_create=EXCLUDED.can_create,
+          can_view_reminders=EXCLUDED.can_view_reminders,
+          can_view_history=EXCLUDED.can_view_history,
+          can_export_contacts=EXCLUDED.can_export_contacts,
+          can_view_others_tasks=EXCLUDED.can_view_others_tasks,
+          updated_at=EXCLUDED.updated_at
+      '''),
+      parameters: {
+        'id': r['id'],
+        'organization_id': r['organization_id'],
+        'user_id': r['user_id'],
+        'can_edit': r['can_edit'] ?? 0,
+        'can_create': r['can_create'] ?? 1,
+        'can_view_reminders': r['can_view_reminders'] ?? 0,
+        'can_view_history': r['can_view_history'] ?? 0,
+        'can_export_contacts': r['can_export_contacts'] ?? 0,
+        'can_view_others_tasks': r['can_view_others_tasks'] ?? 0,
+        'updated_at': r['updated_at'] ?? DateTime.now().toIso8601String(),
       },
     );
   }
@@ -2123,6 +2328,15 @@ class RemoteSyncService {
   static const _userBoolCols = {'email_verified'};
   static const _reminderBoolCols = {'is_completed'};
   static const _memberBoolCols = {
+    'can_edit',
+    'can_create',
+    'can_view_reminders',
+    'can_view_history',
+    'can_export_contacts',
+    'can_view_others_tasks',
+  };
+
+  static const _permBoolCols = {
     'can_edit',
     'can_create',
     'can_view_reminders',

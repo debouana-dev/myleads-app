@@ -232,10 +232,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // If the email has not been verified yet, send a verification code and
     // block login until verification is complete.
     if (!user.emailVerified) {
-      await sendVerificationCode(email);
+      final sendErr = await sendVerificationCode(email);
       state = state.copyWith(
         isLoading: false,
-        error: _l10n.authEmailNotVerified(email),
+        error: sendErr ?? _l10n.authEmailNotVerified(email),
         requiresEmailVerification: true,
       );
       return false;
@@ -847,7 +847,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     // Send the 6-digit code to the new address.
-    final sendErr = await sendVerificationCode(newEmail.trim());
+    final sendErr =
+        await sendVerificationCode(newEmail.trim(), forEmailChange: true);
     if (sendErr != null) return sendErr;
 
     // For premium/business non-org users: pull the latest cloud data in the
@@ -1067,7 +1068,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     // Try to send email.
     final sent = await EmailService.sendRecoveryEmail(email, code);
     if (!sent) {
-      debugPrint('AuthNotifier.sendRecoveryCode: failed to send email to $email');
+      return "Impossible d'envoyer l'email de récupération. Vérifiez votre connexion ou contactez le support.";
     }
 
     return null; // success
@@ -1174,7 +1175,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// it via [EmailService].
   ///
   /// Returns `null` on success, or an error string on failure.
-  Future<String?> sendVerificationCode(String email) async {
+  Future<String?> sendVerificationCode(String email,
+      {bool forEmailChange = false}) async {
     final emailErr = Validators.validateEmail(email);
     if (emailErr != null) return emailErr;
 
@@ -1188,9 +1190,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
 
     // Try to send email.
-    final sent = await EmailService.sendVerificationEmail(email, code);
+    final sent = forEmailChange
+        ? await EmailService.sendEmailChangeVerificationEmail(email, code)
+        : await EmailService.sendVerificationEmail(email, code);
     if (!sent) {
-      debugPrint('AuthNotifier.sendVerificationCode: failed to send email to $email');
+      return "Impossible d'envoyer l'email de vérification à $email. Veuillez vérifier l'adresse ou réessayer plus tard.";
     }
 
     return null; // success

@@ -500,6 +500,10 @@ class AppL10n {
       : 'Consultez nos conditions de remboursement';
   String get helpLabel => _en ? 'Help' : 'Aide';
   String get helpDesc => _en ? 'Support & Legal' : 'Assistance & Légal';
+  String get termsOfUse => _en ? 'Terms of Use' : 'Conditions d\'utilisation';
+  String get termsOfUseDesc => _en
+      ? 'Read our terms and conditions'
+      : 'Lire nos conditions d\'utilisation';
   String get photoTooLarge => _en
       ? 'Image too large. Maximum allowed size is 5 MB.'
       : "L'image est trop volumineuse. La taille maximale autorisée est de 5 Mo.";
@@ -1358,6 +1362,9 @@ class AppL10n {
   String get noTaskDesc => _en
       ? 'Tasks assigned to the team will appear here.'
       : "Les tâches assignées à l'équipe apparaîtront ici.";
+  String get noMyTaskDesc => _en
+      ? 'Tasks assigned to you will appear here.'
+      : 'Les tâches qui vous sont assignées apparaîtront ici.';
   String get deleteTaskTitle => _en ? 'Delete task?' : 'Supprimer la tâche ?';
   String get deleteTaskWarning =>
       _en ? 'This action is irreversible.' : 'Cette action est irréversible.';

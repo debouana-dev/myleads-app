@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -134,11 +133,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
+  Future<void> _launchTermsOfUse() async {
+    final url = Uri.parse('https://me2leads.com/terms');
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Could not launch $url: $e');
+    }
+  }
+
   void _showHelpBottomSheet() {
     final l10n = ref.read(l10nProvider);
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => Container(
         decoration: BoxDecoration(
           color: AppColors.surfaceColor(context),
@@ -176,6 +187,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               () {
                 Navigator.pop(context);
                 _launchContactUs();
+              },
+            ),
+            _menuItem(
+              context,
+              Icons.description_rounded,
+              l10n.termsOfUse,
+              l10n.termsOfUseDesc,
+              AppColors.cold.withOpacity(0.1),
+              AppColors.cold,
+              () {
+                Navigator.pop(context);
+                _launchTermsOfUse();
               },
             ),
             _menuItem(
@@ -437,22 +460,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             : l10n.orgMemberMenuDesc,
                         AppColors.primary.withValues(alpha: 0.08),
                         AppColors.primary,
-                        () async {
-                          final l10nRead = ref.read(l10nProvider);
-                          final connectivity =
-                              await Connectivity().checkConnectivity();
-                          if (!context.mounted) return;
-                          if (connectivity.contains(ConnectivityResult.none)) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                              content:
-                                  Text(l10nRead.orgScreenRequiresInternet),
-                              backgroundColor: AppColors.hot,
-                              duration: const Duration(seconds: 2),
-                            ));
-                            return;
-                          }
-                          context.push('/organization');
-                        },
+                        () => context.push('/organization'),
                       )
                     else ...[
                       _menuItem(
@@ -515,7 +523,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         color: AppColors.hint(context).withOpacity(0.6),
                       ),
                     ),
-                    const SizedBox(height: 100),
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),

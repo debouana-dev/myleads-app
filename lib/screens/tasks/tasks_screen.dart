@@ -30,7 +30,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    Future.microtask(() => _loadData());
   }
 
   Future<void> _loadData() async {
@@ -232,7 +232,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                           ? ListView(
                               physics: const AlwaysScrollableScrollPhysics(),
                               children: [
-                                SizedBox(height: 300, child: _buildEmpty(l10n)),
+                                SizedBox(height: 300, child: _buildEmpty(l10n, scopeAll: effectiveScopeAll)),
                               ],
                             )
                           : ListView.builder(
@@ -256,7 +256,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
     );
   }
 
-  Widget _buildEmpty(AppL10n l10n) {
+  Widget _buildEmpty(AppL10n l10n, {required bool scopeAll}) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -278,7 +278,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
                   fontWeight: FontWeight.w700,
                   color: AppColors.onSurface(context))),
           const SizedBox(height: 6),
-          Text(l10n.noTaskDesc,
+          Text(scopeAll ? l10n.noTaskDesc : l10n.noMyTaskDesc,
               textAlign: TextAlign.center,
               style:
                   TextStyle(fontSize: 13, color: AppColors.secondary(context))),
