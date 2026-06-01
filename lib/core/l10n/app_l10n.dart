@@ -1362,6 +1362,9 @@ class AppL10n {
   String get noTaskDesc => _en
       ? 'Tasks assigned to the team will appear here.'
       : "Les tâches assignées à l'équipe apparaîtront ici.";
+  String get noMyTaskDesc => _en
+      ? 'Tasks assigned to you will appear here.'
+      : 'Les tâches qui vous sont assignées apparaîtront ici.';
   String get deleteTaskTitle => _en ? 'Delete task?' : 'Supprimer la tâche ?';
   String get deleteTaskWarning =>
       _en ? 'This action is irreversible.' : 'Cette action est irréversible.';
