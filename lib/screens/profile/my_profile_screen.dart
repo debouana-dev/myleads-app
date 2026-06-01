@@ -170,9 +170,10 @@ class _MyProfileScreenState extends ConsumerState<MyProfileScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
+        final l10n = ref.read(l10nProvider);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur: ${e.toString()}'),
+            content: Text(l10n.error(e.toString())),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
             shape:

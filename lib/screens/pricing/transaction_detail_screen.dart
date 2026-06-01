@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -339,9 +340,9 @@ class TransactionDetailScreen extends ConsumerWidget {
               divider(),
               infoRow(l10n.billingCycleLabel, cycleLabel),
               divider(),
-              infoRow(l10n.date, _formatDateTimePdf(paidAt)),
+              infoRow(l10n.date, _formatDateTimePdf(paidAt, l10n)),
               divider(),
-              infoRow(l10n.validUntil, _formatDatePdf(validUntil)),
+              infoRow(l10n.validUntil, _formatDatePdf(validUntil, l10n)),
               divider(),
               infoRow(l10n.amount, displayAmount, bold: true),
               divider(),
@@ -424,22 +425,13 @@ class TransactionDetailScreen extends ConsumerWidget {
     );
   }
 
-  String _formatDateTimePdf(DateTime d) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    final h = d.hour.toString().padLeft(2, '0');
-    final m = d.minute.toString().padLeft(2, '0');
-    return '${d.day} ${months[d.month - 1]} ${d.year} · $h:$m';
+  String _formatDateTimePdf(DateTime d, AppL10n l10n) {
+    return DateFormat('dd MMM yyyy · HH:mm', l10n.isEnglish ? 'en' : 'fr')
+        .format(d);
   }
 
-  String _formatDatePdf(DateTime d) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    return '${d.day} ${months[d.month - 1]} ${d.year}';
+  String _formatDatePdf(DateTime d, AppL10n l10n) {
+    return DateFormat('dd MMM yyyy', l10n.isEnglish ? 'en' : 'fr').format(d);
   }
 
   String _formatAmountRaw(double amt, String storedCurrency) {
@@ -689,10 +681,10 @@ class _ReceiptCard extends StatelessWidget {
                 _rowDivider(context),
                 _infoRow(context, l10n.billingCycleLabel, cycleLabel),
                 _rowDivider(context),
-                _infoRow(context, l10n.date, _formatDateTime(paidAt)),
+                _infoRow(context, l10n.date, _formatDateTime(paidAt, l10n)),
                 _rowDivider(context),
                 _infoRow(
-                    context, l10n.validUntil, _formatDate(validUntil)),
+                    context, l10n.validUntil, _formatDate(validUntil, l10n)),
                 _rowDivider(context),
                 _infoRow(
                     context,
@@ -868,22 +860,13 @@ class _ReceiptCard extends StatelessWidget {
     }
   }
 
-  String _formatDateTime(DateTime d) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    final h = d.hour.toString().padLeft(2, '0');
-    final m = d.minute.toString().padLeft(2, '0');
-    return '${d.day} ${months[d.month - 1]} ${d.year} · $h:$m';
+  String _formatDateTime(DateTime d, AppL10n l10n) {
+    return DateFormat('dd MMM yyyy · HH:mm', l10n.isEnglish ? 'en' : 'fr')
+        .format(d);
   }
 
-  String _formatDate(DateTime d) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    return '${d.day} ${months[d.month - 1]} ${d.year}';
+  String _formatDate(DateTime d, AppL10n l10n) {
+    return DateFormat('dd MMM yyyy', l10n.isEnglish ? 'en' : 'fr').format(d);
   }
 
   String _formatAmountRaw(double amt, String storedCurrency) {

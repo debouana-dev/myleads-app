@@ -537,7 +537,7 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
         ),
         const SizedBox(width: 16),
         _LegalLink(
-          label: l10n.isEnglish ? 'Terms of Use / EULA' : 'Conditions / EULA',
+          label: l10n.termsOfUseEula,
           url:
               'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/?utm_source=chatgpt.com',
         ),
@@ -545,51 +545,11 @@ class _SubscriptionPlanScreenState extends ConsumerState<SubscriptionPlanScreen>
     );
   }
 
-  List<String> _freeFeatures(AppL10n l10n) => l10n.isEnglish
-      ? [
-          '10 contacts max',
-          'Business card scan',
-          'Hot · Warm · Cold tags',
-          'Encrypted local storage',
-        ]
-      : [
-          '10 contacts max',
-          'Scan carte de visite',
-          'Tags: Hot · Warm · Cold',
-          'Stockage local chiffré',
-        ];
+  List<String> _freeFeatures(AppL10n l10n) => l10n.freeFeatures;
 
-  List<String> _premiumFeatures(AppL10n l10n) => l10n.isEnglish
-      ? [
-          'Unlimited contacts',
-          'OCR + QR scan',
-          'CSV / CRM export',
-          'Cloud sync',
-          'Priority support',
-        ]
-      : [
-          'Contacts illimités',
-          'Scan OCR + QR',
-          'Export CSV / CRM',
-          'Synchronisation cloud',
-          'Support prioritaire',
-        ];
+  List<String> _premiumFeatures(AppL10n l10n) => l10n.premiumFeatures;
 
-  List<String> _businessFeatures(AppL10n l10n) => l10n.isEnglish
-      ? [
-          'All Premium included',
-          'Multi-user management',
-          'Shared team space',
-          'Auto cloud sync',
-          'Dedicated onboarding',
-        ]
-      : [
-          'Tout Premium inclus',
-          'Gestion multi-utilisateurs',
-          'Espace équipe partagé',
-          'Synchronisation cloud automatique',
-          'Onboarding dédié',
-        ];
+  List<String> _businessFeatures(AppL10n l10n) => l10n.businessFeatures;
 }
 
 class _BillingToggle extends StatelessWidget {

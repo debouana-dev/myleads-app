@@ -156,7 +156,7 @@ class _PricingScreenState extends ConsumerState<PricingScreen>
     }
 
     if (Platform.isAndroid && !_stripeReady) {
-      _showSnack('Stripe not configured', AppColors.warning);
+      _showSnack(l10n.stripeNotConfigured, AppColors.warning);
       return;
     }
     setState(() {

@@ -150,6 +150,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => Container(
         decoration: BoxDecoration(
           color: AppColors.surfaceColor(context),
@@ -361,17 +362,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     const SizedBox(height: 20),
                     Row(
                       children: [
-                        _statItem('${contacts.totalContacts}', 'Contacts'),
+                        _statItem('${contacts.totalContacts}', l10n.contacts),
                         Container(
                             width: 1,
                             height: 30,
                             color: Colors.white.withOpacity(0.1)),
-                        _statItem('${contacts.hotLeads}', 'Hot Leads'),
+                        _statItem('${contacts.hotLeads}', l10n.hotLabel),
                         Container(
                             width: 1,
                             height: 30,
                             color: Colors.white.withOpacity(0.1)),
-                        _statItem('${contacts.warmLeads}', 'Warm'),
+                        _statItem('${contacts.warmLeads}', l10n.warmLabel),
                       ],
                     ),
                   ],

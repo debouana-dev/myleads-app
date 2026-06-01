@@ -260,20 +260,7 @@ class ReminderDetailScreen extends ConsumerWidget {
   }
 
   String _repeatLabel(String f, AppL10n l10n) {
-    switch (f) {
-      case '30m':
-        return l10n.repeat30min;
-      case '1h':
-        return l10n.repeatHourly;
-      case '1d':
-        return l10n.repeatDaily;
-      case '1w':
-        return l10n.repeatWeekly;
-      case '1mo':
-        return l10n.repeatMonthly;
-      default:
-        return f;
-    }
+    return l10n.formatRepeatFrequency(f);
   }
 
   Widget _section(BuildContext context, String title, Widget child) {

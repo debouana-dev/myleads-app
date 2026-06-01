@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/l10n/app_l10n.dart';
 import '../../core/theme/app_colors.dart';
@@ -463,7 +464,7 @@ class _TransactionCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    _formatDateTime(transaction.date),
+                    _formatDateTime(transaction.date, l10n),
                     style: TextStyle(
                       fontSize: 12,
                       color: AppColors.secondary(context),
@@ -500,24 +501,9 @@ class _TransactionCard extends StatelessWidget {
     }
   }
 
-  String _formatDateTime(DateTime d) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    final h = d.hour.toString().padLeft(2, '0');
-    final m = d.minute.toString().padLeft(2, '0');
-    return '${d.day} ${months[d.month - 1]} ${d.year} · $h:$m';
+  String _formatDateTime(DateTime d, AppL10n l10n) {
+    return DateFormat('dd MMM yyyy · HH:mm', l10n.isEnglish ? 'en' : 'fr')
+        .format(d);
   }
 
   String _methodLabel(String method, AppL10n l10n) {

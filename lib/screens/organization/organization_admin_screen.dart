@@ -572,7 +572,8 @@ class _OrganizationAdminScreenState
           org.orgPlanExpiresAt, billingCycle);
       if (renewalStart != null) {
         final formattedDate =
-            '${renewalStart.day.toString().padLeft(2, '0')}/${renewalStart.month.toString().padLeft(2, '0')}/${renewalStart.year}';
+            DateFormat('dd/MM/yyyy', l10n.isEnglish ? 'en' : 'fr')
+                .format(renewalStart);
         _showSnack(l10n.orgRenewalWindowNotOpen(formattedDate), error: true);
       } else {
         _showSnack(l10n.orgRenewalWindowNotOpenGeneric, error: true);
@@ -580,8 +581,8 @@ class _OrganizationAdminScreenState
       return;
     }
 
-    if (Platform.isAndroid && !AppConfig.stripePublishableKey.isNotEmpty) {
-      _showSnack('Stripe not configured', error: true);
+    if (Platform.isAndroid && AppConfig.stripePublishableKey.isEmpty) {
+      _showSnack(l10n.stripeNotConfigured, error: true);
       return;
     }
 

@@ -706,14 +706,15 @@ class _SectionHeader extends StatelessWidget {
 // Hot Lead Card
 // ---------------------------------------------------------------------------
 
-class _HotLeadCard extends StatelessWidget {
+class _HotLeadCard extends ConsumerWidget {
   final Contact contact;
   final VoidCallback onTap;
 
   const _HotLeadCard({required this.contact, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = ref.watch(l10nProvider);
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -815,9 +816,9 @@ class _HotLeadCard extends StatelessWidget {
                     color: AppColors.hot,
                   ),
                   const SizedBox(width: 4),
-                  const Text(
-                    'HOT',
-                    style: TextStyle(
+                  Text(
+                    l10n.hotBadge,
+                    style: const TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
                       color: AppColors.hot,

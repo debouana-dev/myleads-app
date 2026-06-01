@@ -47,7 +47,8 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
   String _formatTs(String iso, AppL10n l10n) {
     try {
       final dt = DateTime.parse(iso).toLocal();
-      return DateFormat('dd MMM yyyy – HH:mm').format(dt);
+      return DateFormat('dd MMM yyyy – HH:mm', l10n.isEnglish ? 'en' : 'fr')
+          .format(dt);
     } catch (_) {
       return iso;
     }

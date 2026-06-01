@@ -19,39 +19,38 @@ class ContactActions {
 
   /// Open the default phone app with the contact's number ready to call.
   static Future<bool> call(BuildContext context, Contact contact) async {
+    final l10n = ProviderScope.containerOf(context).read(l10nProvider);
     if (contact.phone == null || contact.phone!.trim().isEmpty) {
-      final l10n = ProviderScope.containerOf(context).read(l10nProvider);
       _toast(context, l10n.contactNoPhone);
       return false;
     }
     final uri = Uri(scheme: 'tel', path: _cleanPhone(contact.phone!));
     ActionTracker.markPendingAction(contact.id, 'call');
-    return _launch(context, uri, 'Impossible d\'ouvrir l\'application Téléphone');
+    return _launch(context, uri, l10n.errCannotOpenPhone);
   }
 
   /// Open the default SMS app with the contact's number ready to send a message.
   static Future<bool> sms(BuildContext context, Contact contact) async {
+    final l10n = ProviderScope.containerOf(context).read(l10nProvider);
     if (contact.phone == null || contact.phone!.trim().isEmpty) {
-      final l10n = ProviderScope.containerOf(context).read(l10nProvider);
       _toast(context, l10n.contactNoPhone);
       return false;
     }
     final uri = Uri(scheme: 'sms', path: _cleanPhone(contact.phone!));
     ActionTracker.markPendingAction(contact.id, 'sms');
-    return _launch(context, uri, 'Impossible d\'ouvrir l\'application SMS');
+    return _launch(context, uri, l10n.errCannotOpenSms);
   }
 
   /// Open WhatsApp with the contact's number ready to chat.
   static Future<bool> whatsapp(BuildContext context, Contact contact) async {
+    final l10n = ProviderScope.containerOf(context).read(l10nProvider);
     if (contact.phone == null || contact.phone!.trim().isEmpty) {
-      final l10n = ProviderScope.containerOf(context).read(l10nProvider);
       _toast(context, l10n.contactNoPhone);
       return false;
     }
     // WhatsApp expects digits only, no leading + or spaces.
     final digits = contact.phone!.replaceAll(RegExp(r'[^0-9]'), '');
     if (digits.isEmpty) {
-      final l10n = ProviderScope.containerOf(context).read(l10nProvider);
       _toast(context, l10n.contactInvalidPhone);
       return false;
     }
@@ -60,15 +59,15 @@ class ContactActions {
     return _launch(
       context,
       uri,
-      'Impossible d\'ouvrir WhatsApp',
+      l10n.errCannotOpenWhatsapp,
       mode: LaunchMode.externalApplication,
     );
   }
 
   /// Open the default email app with a new message addressed to the contact.
   static Future<bool> email(BuildContext context, Contact contact) async {
+    final l10n = ProviderScope.containerOf(context).read(l10nProvider);
     if (contact.email == null || contact.email!.trim().isEmpty) {
-      final l10n = ProviderScope.containerOf(context).read(l10nProvider);
       _toast(context, l10n.contactNoEmail);
       return false;
     }
@@ -77,11 +76,12 @@ class ContactActions {
       path: contact.email!.trim(),
     );
     ActionTracker.markPendingAction(contact.id, 'email');
-    return _launch(context, uri, 'Impossible d\'ouvrir l\'application Email');
+    return _launch(context, uri, l10n.errCannotOpenEmail);
   }
 
   /// Share the contact profile as text via the system share sheet.
   static Future<void> share(BuildContext context, Contact contact) async {
+    final l10n = ProviderScope.containerOf(context).read(l10nProvider);
     final buf = StringBuffer();
     buf.writeln(contact.fullName);
     if (contact.jobTitle != null && contact.jobTitle!.isNotEmpty) {
@@ -92,23 +92,23 @@ class ContactActions {
     }
     buf.writeln();
     if (contact.phone != null && contact.phone!.isNotEmpty) {
-      buf.writeln('Téléphone : ${contact.phone}');
+      buf.writeln('${l10n.phoneLabel} : ${contact.phone}');
     }
     if (contact.email != null && contact.email!.isNotEmpty) {
-      buf.writeln('Email : ${contact.email}');
+      buf.writeln('${l10n.emailLabel} : ${contact.email}');
     }
     if (contact.source != null && contact.source!.isNotEmpty) {
-      buf.writeln('Source : ${contact.source}');
+      buf.writeln('${l10n.sourceLabel} : ${contact.source}');
     }
     if (contact.project1 != null && contact.project1!.isNotEmpty) {
-      buf.write('Projet 1 : ${contact.project1}');
+      buf.write('${l10n.project1Label} : ${contact.project1}');
       if (contact.project1Budget != null && contact.project1Budget!.isNotEmpty) {
         buf.write(' (${contact.project1Budget})');
       }
       buf.writeln();
     }
     if (contact.project2 != null && contact.project2!.isNotEmpty) {
-      buf.write('Projet 2 : ${contact.project2}');
+      buf.write('${l10n.project2Label} : ${contact.project2}');
       if (contact.project2Budget != null && contact.project2Budget!.isNotEmpty) {
         buf.write(' (${contact.project2Budget})');
       }
@@ -116,15 +116,15 @@ class ContactActions {
     }
     if (contact.notes != null && contact.notes!.isNotEmpty) {
       buf.writeln();
-      buf.writeln('Notes : ${contact.notes}');
+      buf.writeln('${l10n.notesLabel} : ${contact.notes}');
     }
     buf.writeln();
-    buf.writeln('Partagé via Me2Leads');
+    buf.writeln(l10n.sharedViaMe2Leads);
 
     await SharePlus.instance.share(
       ShareParams(
         text: buf.toString(),
-        subject: 'Contact : ${contact.fullName}',
+        subject: l10n.contactSubject(contact.fullName),
       ),
     );
   }

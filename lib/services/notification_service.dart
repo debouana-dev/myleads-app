@@ -272,7 +272,7 @@ class NotificationService {
         _detailsForPriority(priority),
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
+        UILocalNotificationDateInterpretation.absoluteTime,
       );
     } catch (_) {}
   }
@@ -303,7 +303,7 @@ class NotificationService {
     if (ownerId.isEmpty) return;
 
     final scheduledAt =
-        reminder.startDateTime.subtract(const Duration(minutes: 15));
+    reminder.startDateTime.subtract(const Duration(minutes: 15));
     final now = DateTime.now();
 
     final title = 'Rappel dans 15 min';
@@ -639,7 +639,7 @@ class NotificationService {
       AppTask task, String assigneeId) async {
     if (kIsWeb || !_initialized) return;
     final scheduledAt =
-        task.startDateTime.subtract(const Duration(minutes: 15));
+    task.startDateTime.subtract(const Duration(minutes: 15));
     final now = DateTime.now();
     final title = 'Tâche dans 15 min';
     final body = task.note.isNotEmpty
@@ -683,7 +683,7 @@ class NotificationService {
     final now = DateTime.now();
     final title = 'Me2Leads : Tâche maintenant !';
     final body =
-        task.note.isNotEmpty ? task.note : "C'est le moment de votre tâche.";
+    task.note.isNotEmpty ? task.note : "C'est le moment de votre tâche.";
 
     await _persistIfNew(AppNotification(
       id: 'task_ontime_${task.id}',
@@ -940,7 +940,7 @@ class NotificationService {
     required String billingCycle,
   }) async {
     final earlyOffset =
-        billingCycle == 'yearly' ? const Duration(days: 7) : const Duration(days: 5);
+    billingCycle == 'yearly' ? const Duration(days: 7) : const Duration(days: 5);
     final earlyDate = planExpiresAt.subtract(earlyOffset);
     final midDate = planExpiresAt.subtract(const Duration(days: 3));
     final lastDate = planExpiresAt;

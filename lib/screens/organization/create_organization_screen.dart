@@ -59,8 +59,9 @@ class _CreateOrganizationScreenState
     if (!_formKey.currentState!.validate()) return;
 
     final paidLicenseCount = _paidLicenseCount;
+    final l10n = ref.read(l10nProvider);
     if (paidLicenseCount > 0 && Platform.isAndroid && !_stripeReady) {
-      _showSnack('Stripe not configured', AppColors.warning);
+      _showSnack(l10n.stripeNotConfigured, AppColors.warning);
       return;
     }
 

@@ -463,11 +463,11 @@ class _ContactEditScreenState extends ConsumerState<ContactEditScreen> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        _statusChip('hot', 'Hot', AppColors.hot),
+                        _statusChip('hot', l10n.hotLabel, AppColors.hot),
                         const SizedBox(width: 8),
-                        _statusChip('warm', 'Warm', AppColors.warm),
+                        _statusChip('warm', l10n.warmLabel, AppColors.warm),
                         const SizedBox(width: 8),
-                        _statusChip('cold', 'Cold', AppColors.cold),
+                        _statusChip('cold', l10n.coldLabel, AppColors.cold),
                       ],
                     ),
 

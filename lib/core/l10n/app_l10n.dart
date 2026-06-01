@@ -142,6 +142,7 @@ class AppL10n {
       : "Supprimez ou transférez l'administration de l'organisation avant de supprimer votre compte.";
   String authDeleteError(String e) =>
       _en ? 'Error during deletion: $e' : 'Erreur lors de la suppression : $e';
+  String error(String msg) => _en ? 'Error: $msg' : 'Erreur : $msg';
   String authPasswordNotModifiable(String provider) => _en
       ? 'Password cannot be changed for $provider accounts'
       : 'Mot de passe non modifiable pour les comptes $provider';
@@ -298,6 +299,24 @@ class AppL10n {
   String get createReminderButton => _en ? 'Reminder' : 'Rappel';
   String get contactNotFound =>
       _en ? 'Contact not found' : 'Contact non trouvé';
+  String get contactNoPhone =>
+      _en ? 'This contact has no phone number' : 'Ce contact n\'a pas de numéro de téléphone';
+  String get contactInvalidPhone =>
+      _en ? 'Invalid phone number' : 'Numéro de téléphone invalide';
+  String get contactNoEmail =>
+      _en ? 'This contact has no email address' : 'Ce contact n\'a pas d\'adresse email';
+  String get errCannotOpenPhone =>
+      _en ? 'Unable to open Phone app' : 'Impossible d\'ouvrir l\'application Téléphone';
+  String get errCannotOpenSms =>
+      _en ? 'Unable to open SMS app' : 'Impossible d\'ouvrir l\'application SMS';
+  String get errCannotOpenWhatsapp =>
+      _en ? 'Unable to open WhatsApp' : 'Impossible d\'ouvrir WhatsApp';
+  String get errCannotOpenEmail =>
+      _en ? 'Unable to open Email app' : 'Impossible d\'ouvrir l\'application Email';
+  String get sharedViaMe2Leads =>
+      _en ? 'Shared via Me2Leads' : 'Partagé via Me2Leads';
+  String contactSubject(String name) =>
+      _en ? 'Contact: $name' : 'Contact : $name';
   String get back => _en ? 'Back' : 'Retour';
   String get phoneLabel => _en ? 'Phone' : 'Téléphone';
   String get companyLabel => _en ? 'Company' : 'Société';
@@ -316,9 +335,17 @@ class AppL10n {
   String get reminderSection => _en ? 'Reminders' : 'Rappels';
   String get modificationBadge => _en ? 'EDIT' : 'MODIFICATION';
   String get completedReminderBadge => _en ? 'DONE REMINDER' : 'RAPPEL TERMINÉ';
-  String get hotStatus => '● Hot Lead';
-  String get warmStatus => '● Warm Lead';
-  String get coldStatus => '● Cold Lead';
+  String get hotBadge => _en ? 'HOT' : 'CHAUD';
+  String get warmBadge => 'WARM';
+  String get coldBadge => 'COLD';
+
+  String get hotStatus => _en ? '● Hot Lead' : '● Lead Chaud';
+  String get warmStatus => _en ? '● Warm Lead' : '● Lead Tiède';
+  String get coldStatus => _en ? '● Cold Lead' : '● Lead Froid';
+
+  String get hotLabel => _en ? 'Hot' : 'Chaud';
+  String get warmLabel => _en ? 'Warm' : 'Tiède';
+  String get coldLabel => _en ? 'Cold' : 'Froid';
   String get fullHistory => _en ? 'Full History' : 'Historique complet';
   String get noHistory => _en ? 'No history' : 'Aucun historique';
   String get noPendingReminders =>
@@ -425,6 +452,32 @@ class AppL10n {
   String get unitDays => _en ? 'Days' : 'Jours';
   String get unitWeeks => _en ? 'Weeks' : 'Semaines';
   String get unitMonths => _en ? 'Months' : 'Mois';
+
+  String formatRepeatFrequency(String freq) {
+    switch (freq) {
+      case '30m': return repeat30min;
+      case '1h': return repeatHourly;
+      case '1d': return repeatDaily;
+      case '1w': return repeatWeekly;
+      case '1mo': return repeatMonthly;
+      default:
+        final match = RegExp(r'^(\d+)(m|h|d|w|mo)$').firstMatch(freq);
+        if (match == null) return repeatNone;
+        final val = match.group(1);
+        final unit = match.group(2);
+        String unitLabel;
+        switch (unit) {
+          case 'm': unitLabel = unitMinutes.toLowerCase(); break;
+          case 'h': unitLabel = unitHours.toLowerCase(); break;
+          case 'd': unitLabel = unitDays.toLowerCase(); break;
+          case 'w': unitLabel = unitWeeks.toLowerCase(); break;
+          case 'mo': unitLabel = unitMonths.toLowerCase(); break;
+          default: return freq;
+        }
+        return '$val $unitLabel';
+    }
+  }
+
   String get actionCall => _en ? 'Call' : 'Appeler';
   String get actionSms => 'SMS';
   String get actionWhatsapp => 'WhatsApp';
@@ -438,6 +491,58 @@ class AppL10n {
       _en ? 'At least 1 contact required' : 'Au moins 1 contact requis';
   String get noteRequired => _en ? 'Note required' : 'Note requise';
   String get addButton => _en ? '+ Add' : '+ Ajouter';
+
+  // ─── Tasks ─────────────────────────────────────────────────────────────
+  String get tasksTitle => _en ? 'Tasks' : 'Tâches';
+  String get tasksSection => _en ? 'TASKS' : 'TÂCHES';
+  String get newTask => _en ? 'New Task' : 'Nouvelle tâche';
+  String get editTaskTitle => _en ? 'Edit Task' : 'Modifier la tâche';
+  String get createTaskTitle => _en ? 'Create Task' : 'Créer une tâche';
+  String get myTasks => _en ? 'My Tasks' : 'Mes tâches';
+  String get allTasks => _en ? 'All Tasks' : 'Toutes les tâches';
+  String get taskPending => _en ? 'Pending' : 'En attente';
+  String get taskCompletedTab => _en ? 'Completed' : 'Terminées';
+  String get noTask => _en ? 'No tasks' : 'Aucune tâche';
+  String get noTaskDesc => _en ? 'No tasks yet.' : 'Aucune tâche pour le moment.';
+  String get noMyTaskDesc =>
+      _en ? 'You have no tasks.' : "Vous n'avez aucune tâche.";
+  String tasksAssignedToYou(int n) => _en
+      ? '$n task${n == 1 ? '' : 's'} assigned to you'
+      : '$n tâche${n > 1 ? 's' : ''} assignée${n > 1 ? 's' : ''} à vous';
+  String get taskNotFound => _en ? 'Task not found' : 'Tâche introuvable';
+  String get taskSuspendedTitle => _en ? 'Task Suspended' : 'Tâche suspendue';
+  String get taskSuspendedDesc => _en
+      ? 'This organization is suspended.'
+      : 'Cette organisation est suspendue.';
+  String get taskAssigneesLabel => _en ? 'ASSIGNEES' : 'RESPONSABLES';
+  String get taskSelectAssignees =>
+      _en ? 'Select assignees' : 'Sélectionner les responsables';
+  String taskAssigneesCount(int n) => _en
+      ? '$n Assignee${n != 1 ? 's' : ''}'
+      : '$n Responsable${n > 1 ? 's' : ''}';
+  String get taskNoAssigneeSelected => _en
+      ? 'Please select at least one assignee'
+      : 'Veuillez sélectionner au moins un responsable';
+  String get noMembersAvailable =>
+      _en ? 'No members available' : 'Aucun membre disponible';
+  String get taskNoteHint => _en ? 'Enter a note...' : 'Entrez une note...';
+  String get saveTaskBtn => _en ? 'Save' : 'Enregistrer';
+  String get createTaskBtn => _en ? 'Create Task' : 'Créer la tâche';
+  String get assignedBy => _en ? 'Assigned by' : 'Assignée par';
+  String get uncompleteTask =>
+      _en ? 'Mark as pending' : 'Marquer comme en attente';
+  String get completeTask => _en ? 'Mark as done' : 'Marquer comme terminée';
+  String get taskCompletedBy => _en ? 'Completed by' : 'Terminée par';
+  String get taskAssigneeNoPhone => _en
+      ? 'This assignee has no phone number'
+      : "Ce responsable n'a pas de numéro de téléphone";
+  String get taskAssigneeNoEmail => _en
+      ? 'This assignee has no email address'
+      : "Ce responsable n'a pas d'adresse email";
+  String get deleteTaskTitle => _en ? 'Delete task?' : 'Supprimer la tâche ?';
+  String get deleteTaskWarning => _en
+      ? 'Are you sure you want to delete this task?'
+      : 'Êtes-vous sûr de vouloir supprimer cette tâche ?';
 
   // ─── Reminder Detail ──────────────────────────────────────────────────────
   String get reminderNotFound =>
@@ -619,6 +724,55 @@ class AppL10n {
   String get businessPlanDesc =>
       _en ? 'For sales teams' : 'Pour les équipes commerciales';
   String get choosePlanCta => _en ? 'Choose' : 'Choisir';
+
+  List<String> get freeFeatures => _en
+      ? [
+          '10 contacts max',
+          'Business card scan',
+          'Hot · Warm · Cold tags',
+          'Encrypted local storage',
+        ]
+      : [
+          '10 contacts max',
+          'Scan carte de visite',
+          'Tags : Hot · Warm · Cold',
+          'Stockage local chiffré',
+        ];
+
+  List<String> get premiumFeatures => _en
+      ? [
+          'Unlimited contacts',
+          'OCR + QR scan',
+          'CSV / CRM export',
+          'Cloud sync',
+          'Priority support',
+        ]
+      : [
+          'Contacts illimités',
+          'Scan OCR + QR',
+          'Export CSV / CRM',
+          'Synchronisation cloud',
+          'Support prioritaire',
+        ];
+
+  List<String> get businessFeatures => _en
+      ? [
+          'All Premium included',
+          'Multi-user management',
+          'Shared team space',
+          'Auto cloud sync',
+          'Dedicated onboarding',
+        ]
+      : [
+          'Tout Premium inclus',
+          'Gestion multi-utilisateurs',
+          'Espace équipe partagé',
+          'Synchronisation cloud automatique',
+          'Onboarding dédié',
+        ];
+
+  String get termsOfUseEula => _en ? 'Terms of Use / EULA' : 'Conditions / EULA';
+
   String get paymentMethodsTitle =>
       _en ? 'PAYMENT METHODS' : 'MOYENS DE PAIEMENT';
   String get securePayment => _en
@@ -689,6 +843,7 @@ class AppL10n {
   String get paymentSuccess => _en ? 'Payment successful' : 'Paiement réussi';
   String get paymentCancelled => _en ? 'Payment cancelled' : 'Paiement annulé';
   String get paymentFailed => _en ? 'Payment failed' : 'Paiement échoué';
+  String get stripeNotConfigured => _en ? 'Stripe not configured' : 'Stripe non configuré';
   String get billingCycleLabel =>
       _en ? 'BILLING CYCLE' : 'CYCLE DE FACTURATION';
   String get paymentMethodCard => _en ? 'Card' : 'Carte bancaire';
@@ -764,6 +919,10 @@ class AppL10n {
       _en ? 'RECURRING REMINDER' : 'RAPPEL RÉCURRENT';
   String get incompleteProfileBadge =>
       _en ? 'INCOMPLETE PROFILE' : 'PROFIL INCOMPLET';
+  String get taskOverdueNotif => _en ? 'OVERDUE TASK' : 'TÂCHE EN RETARD';
+  String get taskUpcomingNotif => _en ? 'UPCOMING TASK' : 'TÂCHE À VENIR';
+  String get taskOntimeNotif => _en ? 'TASK DUE NOW' : 'TÂCHE MAINTENANT';
+  String get taskRepeatNotif => _en ? 'RECURRING TASK' : 'TÂCHE RÉCURRENTE';
   String get notificationLabel => _en ? 'NOTIFICATION' : 'NOTIFICATION';
 
   // ─── Organization ─────────────────────────────────────────────────────────
@@ -782,6 +941,11 @@ class AppL10n {
   String get orgNameHint => _en ? 'e.g. Acme Corp' : 'ex. Société Dupont';
   String get orgNameRequired =>
       _en ? 'Name is required' : 'Le nom est obligatoire';
+  String get inviteCodeRequired =>
+      _en ? 'Invite code is required' : "Le code d'invitation est obligatoire";
+  String orgCannotReduceBelowCount(int n) => _en
+      ? 'Cannot reduce below current member count ($n)'
+      : 'Impossible de réduire en dessous du nombre de membres actuels ($n)';
   String get orgCreated => _en
       ? 'Organization created successfully'
       : 'Organisation créée avec succès';
@@ -834,6 +998,38 @@ class AppL10n {
       : 'Partagez ce code pour que vos collègues rejoignent votre organisation.';
   String get noOrgMembers =>
       _en ? 'No members yet' : 'Aucun membre pour le moment';
+  String get noOrganization =>
+      _en ? 'No organization' : 'Aucune organisation';
+  String get adminRightsNotModifiable => _en
+      ? 'Admin rights cannot be modified'
+      : "Les droits de l'administrateur ne peuvent pas être modifiés";
+  String get alreadyInOrg => _en
+      ? 'You already belong to an organization'
+      : 'Vous appartenez déjà à une organisation';
+  String get invalidCodeOrOrgNotFound => _en
+      ? 'Invalid code or organization not found'
+      : 'Code invalide ou organisation introuvable';
+  String get orgNoSeatsAvailable => _en
+      ? 'No seats available. The administrator must purchase additional licenses.'
+      : "L'organisation n'a plus de places disponibles. L'administrateur doit acheter des licences supplémentaires.";
+  String get useLeaveOrgToWithdraw => _en
+      ? 'Use "Leave organization" to withdraw'
+      : 'Utilisez "Quitter l\'organisation" pour vous retirer';
+  String get transferAdminBeforeLeaving => _en
+      ? 'Transfer administration before leaving, or delete the organization.'
+      : "Transférez l'administration avant de quitter, ou supprimez l'organisation.";
+  String get cannotSuspendSelf =>
+      _en ? 'You cannot suspend yourself' : 'Vous ne pouvez pas vous suspendre vous-même';
+  String get memberAlreadyAdmin => _en
+      ? 'This member is already an administrator'
+      : 'Ce membre est déjà administrateur';
+  String get memberNotAdmin => _en
+      ? 'This member is not an administrator'
+      : "Ce membre n'est pas administrateur";
+  String get orgAdminOrOwnerAction => _en
+      ? 'This action is reserved for administrators'
+      : "Action réservée à l'administrateur";
+
   String orgContactsCount(int n) =>
       _en ? '$n contact${n == 1 ? '' : 's'}' : '$n contact${n > 1 ? 's' : ''}';
   String get orgDeletedSuccess =>
@@ -865,6 +1061,9 @@ class AppL10n {
   String get exportPrivilege => _en
       ? 'Can export shared contacts'
       : 'Peut exporter les contacts partagés';
+  String get viewOthersTasksPrivilege => _en
+      ? 'Can view tasks assigned to others'
+      : 'Peut voir les tâches assignées aux autres';
   String get memberManagement => _en ? 'Manage member' : 'Gérer le membre';
   String get youLabel => _en ? '(you)' : '(vous)';
   String get suspendMember => _en ? 'Suspend' : 'Suspendre';
@@ -1326,6 +1525,62 @@ class AppL10n {
   String subscriptionDaysLeft(int days) => _en
       ? '$days day${days > 1 ? "s" : ""} remaining'
       : '$days jour${days > 1 ? "s" : ""} restant${days > 1 ? "s" : ""}';
+
+  // ─── Notification Service ───────────────────────────────────────────────
+  String get channelUrgentReminders => _en ? 'Urgent Reminders' : 'Rappels urgents';
+  String get channelUrgentRemindersDesc =>
+      _en ? 'Very important reminders (Alarm)' : 'Rappels très importants (Alarme)';
+  String get channelImportantReminders =>
+      _en ? 'Important Reminders' : 'Rappels importants';
+  String get channelReminders => _en ? 'Reminders' : 'Rappels';
+  String get channelRemindersDesc =>
+      _en ? 'Normal reminders and contact alerts' : 'Rappels normaux et alertes contacts';
+  String get channelPayments => _en ? 'Payments' : 'Paiements';
+  String get channelPaymentsDesc =>
+      _en ? 'Current payment status' : 'Statut du paiement en cours';
+
+  String get paymentInProgressTitle => _en ? 'Payment in progress…' : 'Paiement en cours…';
+  String get paymentInProgressBody => _en
+      ? 'Do not close the app. Return here once the payment is complete.'
+      : 'Ne fermez pas l\'application. Revenez ici une fois le paiement terminé.';
+  String get reminderIn15MinTitle => _en ? 'Reminder in 15 min' : 'Rappel dans 15 min';
+  String reminderScheduledAt(String time) =>
+      _en ? 'Reminder scheduled at $time' : 'Rappel prévu à $time';
+  String get reminderNowTitle =>
+      _en ? 'Me2Leads: Reminder now!' : 'Me2Leads : Rappel maintenant !';
+  String get itIsTimeForTask =>
+      _en ? 'It is time for your task.' : 'C\'est le moment de votre tâche.';
+  String get taskNowTitle => _en ? 'Me2Leads: Task now!' : 'Me2Leads : Tâche maintenant !';
+  String get reminderOverdueTitle => _en ? 'Overdue reminder' : 'Rappel en retard';
+  String reminderNotDone(String date) =>
+      _en ? 'Reminder of $date not completed' : 'Rappel du $date non effectué';
+  String get taskOverdueTitle => _en ? 'Overdue task' : 'Tâche en retard';
+  String taskNotDone(String date) =>
+      _en ? 'Task of $date not completed' : 'Tâche du $date non effectuée';
+  String incompleteProfileTitle(String label) =>
+      _en ? 'Incomplete $label profile' : 'Profil $label incomplet';
+  String get missingFieldsLabel => _en ? 'missing fields' : 'champs manquants';
+  String get phoneMissing => _en ? 'phone' : 'téléphone';
+  String get emailMissing => _en ? 'email' : 'email';
+  String get companyMissing => _en ? 'company' : 'entreprise';
+  String get jobTitleMissing => _en ? 'position' : 'poste';
+  String get notesMissing => _en ? 'notes' : 'notes';
+  String get interestMissing => _en ? 'interest' : 'intérêt';
+  String get sourceMissing => _en ? 'source' : 'source';
+
+  String get reminderRepeatTitle => _en ? 'Recurring reminder' : 'Rappel récurrent';
+  String get subExpiringSoonTitle =>
+      _en ? 'Subscription expiring soon' : 'Abonnement bientôt expiré';
+  String subExpiringInDaysBody(int days) => _en
+      ? 'Your subscription expires in $days days. Renew now to keep all features.'
+      : 'Votre abonnement expire dans $days jours. Renouvelez maintenant pour conserver toutes vos fonctionnalités.';
+  String get subExpiring3DaysBody =>
+      _en ? 'Your subscription expires in 3 days. Renew now.' : 'Votre abonnement expire dans 3 jours. Renouvelez maintenant.';
+  String get subLastDayTitle =>
+      _en ? 'Last day of your subscription' : 'Dernier jour de votre abonnement';
+  String get subLastDayBody => _en
+      ? 'Today is the last day of your subscription. Renew now.'
+      : 'C\'est le dernier jour de votre abonnement. Renouvelez dès maintenant.';
 }
 
 final l10nProvider = Provider<AppL10n>((ref) {

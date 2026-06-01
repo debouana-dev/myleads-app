@@ -123,9 +123,9 @@ class ContactsScreen extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
               children: [
                 _buildChip(context, ref, l10n.all, 'all', state.activeFilter),
-                _buildChip(context, ref, 'Hot', 'hot', state.activeFilter),
-                _buildChip(context, ref, 'Warm', 'warm', state.activeFilter),
-                _buildChip(context, ref, 'Cold', 'cold', state.activeFilter),
+                _buildChip(context, ref, l10n.hotLabel, 'hot', state.activeFilter),
+                _buildChip(context, ref, l10n.warmLabel, 'warm', state.activeFilter),
+                _buildChip(context, ref, l10n.coldLabel, 'cold', state.activeFilter),
                 _buildChip(context, ref, 'Tech', 'tech', state.activeFilter),
                 _buildChip(context, ref, 'Event', 'event', state.activeFilter),
               ],
