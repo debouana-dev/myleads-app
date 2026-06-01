@@ -50,6 +50,10 @@ class RemoteSyncService {
   // background tasks don't run all 6 CREATE TABLE statements on every call.
   static bool _schemaReady = false;
 
+  // Mirrors SQLite's _dbVersion. Bump this whenever _ensureSchema gains new
+  // DDL/migrations so the schema_migrations fast-path re-runs for existing DBs.
+  static const int _currentSchemaVersion = 29;
+
   /// Returns true when the current user's effective plan allows full data-table sync
   /// (premium or business). The `users` table is always synced regardless.
   static Future<bool> _hasSyncPlan() async {
@@ -176,6 +180,20 @@ class RemoteSyncService {
   // ── Schema bootstrap ─────────────────────────────────────────────────────────
 
   static Future<void> _ensureSchema(Connection conn) async {
+    // Version-tracking table — created first so the SELECT below always works.
+    await conn.execute('''
+      CREATE TABLE IF NOT EXISTS "schema_migrations" (
+        "version"    SMALLINT    PRIMARY KEY,
+        "applied_at" VARCHAR(50) NOT NULL
+      )
+    ''');
+
+    // Fast-path: if this version has already been applied, skip all DDL/migrations.
+    final versionRes = await conn.execute(
+      'SELECT 1 FROM "schema_migrations" WHERE "version" = $_currentSchemaVersion LIMIT 1',
+    );
+    if (versionRes.isNotEmpty) return;
+
     await conn.execute('''
       CREATE TABLE IF NOT EXISTS "users" (
         "id"                  VARCHAR(36)  NOT NULL,
@@ -596,6 +614,19 @@ class RemoteSyncService {
           )
         )
     ''');
+
+    // Stamp the applied version so future calls fast-path past all DDL above.
+    await conn.execute(
+      Sql.named('''
+        INSERT INTO "schema_migrations" ("version", "applied_at")
+        VALUES (@v, @at)
+        ON CONFLICT ("version") DO UPDATE SET "applied_at" = EXCLUDED."applied_at"
+      '''),
+      parameters: {
+        'v': _currentSchemaVersion,
+        'at': DateTime.now().toUtc().toIso8601String(),
+      },
+    );
   }
 
   // ── Cloud user helpers ───────────────────────────────────────────────────────
@@ -938,8 +969,10 @@ class RemoteSyncService {
     if (conn == null) return SyncResult.err('auth_failed');
 
     try {
-      await _ensureSchema(conn);
-      _schemaReady = true;
+      if (!_schemaReady) {
+        await _ensureSchema(conn);
+        _schemaReady = true;
+      }
 
       // Determine whether full data-table sync is allowed for this user.
       // Org-covered free-plan users receive business-level sync privileges.
@@ -1897,7 +1930,10 @@ class RemoteSyncService {
     final conn = await _connect();
     if (conn == null) return;
     try {
-      await _ensureSchema(conn);
+      if (!_schemaReady) {
+        await _ensureSchema(conn);
+        _schemaReady = true;
+      }
       await conn.execute(
         Sql.named(
             'DELETE FROM "organization_members" WHERE "organization_id" = @id'),

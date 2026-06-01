@@ -1,5 +1,5 @@
 -- ============================================================
--- me2leads  —  PostgreSQL schema v18
+-- me2leads  —  PostgreSQL schema v29
 -- PostgreSQL 14+
 -- Source of truth: lib/services/remote_sync_service.dart (_ensureSchema)
 --
@@ -16,6 +16,17 @@
 -- No application-level FK constraints: the app relies on
 -- logical integrity and ON DELETE CASCADE is handled in Dart.
 -- ============================================================
+
+
+-- ============================================================
+-- TABLE: schema_migrations  (PostgreSQL-only — tracks applied remote schema version)
+-- One row per applied version. The Dart app creates this table on first connect
+-- and fast-paths _ensureSchema when the current version row is already present.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS "schema_migrations" (
+  "version"    SMALLINT    PRIMARY KEY,
+  "applied_at" VARCHAR(50) NOT NULL
+);
 
 
 -- ============================================================
@@ -474,6 +485,9 @@ ALTER TABLE "organization_members"
 --         Regular members receive only their own row on sync; admins/owners receive
 --         all rows. Legacy can_* columns in organization_members are dual-written for
 --         backward compat but are no longer the authoritative source.
+-- v29+  : schema_migrations table — one-row version tracker. _ensureSchema fast-paths
+--         all DDL when the current version row is already present, reducing cold-start
+--         sync cost from 39+ round trips to 2 (CREATE IF NOT EXISTS + SELECT).
 -- ============================================================
 
 
@@ -631,3 +645,19 @@ CREATE POLICY "omp_select" ON "org_member_permissions"
         AND om."status" = 'active'
     )
   );
+
+-- ============================================================
+-- UPGRADE SCRIPT (v29 → schema_migrations)
+-- Adds the version-tracking table used by the _ensureSchema fast-path.
+-- Safe to run on any existing database — CREATE IF NOT EXISTS is idempotent.
+-- After running, stamp the current version so the next app launch fast-paths.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS "schema_migrations" (
+  "version"    SMALLINT    PRIMARY KEY,
+  "applied_at" VARCHAR(50) NOT NULL
+);
+
+INSERT INTO "schema_migrations" ("version", "applied_at")
+VALUES (29, NOW()::VARCHAR)
+ON CONFLICT ("version") DO NOTHING;
